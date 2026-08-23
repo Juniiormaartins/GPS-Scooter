@@ -14,7 +14,7 @@ const TABS: { key: BottomNavTab; label: string }[] = [
 
 export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
   return (
-    <div className="pointer-events-auto flex items-center justify-around rounded-t-2xl bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-floating">
+    <div className="pointer-events-auto flex items-center justify-around rounded-t-2xl border-t border-white/5 bg-surface-card px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-floating">
       {TABS.map((tab) => {
         const isActive = tab.key === active
         return (
@@ -23,7 +23,7 @@ export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
             type="button"
             onClick={() => onSelect(tab.key)}
             className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold ${
-              isActive ? 'text-brand-600' : 'text-slate-400'
+              isActive ? 'text-brand-400' : 'text-slate-500'
             }`}
           >
             <TabIcon tabKey={tab.key} active={isActive} />

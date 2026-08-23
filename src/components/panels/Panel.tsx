@@ -24,17 +24,17 @@ export function Panel({ title, onClose, children }: PanelProps) {
 
   return (
     <div
-      className={`pointer-events-auto absolute inset-0 z-30 flex flex-col bg-white transition-all duration-200 ease-out ${
+      className={`pointer-events-auto absolute inset-0 z-30 flex flex-col bg-surface transition-all duration-200 ease-out ${
         isVisible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <h2 className="text-lg font-bold text-navy-900">{title}</h2>
+      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <h2 className="text-lg font-bold text-slate-100">{title}</h2>
         <button
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 active:bg-slate-100"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 active:bg-white/5"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />

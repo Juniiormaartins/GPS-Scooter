@@ -69,7 +69,7 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
 
   return (
     <div
-      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl bg-white shadow-floating ${
+      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-white/5 bg-surface-card shadow-floating ${
         isDragging ? '' : 'transition-[height] duration-200 ease-out'
       }`}
       style={{ height: `${liveHeightVh}vh` }}
@@ -81,7 +81,7 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <div className="h-1 w-10 rounded-full bg-slate-300" />
+        <div className="h-1 w-10 rounded-full bg-white/15" />
       </div>
 
       {snap === 'collapsed' ? (

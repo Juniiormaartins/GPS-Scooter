@@ -15,6 +15,7 @@ import { SavedPanel } from '@/components/panels/SavedPanel'
 import { ActivityPanel } from '@/components/panels/ActivityPanel'
 import { useGeolocation, LOW_ACCURACY_THRESHOLD_METERS } from '@/hooks/useGeolocation'
 import { useNavigationSession } from '@/hooks/useNavigationSession'
+import { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
 import { planRoute } from '@/services/routing'
@@ -47,6 +48,9 @@ export default function App() {
   )
 
   const { sample, isLocating, locate, error: locationError, permission } = useGeolocation()
+  // Vivendo em App.tsx (não dentro do ProfilePanel) para a conexão persistir
+  // entre navegação de painéis e alimentar o NavigationPanel com bateria real quando disponível.
+  const vehicleBluetooth = useVehicleBluetooth()
   const userPosition = sample?.position ?? null
   const [followUserAsOrigin, setFollowUserAsOrigin] = useState(false)
   const [pendingCenter, setPendingCenter] = useState(false)
@@ -319,7 +323,7 @@ export default function App() {
     const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
     return (
-      <div className="relative h-screen w-screen overflow-hidden bg-navy-900">
+      <div className="relative h-screen w-screen overflow-hidden bg-surface">
         <MapView
           originPoint={originPoint}
           destinationPoint={destinationPoint}
@@ -335,6 +339,7 @@ export default function App() {
           locationError={navigationSession.locationError}
           routeDeviated={navigationSession.routeDeviated}
           isRecalculating={isRecalculating}
+          vehicleBattery={vehicleBluetooth.status === 'connected' ? vehicleBluetooth.batteryPercent : null}
           onStop={() => {
             setIsNavigating(false)
             setIsFollowingUser(true)
@@ -347,13 +352,21 @@ export default function App() {
     )
   }
 
+  const routeOptions = allRoutes.map((entry) => ({
+    id: entry.route.id,
+    geometry: entry.route.geometry,
+    eligibility: entry.eligibility,
+    isActive: entry.route.id === activeScoredRoute?.route.id,
+  }))
+
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-navy-900">
+    <div className="relative h-screen w-screen overflow-hidden bg-surface">
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}
         userPoint={userPosition}
         routeGeometry={activeScoredRoute?.route.geometry ?? null}
+        routeOptions={routeOptions.length > 1 ? routeOptions : []}
         centerRequestId={centerToken}
       />
 
@@ -384,6 +397,7 @@ export default function App() {
         <PoiCard
           poi={selectedPoi}
           isSaved={isPoiSaved}
+          userPoint={userPosition}
           onDismiss={() => setSelectedPoi(null)}
           onSave={() => handleSavePoi(selectedPoi)}
           onTraceRoute={() => handleTraceRouteToPlace(selectedPoi.label, selectedPoi.point)}
@@ -422,7 +436,7 @@ export default function App() {
       )}
 
       {activePanel === 'menu' && <MenuPanel onClose={() => setActivePanel(null)} onNavigate={handleMenuNavigate} />}
-      {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} />}
+      {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} vehicleBluetooth={vehicleBluetooth} />}
       {activePanel === 'saved' && (
         <SavedPanel
           onClose={() => setActivePanel(null)}

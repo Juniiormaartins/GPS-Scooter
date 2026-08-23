@@ -13,6 +13,8 @@ interface NavigationPanelProps {
   locationError: string | null
   routeDeviated: boolean
   isRecalculating: boolean
+  /** Percentual REAL lido via Bluetooth do veículo, quando conectado e o dispositivo expõe essa telemetria — null caso contrário (nunca um valor fabricado). */
+  vehicleBattery: number | null
   onStop: () => void
 }
 
@@ -29,6 +31,7 @@ export function NavigationPanel({
   locationError,
   routeDeviated,
   isRecalculating,
+  vehicleBattery,
   onStop,
 }: NavigationPanelProps) {
   const { route, etaMinutes } = scoredRoute
@@ -37,84 +40,94 @@ export function NavigationPanel({
   const remainingDurationMinutes = progress?.remainingDurationMinutes ?? etaMinutes
   const currentSpeedKmh = gpsSample?.speedMps != null ? Math.round(gpsSample.speedMps * 3.6) : null
   const lowAccuracy = gpsSample ? gpsSample.accuracyMeters > LOW_ACCURACY_THRESHOLD_METERS : false
+  // Bateria REAL (Bluetooth conectado e dispositivo expõe a leitura) tem prioridade sobre a estimativa por
+  // fórmula — a estimativa (services/vehicle/batteryEstimate.ts) só existe como aproximação honesta quando
+  // não há telemetria real disponível, nunca finge ser uma leitura de hardware.
   const batteryEstimate = estimateRemainingBatteryPercent(
     MOCK_VEHICLE_STATUS.batteryPercent,
     progress?.distanceTraveledMeters ?? 0,
   )
-  const remainingRangeKm = Math.max(0, Math.round((batteryEstimate.percent / 100) * VEHICLE_PROFILE.estimatedRangeKm))
+  const batteryPercent = vehicleBattery ?? batteryEstimate.percent
+  const remainingRangeKm = Math.max(0, Math.round((batteryPercent / 100) * VEHICLE_PROFILE.estimatedRangeKm))
 
   return (
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         {!progress && !locationError && (
-          <div className="pointer-events-auto rounded-2xl bg-navy-900 px-4 py-3 text-sm text-white/80 shadow-floating">
+          <div className="pointer-events-auto rounded-2xl border border-white/5 bg-surface-card px-4 py-3 text-sm text-slate-300 shadow-floating">
             Obtendo sua localização…
           </div>
         )}
 
         {locationError && (
-          <div className="pointer-events-auto rounded-2xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 shadow-floating">
+          <div className="pointer-events-auto rounded-2xl bg-warning-500/15 px-4 py-3 text-sm font-medium text-warning-300 shadow-floating">
             {locationError}
           </div>
         )}
 
         {routeDeviated && (
-          <div className="pointer-events-auto rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-floating">
+          <div className="pointer-events-auto rounded-2xl bg-warning-500 px-4 py-3 text-sm font-semibold text-surface shadow-floating">
             {isRecalculating ? 'Você saiu da rota — recalculando…' : 'Você saiu da rota.'}
           </div>
         )}
 
         {progress?.nextStep && (
-          <div className="pointer-events-auto flex items-center gap-3 rounded-3xl bg-navy-900 p-4 text-white shadow-floating">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-3xl border border-white/5 bg-surface-card p-4 text-slate-100 shadow-floating">
             <ManeuverIcon maneuver={progress.nextStep.maneuver} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-bold">{progress.nextStep.instruction}</p>
-              <p className="text-sm text-white/60">em {formatDistance(progress.distanceToNextManeuverMeters)}</p>
+              <p className="text-sm text-slate-400">em {formatDistance(progress.distanceToNextManeuverMeters)}</p>
             </div>
           </div>
         )}
 
         {progress && lowAccuracy && (
-          <div className="pointer-events-auto rounded-2xl bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 shadow-floating">
+          <div className="pointer-events-auto rounded-2xl border border-white/5 bg-surface-card/90 px-4 py-2 text-xs font-medium text-slate-400 shadow-floating">
             Localização com baixa precisão (±{Math.round(gpsSample!.accuracyMeters)} m) — tente uma área aberta.
           </div>
         )}
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0">
-        <div className="pointer-events-auto rounded-t-2xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-floating">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" />
+        <div className="pointer-events-auto rounded-t-2xl border-t border-white/5 bg-surface-card p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-floating">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" />
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-2xl font-extrabold text-navy-900">{formatEta(remainingDurationMinutes)}</p>
-              <p className="text-sm text-slate-500">restantes até o destino</p>
+              <p className="text-2xl font-extrabold text-slate-100">{formatEta(remainingDurationMinutes)}</p>
+              <p className="text-sm text-slate-400">restantes até o destino</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-extrabold text-navy-900">{formatDistance(remainingDistanceMeters)}</p>
-              <p className="text-sm text-slate-500">de distância</p>
+              <p className="text-2xl font-extrabold text-slate-100">{formatDistance(remainingDistanceMeters)}</p>
+              <p className="text-sm text-slate-400">de distância</p>
             </div>
           </div>
 
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500">
               {currentSpeedKmh != null ? `${currentSpeedKmh} km/h (GPS)` : 'Velocidade indisponível'}
             </span>
             <span
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
-              title={`Estimativa: ${MOCK_VEHICLE_STATUS.batteryPercent}% inicial, autonomia de ${VEHICLE_PROFILE.estimatedRangeKm} km — sem integração real de bateria`}
+              className={`flex items-center gap-1.5 text-xs font-medium ${vehicleBattery != null ? 'text-success-400' : 'text-slate-400'}`}
+              title={
+                vehicleBattery != null
+                  ? 'Leitura real do veículo conectado via Bluetooth'
+                  : `Estimativa: ${MOCK_VEHICLE_STATUS.batteryPercent}% inicial, autonomia de ${VEHICLE_PROFILE.estimatedRangeKm} km — sem integração real de bateria`
+              }
             >
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.2}>
                 <rect x="2.5" y="7" width="16" height="10" rx="2" />
                 <path d="M21 10v4" strokeLinecap="round" />
               </svg>
-              ≈{batteryEstimate.percent}% estimado · ≈{remainingRangeKm} km restantes
+              {vehicleBattery != null
+                ? `${vehicleBattery}% (Bluetooth) · ≈${remainingRangeKm} km restantes`
+                : `≈${batteryPercent}% estimado · ≈${remainingRangeKm} km restantes`}
             </span>
           </div>
 
           <button
             type="button"
             onClick={onStop}
-            className="mt-4 w-full rounded-full bg-red-50 py-3.5 text-[15px] font-semibold text-red-600 active:scale-[0.99] active:bg-red-100"
+            className="mt-4 w-full rounded-full bg-danger-500/15 py-3.5 text-[15px] font-semibold text-danger-400 active:scale-[0.99] active:bg-danger-500/25"
           >
             Encerrar navegação
           </button>
@@ -128,7 +141,7 @@ function ManeuverIcon({ maneuver }: { maneuver: ManeuverType }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 
   return (
-    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-600">
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500">
       {maneuver === 'turn-right' && (
         <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" {...common}>
           <path d="M9 5v6a4 4 0 004 4h6M15 11l4 4-4 4" />

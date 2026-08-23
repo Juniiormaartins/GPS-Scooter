@@ -13,17 +13,25 @@
 
 const NOMINATIM_DEFAULT_BASE_URL = 'https://nominatim.openstreetmap.org'
 const OSRM_DEMO_DEFAULT_BASE_URL = 'https://router.project-osrm.org'
-const MAPTILER_STYLE_ID = 'streets-v2'
+const MAPTILER_STYLE_ID = 'streets-v2-dark'
+/** Estilo escuro padrão do Mapbox — mesmo tom das superfícies do app (ver tailwind.config.js `surface`). */
+const MAPBOX_STYLE_ID = 'dark-v11'
 
 /**
  * Resolve a URL do estilo do mapa. Prioridade:
  * 1. VITE_MAP_STYLE_URL — override explícito, aceita qualquer provedor compatível com MapLibre.
- * 2. VITE_MAPTILER_API_KEY — monta a URL do estilo do MapTiler (provedor padrão do GPS Scooter).
- * 3. Nenhuma das duas — MapView usa o fallback de demonstração (ver FALLBACK_DEMO_STYLE_URL).
+ * 2. VITE_MAPBOX_API_KEY — estilo escuro padrão do Mapbox (mesma chave já usada para busca de POI).
+ * 3. VITE_MAPTILER_API_KEY — variante escura do MapTiler, caso o Mapbox não esteja configurado.
+ * 4. Nenhuma das três — MapView usa o fallback de demonstração (ver FALLBACK_DEMO_STYLE_URL).
  */
 function resolveMapStyleUrl(): string {
   const explicitStyleUrl = import.meta.env.VITE_MAP_STYLE_URL ?? ''
   if (explicitStyleUrl) return explicitStyleUrl
+
+  const mapboxApiKey = import.meta.env.VITE_MAPBOX_API_KEY ?? ''
+  if (mapboxApiKey) {
+    return `https://api.mapbox.com/styles/v1/mapbox/${MAPBOX_STYLE_ID}?access_token=${mapboxApiKey}`
+  }
 
   const maptilerApiKey = import.meta.env.VITE_MAPTILER_API_KEY ?? ''
   if (maptilerApiKey) {

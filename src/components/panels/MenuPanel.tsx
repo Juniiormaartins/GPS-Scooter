@@ -22,24 +22,24 @@ export function MenuPanel({ onClose, onNavigate }: MenuPanelProps) {
             key={item.key}
             type="button"
             onClick={() => onNavigate(item.key)}
-            className="flex items-center gap-3 rounded-2xl px-3 py-3.5 text-left active:bg-slate-50"
+            className="flex items-center gap-3 rounded-2xl px-3 py-3.5 text-left active:bg-white/5"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-400">
               <MenuIcon itemKey={item.key} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-navy-900">{item.label}</span>
+              <span className="block text-[15px] font-semibold text-slate-100">{item.label}</span>
               <span className="block truncate text-xs text-slate-500">{item.description}</span>
             </span>
-            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-300" fill="none" stroke="currentColor" strokeWidth={2}>
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-600" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         ))}
       </div>
 
-      <div className="mt-6 border-t border-slate-100 pt-4">
-        <p className="text-xs text-slate-400">GPS Scooter · navegação para mobilidade elétrica urbana</p>
+      <div className="mt-6 border-t border-white/5 pt-4">
+        <p className="text-xs text-slate-500">GPS Scooter · navegação para mobilidade elétrica urbana</p>
       </div>
     </Panel>
   )

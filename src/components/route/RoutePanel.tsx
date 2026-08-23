@@ -9,10 +9,11 @@ const LABEL_TEXT: Record<NonNullable<ScoredRoute['label']>, string> = {
   safest: 'Mais tranquila',
 }
 
-const ELIGIBILITY_TONE: Record<Eligibility, { bg: string; text: string; emoji: string; label: string }> = {
-  allowed: { bg: 'bg-success-50', text: 'text-success-700', emoji: '🟢', label: 'Rota adequada' },
-  discouraged: { bg: 'bg-amber-50', text: 'text-amber-700', emoji: '🟡', label: 'Rota com ressalvas' },
-  'not-allowed': { bg: 'bg-red-50', text: 'text-red-700', emoji: '🔴', label: 'Rota não recomendada' },
+/** Selo colorido por elegibilidade — substitui os emojis 🟢🟡🔴 usados antes por um badge de texto, igual ao protótipo. */
+const ELIGIBILITY_TONE: Record<Eligibility, { badge: string; dot: string; label: string }> = {
+  allowed: { badge: 'bg-success-500 text-surface', dot: 'bg-success-400', label: 'Rota adequada' },
+  discouraged: { badge: 'bg-warning-500 text-surface', dot: 'bg-warning-400', label: 'Rota com ressalvas' },
+  'not-allowed': { badge: 'bg-danger-500 text-surface', dot: 'bg-danger-400', label: 'Rota não recomendada' },
 }
 
 /** Resumo mínimo mostrado com o Bottom Sheet recolhido — só a rota ativa, sem lista. */
@@ -20,12 +21,13 @@ export function RouteSummary({ scoredRoute }: { scoredRoute: ScoredRoute }) {
   const tone = ELIGIBILITY_TONE[scoredRoute.eligibility]
   return (
     <div className="flex items-center justify-between">
-      <div>
-        <p className="text-xl font-extrabold text-navy-900">
-          {tone.emoji} {formatEta(scoredRoute.etaMinutes)} · {formatDistance(scoredRoute.route.totalDistanceMeters)}
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`} />
+        <p className="text-xl font-extrabold text-slate-100">
+          {formatEta(scoredRoute.etaMinutes)} · {formatDistance(scoredRoute.route.totalDistanceMeters)}
         </p>
-        <p className="text-xs text-slate-500">↑ arraste para ver opções</p>
       </div>
+      <p className="text-xs text-slate-500">↑ arraste para ver opções</p>
     </div>
   )
 }
@@ -48,8 +50,8 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-500">{routes.length > 1 ? 'Opções de rota' : 'Rota'}</p>
-        <button type="button" onClick={onDismiss} className="text-sm font-medium text-slate-400 active:text-slate-600">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{routes.length > 1 ? 'Opções de rota' : 'Rota'}</p>
+        <button type="button" onClick={onDismiss} className="text-sm font-medium text-slate-500 active:text-slate-300">
           Fechar
         </button>
       </div>
@@ -67,15 +69,15 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
         </div>
       )}
 
-      <div className="rounded-2xl bg-slate-50 p-3">
+      <div className="rounded-2xl border border-white/5 bg-surface-raised p-3">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-2xl font-extrabold text-navy-900">{formatEta(activeRoute.etaMinutes)}</p>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="text-2xl font-extrabold text-slate-100">{formatEta(activeRoute.etaMinutes)}</p>
+            <p className="mt-0.5 text-sm text-slate-400">
               {formatDistance(route.totalDistanceMeters)} · {VEHICLE_PROFILE.label}
             </p>
           </div>
-          <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
+          <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300">
             Ref. {VEHICLE_PROFILE.maxOperationalSpeedKmh} km/h
           </span>
         </div>
@@ -83,7 +85,7 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
         {highlights.length > 0 && (
           <ul className="mt-2 space-y-1">
             {highlights.map((text) => (
-              <li key={text} className="text-sm text-slate-600">
+              <li key={text} className="text-sm text-slate-400">
                 {text}
               </li>
             ))}
@@ -104,8 +106,11 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
       <button
         type="button"
         onClick={onStartNavigation}
-        className="w-full shrink-0 rounded-full bg-brand-600 py-3.5 text-[15px] font-semibold text-white shadow-sm active:scale-[0.99] active:bg-brand-700"
+        className="flex w-full shrink-0 items-center justify-center gap-2 rounded-full bg-success-500 py-3.5 text-[15px] font-bold text-surface shadow-sm active:scale-[0.99] active:bg-success-400"
       >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+          <path d="M3 11l18-8-8 18-2-8-8-2z" />
+        </svg>
         Iniciar navegação
       </button>
     </div>
@@ -120,17 +125,18 @@ function RouteOptionCard({ scoredRoute, isSelected, onSelect }: { scoredRoute: S
       type="button"
       onClick={onSelect}
       className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-        isSelected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-white active:bg-slate-50'
+        isSelected ? 'border-brand-400/70 bg-surface-raised' : 'border-white/5 bg-surface-raised/50 active:bg-surface-raised'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-bold text-navy-900">
-          {tone.emoji} {scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone.badge}`}>
+          {scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}
         </span>
-        {isSelected && <span className="shrink-0 text-xs font-bold text-brand-700">✓ Selecionada</span>}
+        <span className="shrink-0 text-sm font-bold text-slate-100">{formatEta(scoredRoute.etaMinutes)}</span>
       </div>
-      <p className="mt-0.5 text-sm text-slate-600">
-        {formatDistance(scoredRoute.route.totalDistanceMeters)} · {formatEta(scoredRoute.etaMinutes)} · {scoredRoute.suitabilityScore}/100
+      <p className="mt-1.5 text-sm text-slate-300">
+        {formatDistance(scoredRoute.route.totalDistanceMeters)} · {scoredRoute.suitabilityScore}/100
+        {isSelected && <span className="ml-1.5 font-semibold text-brand-400">· Selecionada</span>}
       </p>
       {scoredRoute.highlights[0] && <p className="mt-0.5 truncate text-xs text-slate-500">{scoredRoute.highlights[0]}</p>}
     </button>
@@ -138,7 +144,7 @@ function RouteOptionCard({ scoredRoute, isSelected, onSelect }: { scoredRoute: S
 }
 
 function tierChipClass(tier: string): string {
-  if (tier === 'very-good' || tier === 'good') return 'bg-success-50 text-success-700'
-  if (tier === 'caution') return 'bg-amber-50 text-amber-700'
-  return 'bg-red-50 text-red-700'
+  if (tier === 'very-good' || tier === 'good') return 'bg-success-500/15 text-success-400'
+  if (tier === 'caution') return 'bg-warning-500/15 text-warning-400'
+  return 'bg-danger-500/15 text-danger-400'
 }

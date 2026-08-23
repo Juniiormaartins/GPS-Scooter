@@ -19,14 +19,14 @@ export function MapControls({ onCenterOnUser, isLocating, isFollowing = false }:
         onClick={onCenterOnUser}
         aria-label={isFollowing ? 'Seguindo sua localização' : 'Centralizar na localização atual'}
         title={isFollowing ? 'Seguindo sua localização' : 'Centralizar na localização atual'}
-        className={`flex h-12 w-12 items-center justify-center rounded-full shadow-floating active:scale-95 ${
-          isFollowing ? 'bg-brand-600 text-white' : 'bg-white text-brand-600'
+        className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/5 shadow-floating active:scale-95 ${
+          isFollowing ? 'bg-brand-500 text-surface' : 'bg-surface-card text-brand-400'
         }`}
       >
         {isLocating ? (
           <span
             className={`h-4 w-4 animate-spin rounded-full border-2 border-t-transparent ${
-              isFollowing ? 'border-white' : 'border-brand-500'
+              isFollowing ? 'border-surface' : 'border-brand-400'
             }`}
           />
         ) : (

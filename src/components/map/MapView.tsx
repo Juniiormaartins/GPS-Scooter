@@ -4,12 +4,23 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS } from '@/config/theme'
+import type { Eligibility } from '@/types/routing'
+
+export interface RouteOptionGeometry {
+  id: string
+  geometry: LngLat[]
+  eligibility: Eligibility
+  isActive: boolean
+}
 
 interface MapViewProps {
   originPoint: LngLat | null
   destinationPoint: LngLat | null
   userPoint: LngLat | null
+  /** Rota única (navegação ativa — uma rota já confirmada, linha na cor da marca). */
   routeGeometry: LngLat[] | null
+  /** Várias candidatas simultâneas (tela de seleção de rota) — cada uma colorida pela própria elegibilidade. Ignorado se vazio/ausente; nesse caso usa `routeGeometry`. */
+  routeOptions?: RouteOptionGeometry[]
   /** Quando true, a câmera acompanha `userPoint` continuamente (uso: navegação ativa). */
   followUser?: boolean
   /**
@@ -26,6 +37,8 @@ interface MapViewProps {
 const ROUTE_SOURCE_ID = 'gps-scooter-route'
 const ROUTE_CASING_LAYER_ID = 'gps-scooter-route-casing'
 const ROUTE_LAYER_ID = 'gps-scooter-route-line'
+const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
+const ROUTE_OPTIONS_LAYER_ID = 'gps-scooter-route-options-line'
 
 // Zoom "de rua" usado durante a navegação ativa — próximo o bastante para ler
 // nomes de rua e a próxima manobra, mas sem escapar do enquadramento útil.
@@ -40,6 +53,7 @@ export function MapView({
   destinationPoint,
   userPoint,
   routeGeometry,
+  routeOptions = [],
   followUser = false,
   centerRequestId = 0,
   onUserInteraction,
@@ -105,6 +119,30 @@ export function MapView({
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': MAP_COLORS.routeLine, 'line-width': 5, 'line-opacity': 0.95 },
       })
+
+      // Múltiplas candidatas simultâneas (tela de seleção) — uma FeatureCollection com uma
+      // linha por rota, cor por `eligibility` e destaque (largura/opacidade) por `active`.
+      map.addSource(ROUTE_OPTIONS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: ROUTE_OPTIONS_LAYER_ID,
+        type: 'line',
+        source: ROUTE_OPTIONS_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'eligibility'],
+            'allowed',
+            MAP_COLORS.routeByEligibility.allowed,
+            'discouraged',
+            MAP_COLORS.routeByEligibility.discouraged,
+            MAP_COLORS.routeByEligibility['not-allowed'],
+          ],
+          'line-width': ['case', ['get', 'active'], 5, 3],
+          'line-opacity': ['case', ['get', 'active'], 1, 0.65],
+          'line-dasharray': ['case', ['get', 'active'], ['literal', [1, 0]], ['literal', [2, 1.6]]],
+        },
+      })
       onMapReady?.(map)
     })
 
@@ -116,11 +154,23 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Alterna visibilidade entre a camada de rota única (navegação) e a de
+  // múltiplas candidatas (seleção) — nunca as duas ao mesmo tempo.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.getLayer(ROUTE_LAYER_ID)) return
+    const showingOptions = routeOptions.length > 0
+    const single = showingOptions ? 'none' : 'visible'
+    map.setLayoutProperty(ROUTE_LAYER_ID, 'visibility', single)
+    map.setLayoutProperty(ROUTE_CASING_LAYER_ID, 'visibility', single)
+    map.setLayoutProperty(ROUTE_OPTIONS_LAYER_ID, 'visibility', showingOptions ? 'visible' : 'none')
+  }, [routeOptions.length])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const source = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
-    if (!source) return
+    if (!source || routeOptions.length > 0) return
 
     const coordinates: [number, number][] = (routeGeometry ?? []).map((point) => [point.lng, point.lat])
 
@@ -142,7 +192,33 @@ export function MapView({
         duration: 600,
       })
     }
-  }, [routeGeometry])
+  }, [routeGeometry, routeOptions.length])
+
+  // Múltiplas candidatas simultâneas — uma linha colorida por elegibilidade
+  // para cada rota, enquadrando a câmera em todas de uma vez (não só a ativa).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const source = map.getSource(ROUTE_OPTIONS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (!source || routeOptions.length === 0) return
+
+    const features: GeoJSON.Feature<GeoJSON.LineString>[] = routeOptions.map((option) => ({
+      type: 'Feature',
+      properties: { eligibility: option.eligibility, active: option.isActive },
+      geometry: { type: 'LineString', coordinates: option.geometry.map((point) => [point.lng, point.lat]) },
+    }))
+    source.setData({ type: 'FeatureCollection', features })
+
+    const allCoordinates = features.flatMap((feature) => feature.geometry.coordinates as [number, number][])
+    if (allCoordinates.length >= 2) {
+      const bounds = allCoordinates.reduce(
+        (acc, coord) => acc.extend(coord),
+        new maplibregl.LngLatBounds(allCoordinates[0], allCoordinates[0]),
+      )
+      map.fitBounds(bounds, { padding: { top: 220, bottom: 260, left: 48, right: 48 }, duration: 600 })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeOptions])
 
   useEffect(() => {
     const map = mapRef.current
@@ -206,8 +282,8 @@ function updateMarker(
 }
 
 function markerClassName(kind: 'origin' | 'destination' | 'user'): string {
-  const base = 'h-4 w-4 rounded-full border-2 border-white shadow-md'
-  if (kind === 'origin') return `${base} bg-brand-600`
-  if (kind === 'destination') return `${base} bg-navy-900`
+  const base = 'h-4 w-4 rounded-full border-2 border-surface shadow-md'
+  if (kind === 'origin') return `${base} bg-brand-400`
+  if (kind === 'destination') return `${base} bg-success-400`
   return `${base} bg-brand-400 ring-4 ring-brand-400/30`
 }

@@ -33,7 +33,7 @@ export function AddressAutocompleteInput({
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-3">
+      <div className="flex items-center gap-2 rounded-full border border-white/5 bg-surface-raised px-4 py-3 transition-colors has-[input:focus]:border-brand-400/60">
         {leftIcon}
         <input
           value={value}
@@ -44,15 +44,15 @@ export function AddressAutocompleteInput({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 150)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-[15px] text-navy-900 placeholder:text-slate-400 focus:outline-none"
+          className="w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
         />
         {rightAdornment}
       </div>
 
       {showDropdown && (
-        <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl bg-white py-1 shadow-floating">
+        <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl border border-white/5 bg-surface-card py-1 shadow-floating">
           {isLoading && <p className="px-4 py-3 text-sm text-slate-400">Buscando…</p>}
-          {!isLoading && error && <p className="px-4 py-3 text-sm text-amber-600">{error}</p>}
+          {!isLoading && error && <p className="px-4 py-3 text-sm text-warning-400">{error}</p>}
           {!isLoading && !error && suggestions.length === 0 && (
             <p className="px-4 py-3 text-sm text-slate-400">Nenhum resultado encontrado.</p>
           )}
@@ -65,13 +65,13 @@ export function AddressAutocompleteInput({
                   setSuppressDropdown(true)
                   onSelect(result)
                 }}
-                className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left active:bg-slate-50"
+                className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left active:bg-white/5"
               >
-                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2}>
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path d="M12 2C7.6 2 4 5.6 4 10c0 5.4 7 11.5 7.3 11.8.4.3 1 .3 1.4 0C13 21.5 20 15.4 20 10c0-4.4-3.6-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" />
                 </svg>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-navy-900">{result.label}</span>
+                  <span className="block truncate text-sm font-semibold text-slate-100">{result.label}</span>
                   {result.secondaryLabel && <span className="block truncate text-xs text-slate-500">{result.secondaryLabel}</span>}
                 </span>
               </button>
