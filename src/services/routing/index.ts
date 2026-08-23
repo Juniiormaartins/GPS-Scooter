@@ -1,0 +1,130 @@
+import { calculateEtaMinutes } from '@/services/routing/eta'
+import { getRoutingProvider } from '@/services/routing/provider'
+import { enrichRouteSegments } from '@/services/routing/segmentEnrichment'
+import { evaluateRoute } from '@/services/routing/ruleEngine'
+import { getUserPreferences, ROUTE_PREFERENCE_TOLERANCE } from '@/config/userPreferences'
+import { formatDistance, formatEta } from '@/utils/geo'
+import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
+
+/**
+ * Orquestra o pipeline completo de roteamento:
+ * 1. obter rotas candidatas do provedor (OSRM — services/routing/provider.ts);
+ * 2. enriquecer os segmentos de cada candidata com dados reais do OSM
+ *    (Overpass — services/routing/segmentEnrichment.ts);
+ * 3. avaliar cada rota contra as regras do perfil autopropelido, com
+ *    penalização proporcional por trecho (services/routing/ruleEngine.ts);
+ * 4. calcular o ETA (32 km/h) de cada candidata;
+ * 5. ranquear as alternativas e escolher a recomendada — não
+ *    necessariamente a de maior pontuação isolada nem a mais rápida, mas a
+ *    de melhor equilíbrio entre adequação e distância (ver `rankRoutes`);
+ * 6. anexar explicações legíveis (highlights) e retornar rota selecionada +
+ *    alternativas para o usuário.
+ */
+export async function planRoute(request: RouteRequest): Promise<RouteResult> {
+  const provider = getRoutingProvider()
+  const candidates = await provider.fetchCandidateRoutes(request)
+
+  if (candidates.length === 0) {
+    throw new Error('Nenhuma rota candidata foi encontrada entre a origem e o destino informados.')
+  }
+
+  const scored: ScoredRoute[] = await Promise.all(
+    candidates.map(async (route) => {
+      const enrichedSegments = await enrichRouteSegments(route)
+      const enrichedRoute = { ...route, segments: enrichedSegments }
+      const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute)
+      return {
+        route: enrichedRoute,
+        issues,
+        breakdown,
+        suitabilityScore,
+        eligibility,
+        etaMinutes: calculateEtaMinutes(route.totalDistanceMeters),
+        highlights: [],
+      }
+    }),
+  )
+
+  const { ranked, recommendedId } = rankRoutes(scored)
+  attachHighlights(ranked, recommendedId)
+
+  const selected = ranked.find((entry) => entry.route.id === recommendedId)!
+  const alternatives = ranked.filter((entry) => entry.route.id !== recommendedId)
+
+  return { selected, alternatives }
+}
+
+/**
+ * Ranqueia as candidatas e decide qual é a "recomendada": a de maior
+ * adequação, EXCETO quando outra candidata tem adequação muito próxima
+ * (dentro de uma tolerância em pontos) e é significativamente mais curta —
+ * nesse caso, a mais curta ganha, para evitar recomendar um desvio grande em
+ * troca de um ganho de adequação irrisório.
+ *
+ * A tolerância vem da preferência do usuário (Perfil → "Estilo de rota"):
+ * 'tranquil' é mais estrita (só aceita rotas muito próximas do máximo de
+ * adequação), 'fast' é mais permissiva (aceita mais perda de adequação em
+ * troca de velocidade). Nunca influencia a ELEGIBILIDADE das vias — só qual
+ * das rotas já elegíveis é escolhida como recomendada.
+ *
+ * Rótulos 'fastest'/'safest' marcam os extremos do conjunto quando distintos
+ * da recomendada, para a UI oferecer alternativas (ex: "Mais rápida").
+ */
+function rankRoutes(scored: ScoredRoute[]): { ranked: ScoredRoute[]; recommendedId: string } {
+  const tolerance = ROUTE_PREFERENCE_TOLERANCE[getUserPreferences().routePreference]
+  const maxScore = Math.max(...scored.map((entry) => entry.suitabilityScore))
+  const contenders = scored.filter((entry) => entry.suitabilityScore >= maxScore - tolerance)
+  const recommended = [...contenders].sort((a, b) => a.route.totalDistanceMeters - b.route.totalDistanceMeters)[0]
+
+  const fastest = [...scored].sort((a, b) => a.etaMinutes - b.etaMinutes)[0]
+  const safest = [...scored].sort((a, b) => b.suitabilityScore - a.suitabilityScore)[0]
+
+  const ranked = [...scored].sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+
+  for (const entry of ranked) {
+    entry.label = undefined
+    if (entry.route.id === recommended.route.id) entry.label = 'recommended'
+    else if (entry.route.id === fastest.route.id) entry.label = 'fastest'
+    else if (entry.route.id === safest.route.id) entry.label = 'safest'
+  }
+
+  return { ranked, recommendedId: recommended.route.id }
+}
+
+function attachHighlights(routes: ScoredRoute[], recommendedId: string) {
+  const recommended = routes.find((entry) => entry.route.id === recommendedId)
+  if (!recommended) return
+
+  for (const entry of routes) {
+    const unsuitableDistance = entry.breakdown
+      .filter((item) => item.tier === 'unsuitable' || item.tier === 'prohibited')
+      .reduce((sum, item) => sum + item.distanceMeters, 0)
+
+    const highlights: string[] = []
+
+    if (entry.route.id === recommendedId) {
+      if (unsuitableDistance === 0) {
+        highlights.push('Recomendada para scooter — evita vias expressas e rodovias.')
+      } else {
+        highlights.push(`Recomendada para scooter — inclui ${formatDistance(unsuitableDistance)} de acesso inevitável em via inadequada.`)
+      }
+    } else if (unsuitableDistance > 0 && recommended.route.id !== entry.route.id) {
+      const extraTime = Math.round(entry.etaMinutes - recommended.etaMinutes)
+      if (extraTime < 0) {
+        highlights.push(`Mais rápida (${formatEta(entry.etaMinutes)}), mas passa por ${formatDistance(unsuitableDistance)} de via inadequada.`)
+      } else {
+        highlights.push(`⚠️ Esta rota utiliza ${formatDistance(unsuitableDistance)} de via expressa/rodovia.`)
+      }
+    } else if (unsuitableDistance === 0 && entry.etaMinutes > recommended.etaMinutes) {
+      const extraTime = Math.round(entry.etaMinutes - recommended.etaMinutes)
+      if (extraTime > 0) {
+        highlights.push(`${extraTime} min mais longa que a recomendada, mas igualmente adequada.`)
+      }
+    }
+
+    entry.highlights = highlights
+  }
+}
+
+export { calculateEtaMinutes } from '@/services/routing/eta'
+export { evaluateRoute } from '@/services/routing/ruleEngine'
