@@ -8,6 +8,7 @@ import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet
 import { TopBar } from '@/components/layout/TopBar'
 import { StatusChips } from '@/components/layout/StatusChips'
 import { BottomNavBar, type BottomNavTab } from '@/components/layout/BottomNavBar'
+import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { MenuPanel, type MenuTarget } from '@/components/panels/MenuPanel'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
@@ -389,7 +390,7 @@ export default function App() {
         />
       </div>
 
-      <div className="pointer-events-none absolute bottom-24 right-3">
+      <div className="pointer-events-none absolute bottom-36 right-3">
         <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
       </div>
 
@@ -426,7 +427,8 @@ export default function App() {
         </BottomSheet>
       ) : (
         !selectedPoi && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <VehicleStatusBar bluetooth={vehicleBluetooth} />
             <BottomNavBar
               active={activePanel === null ? 'explore' : (activePanel as BottomNavTab)}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}

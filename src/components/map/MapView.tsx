@@ -282,8 +282,8 @@ function updateMarker(
 }
 
 function markerClassName(kind: 'origin' | 'destination' | 'user'): string {
-  const base = 'h-4 w-4 rounded-full border-2 border-surface shadow-md'
-  if (kind === 'origin') return `${base} bg-brand-400`
-  if (kind === 'destination') return `${base} bg-success-400`
-  return `${base} bg-brand-400 ring-4 ring-brand-400/30`
+  const base = 'h-4 w-4 rounded-full border-2 border-white shadow-md'
+  if (kind === 'origin') return `${base} bg-brand-600`
+  if (kind === 'destination') return `${base} bg-success-600`
+  return `${base} bg-brand-500 ring-4 ring-brand-500/30`
 }

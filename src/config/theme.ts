@@ -22,15 +22,22 @@ export const SUCCESS = colors.green
 export const WARNING = colors.amber
 export const DANGER = colors.rose
 
-/** Hex literais usados fora do Tailwind (paint properties do MapLibre GL). */
+/**
+ * Hex literais usados fora do Tailwind (paint properties do MapLibre GL).
+ * O MAPA usa um estilo próprio, claro/colorido (ver config/env.ts —
+ * "streets-v12" do Mapbox, trocado do dark-v11 por ilegibilidade real
+ * medida: só 8% de diferença de luminosidade entre fundo e ruas). A
+ * interface flutua em cards escuros por cima — o contraste entre rota/
+ * marcadores e esse mapa claro precisa ser mantido mesmo assim.
+ */
 export const MAP_COLORS = {
-  routeCasing: '#0A0E1A',
+  routeCasing: '#FFFFFF',
   /** Linha única (navegação ativa — uma rota já confirmada). */
-  routeLine: BRAND[400],
+  routeLine: BRAND[600],
   /** Linhas de múltiplas candidatas simultâneas na tela de seleção de rota, por elegibilidade. */
   routeByEligibility: {
-    allowed: SUCCESS[400],
-    discouraged: WARNING[400],
-    'not-allowed': DANGER[400],
+    allowed: SUCCESS[600],
+    discouraged: WARNING[600],
+    'not-allowed': DANGER[600],
   },
 } as const

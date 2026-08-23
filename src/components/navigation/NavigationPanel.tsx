@@ -88,41 +88,55 @@ export function NavigationPanel({
         )}
       </div>
 
+      {/* Pílulas flutuantes de velocidade/bateria — separadas do bottom sheet, lado a lado, acima dele. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] flex justify-between px-3">
+        <span className="pointer-events-auto rounded-2xl border border-white/5 bg-surface-card/95 px-4 py-2.5 text-center shadow-floating backdrop-blur">
+          <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Velocidade</span>
+          <span className="block text-lg font-extrabold text-slate-100">
+            {currentSpeedKmh != null ? currentSpeedKmh : '—'}
+            <span className="ml-0.5 text-xs font-semibold text-slate-500">km/h</span>
+          </span>
+        </span>
+        <span
+          className="pointer-events-auto rounded-2xl border border-white/5 bg-surface-card/95 px-4 py-2.5 text-center shadow-floating backdrop-blur"
+          title={
+            vehicleBattery != null
+              ? 'Leitura real do veículo conectado via Bluetooth'
+              : `Estimativa: ${MOCK_VEHICLE_STATUS.batteryPercent}% inicial, autonomia de ${VEHICLE_PROFILE.estimatedRangeKm} km — sem integração real de bateria`
+          }
+        >
+          <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Bateria</span>
+          <span className={`block text-lg font-extrabold ${vehicleBattery != null ? 'text-success-400' : 'text-slate-100'}`}>
+            {vehicleBattery != null ? vehicleBattery : `≈${batteryPercent}`}
+            <span className="ml-0.5 text-xs font-semibold text-slate-500">%</span>
+          </span>
+        </span>
+      </div>
+
       <div className="pointer-events-none absolute inset-x-0 bottom-0">
         <div className="pointer-events-auto rounded-t-2xl border-t border-white/5 bg-surface-card p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-floating">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-2xl font-extrabold text-slate-100">{formatEta(remainingDurationMinutes)}</p>
-              <p className="text-sm text-slate-400">restantes até o destino</p>
+          <div className="flex items-center justify-between text-center">
+            <div className="flex-1">
+              <p className="text-xl font-extrabold text-slate-100">{formatEta(remainingDurationMinutes)}</p>
+              <p className="text-xs text-slate-400">tempo restante</p>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-extrabold text-slate-100">{formatDistance(remainingDistanceMeters)}</p>
-              <p className="text-sm text-slate-400">de distância</p>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="flex-1">
+              <p className="text-xl font-extrabold text-slate-100">{formatDistance(remainingDistanceMeters)}</p>
+              <p className="text-xs text-slate-400">distância restante</p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="flex-1">
+              <p className="text-xl font-extrabold text-slate-100">{estimatedArrivalTime(remainingDurationMinutes)}</p>
+              <p className="text-xs text-slate-400">chegada</p>
             </div>
           </div>
-
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-xs text-slate-500">
-              {currentSpeedKmh != null ? `${currentSpeedKmh} km/h (GPS)` : 'Velocidade indisponível'}
-            </span>
-            <span
-              className={`flex items-center gap-1.5 text-xs font-medium ${vehicleBattery != null ? 'text-success-400' : 'text-slate-400'}`}
-              title={
-                vehicleBattery != null
-                  ? 'Leitura real do veículo conectado via Bluetooth'
-                  : `Estimativa: ${MOCK_VEHICLE_STATUS.batteryPercent}% inicial, autonomia de ${VEHICLE_PROFILE.estimatedRangeKm} km — sem integração real de bateria`
-              }
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.2}>
-                <rect x="2.5" y="7" width="16" height="10" rx="2" />
-                <path d="M21 10v4" strokeLinecap="round" />
-              </svg>
-              {vehicleBattery != null
-                ? `${vehicleBattery}% (Bluetooth) · ≈${remainingRangeKm} km restantes`
-                : `≈${batteryPercent}% estimado · ≈${remainingRangeKm} km restantes`}
-            </span>
-          </div>
+          {vehicleBattery == null && (
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              ≈{remainingRangeKm} km de autonomia restante estimada
+            </p>
+          )}
 
           <button
             type="button"
@@ -135,6 +149,12 @@ export function NavigationPanel({
       </div>
     </>
   )
+}
+
+/** Hora prevista de chegada — calculada a partir do tempo restante real (progress), nunca fixa. */
+function estimatedArrivalTime(remainingMinutes: number): string {
+  const arrival = new Date(Date.now() + remainingMinutes * 60_000)
+  return arrival.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
 function ManeuverIcon({ maneuver }: { maneuver: ManeuverType }) {

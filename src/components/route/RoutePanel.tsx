@@ -10,10 +10,10 @@ const LABEL_TEXT: Record<NonNullable<ScoredRoute['label']>, string> = {
 }
 
 /** Selo colorido por elegibilidade — substitui os emojis 🟢🟡🔴 usados antes por um badge de texto, igual ao protótipo. */
-const ELIGIBILITY_TONE: Record<Eligibility, { badge: string; dot: string; label: string }> = {
-  allowed: { badge: 'bg-success-500 text-surface', dot: 'bg-success-400', label: 'Rota adequada' },
-  discouraged: { badge: 'bg-warning-500 text-surface', dot: 'bg-warning-400', label: 'Rota com ressalvas' },
-  'not-allowed': { badge: 'bg-danger-500 text-surface', dot: 'bg-danger-400', label: 'Rota não recomendada' },
+const ELIGIBILITY_TONE: Record<Eligibility, { badge: string; dot: string; border: string; text: string; label: string }> = {
+  allowed: { badge: 'bg-success-500 text-surface', dot: 'bg-success-400', border: 'border-success-500', text: 'text-success-400', label: 'Rota adequada' },
+  discouraged: { badge: 'bg-warning-500 text-surface', dot: 'bg-warning-400', border: 'border-warning-500', text: 'text-warning-400', label: 'Rota com ressalvas' },
+  'not-allowed': { badge: 'bg-danger-500 text-surface', dot: 'bg-danger-400', border: 'border-danger-500', text: 'text-danger-400', label: 'Rota não recomendada' },
 }
 
 /** Resumo mínimo mostrado com o Bottom Sheet recolhido — só a rota ativa, sem lista. */
@@ -124,21 +124,28 @@ function RouteOptionCard({ scoredRoute, isSelected, onSelect }: { scoredRoute: S
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-        isSelected ? 'border-brand-400/70 bg-surface-raised' : 'border-white/5 bg-surface-raised/50 active:bg-surface-raised'
+      className={`w-full rounded-2xl border-2 border-l-[6px] p-3.5 text-left transition-all ${
+        isSelected
+          ? `${tone.border} bg-surface-raised shadow-floating`
+          : 'border-white/5 border-l-white/10 bg-surface-raised/40 active:bg-surface-raised/70'
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone.badge}`}>
           {scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}
         </span>
-        <span className="shrink-0 text-sm font-bold text-slate-100">{formatEta(scoredRoute.etaMinutes)}</span>
+        <div className="shrink-0 text-right">
+          <span className={`block font-extrabold leading-none text-slate-100 ${isSelected ? 'text-2xl' : 'text-lg'}`}>
+            {formatEta(scoredRoute.etaMinutes)}
+          </span>
+        </div>
       </div>
-      <p className="mt-1.5 text-sm text-slate-300">
-        {formatDistance(scoredRoute.route.totalDistanceMeters)} · {scoredRoute.suitabilityScore}/100
-        {isSelected && <span className="ml-1.5 font-semibold text-brand-400">· Selecionada</span>}
-      </p>
-      {scoredRoute.highlights[0] && <p className="mt-0.5 truncate text-xs text-slate-500">{scoredRoute.highlights[0]}</p>}
+      <div className="mt-2 flex items-center gap-2 text-sm text-slate-300">
+        <span className="font-semibold">{formatDistance(scoredRoute.route.totalDistanceMeters)}</span>
+        <span className="text-slate-600">·</span>
+        <span className={`font-semibold ${tone.text}`}>{scoredRoute.suitabilityScore}/100 adequação</span>
+      </div>
+      {scoredRoute.highlights[0] && <p className="mt-1 text-xs text-slate-500">{scoredRoute.highlights[0]}</p>}
     </button>
   )
 }

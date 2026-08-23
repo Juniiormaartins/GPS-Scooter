@@ -13,9 +13,17 @@
 
 const NOMINATIM_DEFAULT_BASE_URL = 'https://nominatim.openstreetmap.org'
 const OSRM_DEMO_DEFAULT_BASE_URL = 'https://router.project-osrm.org'
-const MAPTILER_STYLE_ID = 'streets-v2-dark'
-/** Estilo escuro padrão do Mapbox — mesmo tom das superfícies do app (ver tailwind.config.js `surface`). */
-const MAPBOX_STYLE_ID = 'dark-v11'
+const MAPTILER_STYLE_ID = 'streets-v2'
+/**
+ * Estilo do mapa. Testei o "dark-v11" e é ILEGÍVEL como GPS: medi a
+ * luminosidade real das cores do próprio estilo (fundo hsl(0,0%,16%) vs.
+ * ruas hsl(0,0%,24%) — só 8% de diferença, praticamente invisível). Prioridade
+ * do produto é o mapa ser utilizável, não combinar com o tema escuro da UI —
+ * por isso "streets-v12" (padrão, colorido, alto contraste, mostra ruas,
+ * bairros e POIs) em vez de um estilo escuro que esconde a própria informação
+ * que um GPS existe para mostrar.
+ */
+const MAPBOX_STYLE_ID = 'streets-v12'
 
 /**
  * Resolve a URL do estilo do mapa. Prioridade:
