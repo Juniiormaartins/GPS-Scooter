@@ -5,12 +5,9 @@ import { PoiCard } from '@/components/search/PoiCard'
 import { MapControls } from '@/components/controls/MapControls'
 import { RoutePanel, RouteSummary } from '@/components/route/RoutePanel'
 import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet'
-import { TopBar } from '@/components/layout/TopBar'
-import { StatusChips } from '@/components/layout/StatusChips'
 import { BottomNavBar, type BottomNavTab } from '@/components/layout/BottomNavBar'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
-import { MenuPanel, type MenuTarget } from '@/components/panels/MenuPanel'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
 import { ActivityPanel } from '@/components/panels/ActivityPanel'
@@ -25,7 +22,7 @@ import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/stora
 import { recordActivity } from '@/services/storage/activityHistory'
 import type { RouteResult } from '@/types/routing'
 
-type ActivePanel = 'menu' | 'profile' | 'saved' | 'activity' | null
+type ActivePanel = 'profile' | 'saved' | 'activity' | null
 
 /** Texto do campo de origem quando a localização atual está em uso mas a geocodificação reversa ainda não resolveu (ou falhou). */
 const CURRENT_LOCATION_LABEL = 'Minha localização atual'
@@ -316,10 +313,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigationSession.routeDeviated])
 
-  function handleMenuNavigate(target: MenuTarget) {
-    setActivePanel(target)
-  }
-
   if (isNavigating && activeScoredRoute) {
     const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
@@ -372,9 +365,6 @@ export default function App() {
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <TopBar onMenuClick={() => setActivePanel('menu')} onProfileClick={() => setActivePanel('profile')} />
-        <StatusChips />
-
         <SearchPanel
           originText={originText}
           destinationText={destinationText}
@@ -384,6 +374,7 @@ export default function App() {
           onSelectDestination={handleSelectDestination}
           onUseCurrentLocation={handleUseCurrentLocation}
           onCalculateRoute={handleCalculateRoute}
+          onProfileClick={() => setActivePanel('profile')}
           isCalculating={isCalculating}
           canCalculate={Boolean(originText.trim() && destinationText.trim())}
           warningMessage={statusMessage ?? warningMessage}
@@ -437,7 +428,6 @@ export default function App() {
         )
       )}
 
-      {activePanel === 'menu' && <MenuPanel onClose={() => setActivePanel(null)} onNavigate={handleMenuNavigate} />}
       {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} vehicleBluetooth={vehicleBluetooth} />}
       {activePanel === 'saved' && (
         <SavedPanel

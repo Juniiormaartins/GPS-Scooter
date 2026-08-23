@@ -10,11 +10,18 @@ interface SearchPanelProps {
   onSelectDestination: (result: GeocodingResult) => void
   onUseCurrentLocation: () => void
   onCalculateRoute: () => void
+  onProfileClick: () => void
   isCalculating: boolean
   canCalculate: boolean
   warningMessage: string | null
 }
 
+/**
+ * Card único de busca — sem barra de topo separada (o avatar/acesso ao
+ * Perfil vive aqui dentro, à esquerda, como no protótipo). "Sua localização"
+ * e "Para onde?" ficam empilhados com um marcador colorido cada, ligados por
+ * uma linha vertical fina.
+ */
 export function SearchPanel({
   originText,
   destinationText,
@@ -24,6 +31,7 @@ export function SearchPanel({
   onSelectDestination,
   onUseCurrentLocation,
   onCalculateRoute,
+  onProfileClick,
   isCalculating,
   canCalculate,
   warningMessage,
@@ -31,12 +39,22 @@ export function SearchPanel({
   return (
     <div className="pointer-events-auto rounded-3xl border border-white/5 bg-surface-card/95 p-3 shadow-floating backdrop-blur">
       <div className="flex items-stretch gap-3">
-        <div className="flex flex-col items-center justify-between py-2.5">
-          <span className="h-2.5 w-2.5 rounded-full border-2 border-brand-400 bg-surface-card" />
-          <span className="my-1 h-8 w-px flex-1 border-l border-dashed border-white/15" />
-          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-slate-500" fill="currentColor">
-            <path d="M12 2C7.6 2 4 5.6 4 10c0 5.4 7 11.5 7.3 11.8.4.3 1 .3 1.4 0C13 21.5 20 15.4 20 10c0-4.4-3.6-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" />
+        <button
+          type="button"
+          onClick={onProfileClick}
+          aria-label="Perfil"
+          className="flex h-11 w-11 shrink-0 items-center justify-center self-center overflow-hidden rounded-full bg-brand-500/15 text-brand-400 active:bg-brand-500/25"
+        >
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="8" r="3.2" />
+            <path d="M5 20c1.2-3.6 4.2-5.5 7-5.5s5.8 1.9 7 5.5" strokeLinecap="round" />
           </svg>
+        </button>
+
+        <div className="flex flex-col items-center justify-between py-1">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-brand-400" />
+          <span className="my-1 w-px flex-1 border-l border-dashed border-white/15" />
+          <span className="h-2 w-2 shrink-0 rounded-full bg-slate-500" />
         </div>
 
         <div className="flex flex-1 flex-col gap-2">
@@ -60,8 +78,8 @@ export function SearchPanel({
             value={destinationText}
             onChangeText={onDestinationChange}
             onSelect={onSelectDestination}
-            placeholder="Para onde vamos?"
-            leftIcon={
+            placeholder="Para onde?"
+            rightAdornment={
               <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-brand-400" fill="none" stroke="currentColor" strokeWidth={2}>
                 <circle cx="11" cy="11" r="7" />
                 <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
