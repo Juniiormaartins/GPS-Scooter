@@ -1,4 +1,5 @@
-export type BottomNavTab = 'explore' | 'saved' | 'activity' | 'profile'
+/** Só 3 abas, igual ao protótipo — Perfil não está aqui, o acesso é pelo avatar no card de busca (ver SearchPanel). */
+export type BottomNavTab = 'explore' | 'saved' | 'activity'
 
 interface BottomNavBarProps {
   active: BottomNavTab
@@ -9,7 +10,6 @@ const TABS: { key: BottomNavTab; label: string }[] = [
   { key: 'explore', label: 'Explorar' },
   { key: 'saved', label: 'Salvos' },
   { key: 'activity', label: 'Atividade' },
-  { key: 'profile', label: 'Perfil' },
 ]
 
 /** Navegação inferior flutuante — pílula com margem das bordas, não uma barra colada de ponta a ponta (ver protótipo). */
@@ -23,12 +23,12 @@ export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
             key={tab.key}
             type="button"
             onClick={() => onSelect(tab.key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[13px] font-bold transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3 text-[15px] font-bold transition-colors ${
               isActive ? 'bg-brand-500/15 text-brand-400' : 'text-slate-500'
             }`}
           >
             <TabIcon tabKey={tab.key} active={isActive} />
-            <span className={isActive ? 'inline' : 'hidden'}>{tab.label}</span>
+            {tab.label}
           </button>
         )
       })}
@@ -56,18 +56,10 @@ function TabIcon({ tabKey, active }: { tabKey: BottomNavTab; active: boolean }) 
       </svg>
     )
   }
-  if (tabKey === 'activity') {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...common}>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3.5 2" />
-      </svg>
-    )
-  }
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...common}>
-      <circle cx="12" cy="8" r="3.2" fill={active ? 'currentColor' : 'none'} />
-      <path d="M5 20c1.2-3.6 4.2-5.5 7-5.5s5.8 1.9 7 5.5" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
     </svg>
   )
 }

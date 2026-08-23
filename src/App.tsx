@@ -5,7 +5,7 @@ import { PoiCard } from '@/components/search/PoiCard'
 import { MapControls } from '@/components/controls/MapControls'
 import { RoutePanel, RouteSummary } from '@/components/route/RoutePanel'
 import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet'
-import { BottomNavBar, type BottomNavTab } from '@/components/layout/BottomNavBar'
+import { BottomNavBar } from '@/components/layout/BottomNavBar'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
@@ -421,7 +421,7 @@ export default function App() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <VehicleStatusBar bluetooth={vehicleBluetooth} />
             <BottomNavBar
-              active={activePanel === null ? 'explore' : (activePanel as BottomNavTab)}
+              active={activePanel === 'saved' || activePanel === 'activity' ? activePanel : 'explore'}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
             />
           </div>

@@ -9,6 +9,24 @@ interface AddressAutocompleteInputProps {
   onSelect: (result: GeocodingResult) => void
   leftIcon?: ReactNode
   rightAdornment?: ReactNode
+  /**
+   * 'primary'   — linha de destaque ("Para onde?"): texto maior, em negrito, sem caixa.
+   * 'secondary' — linha auxiliar ("Sua localização"): texto menor e discreto, sem caixa.
+   * 'boxed'     — campo com fundo/pílula próprio (usado fora do card principal de busca).
+   */
+  variant?: 'primary' | 'secondary' | 'boxed'
+}
+
+const VARIANT_ROW: Record<NonNullable<AddressAutocompleteInputProps['variant']>, string> = {
+  primary: 'flex items-center gap-2.5 py-0.5',
+  secondary: 'flex items-center gap-2.5 py-0.5',
+  boxed: 'flex items-center gap-2 rounded-full border border-white/5 bg-surface-raised px-4 py-3 transition-colors has-[input:focus]:border-brand-400/60',
+}
+
+const VARIANT_INPUT: Record<NonNullable<AddressAutocompleteInputProps['variant']>, string> = {
+  primary: 'w-full bg-transparent text-lg font-bold text-slate-100 placeholder:text-slate-100 focus:outline-none',
+  secondary: 'w-full bg-transparent text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none',
+  boxed: 'w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none',
 }
 
 /**
@@ -25,6 +43,7 @@ export function AddressAutocompleteInput({
   onSelect,
   leftIcon,
   rightAdornment,
+  variant = 'boxed',
 }: AddressAutocompleteInputProps) {
   const [isFocused, setIsFocused] = useState(false)
   const [suppressDropdown, setSuppressDropdown] = useState(false)
@@ -33,7 +52,7 @@ export function AddressAutocompleteInput({
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 rounded-full border border-white/5 bg-surface-raised px-4 py-3 transition-colors has-[input:focus]:border-brand-400/60">
+      <div className={VARIANT_ROW[variant]}>
         {leftIcon}
         <input
           value={value}
@@ -44,7 +63,7 @@ export function AddressAutocompleteInput({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 150)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
+          className={VARIANT_INPUT[variant]}
         />
         {rightAdornment}
       </div>

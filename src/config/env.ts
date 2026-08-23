@@ -14,32 +14,30 @@
 const NOMINATIM_DEFAULT_BASE_URL = 'https://nominatim.openstreetmap.org'
 const OSRM_DEMO_DEFAULT_BASE_URL = 'https://router.project-osrm.org'
 const MAPTILER_STYLE_ID = 'streets-v2'
-/**
- * Estilo do mapa. Testei o "dark-v11" e é ILEGÍVEL como GPS: medi a
- * luminosidade real das cores do próprio estilo (fundo hsl(0,0%,16%) vs.
- * ruas hsl(0,0%,24%) — só 8% de diferença, praticamente invisível). Prioridade
- * do produto é o mapa ser utilizável, não combinar com o tema escuro da UI —
- * por isso "streets-v12" (padrão, colorido, alto contraste, mostra ruas,
- * bairros e POIs) em vez de um estilo escuro que esconde a própria informação
- * que um GPS existe para mostrar.
- */
-const MAPBOX_STYLE_ID = 'streets-v12'
 
 /**
  * Resolve a URL do estilo do mapa. Prioridade:
  * 1. VITE_MAP_STYLE_URL — override explícito, aceita qualquer provedor compatível com MapLibre.
- * 2. VITE_MAPBOX_API_KEY — estilo escuro padrão do Mapbox (mesma chave já usada para busca de POI).
- * 3. VITE_MAPTILER_API_KEY — variante escura do MapTiler, caso o Mapbox não esteja configurado.
- * 4. Nenhuma das três — MapView usa o fallback de demonstração (ver FALLBACK_DEMO_STYLE_URL).
+ * 2. VITE_MAPTILER_API_KEY — mapa (MapTiler continua sendo o provedor de mapa; Mapbox é usado só
+ *    para busca de POI, ver services/geocoding.ts).
+ * 3. Nenhuma das duas — MapView usa o fallback de demonstração (ver FALLBACK_DEMO_STYLE_URL).
+ *
+ * IMPORTANTE — por que não usar um estilo hospedado no Mapbox aqui: tentei
+ * (streets-v12/dark-v11) e o mapa ficava com fundo sólido, sem nenhuma rua —
+ * confirmado em teste real (navegador, PWA instalado, iPhone). Causa raiz
+ * encontrada: estilos do Mapbox referenciam tiles/sprite/glyphs via URLs
+ * `mapbox://...`, um protocolo proprietário que só o SDK oficial "mapbox-gl"
+ * sabe resolver — o "maplibre-gl" usado neste projeto (biblioteca aberta,
+ * sem conta/billing Mapbox) não traduz esse protocolo sozinho, então o
+ * estilo carregava mas nenhum dado de rua era buscado. Resolver isso direito
+ * exigiria reimplementar a tradução `mapbox://` → `https://api.mapbox.com/...`
+ * nós mesmos (frágil, não documentado oficialmente para uso fora do SDK deles).
+ * MapTiler usa URLs HTTPS simples, sem esse problema — por isso voltou a ser
+ * o provedor do mapa em si.
  */
 function resolveMapStyleUrl(): string {
   const explicitStyleUrl = import.meta.env.VITE_MAP_STYLE_URL ?? ''
   if (explicitStyleUrl) return explicitStyleUrl
-
-  const mapboxApiKey = import.meta.env.VITE_MAPBOX_API_KEY ?? ''
-  if (mapboxApiKey) {
-    return `https://api.mapbox.com/styles/v1/mapbox/${MAPBOX_STYLE_ID}?access_token=${mapboxApiKey}`
-  }
 
   const maptilerApiKey = import.meta.env.VITE_MAPTILER_API_KEY ?? ''
   if (maptilerApiKey) {
