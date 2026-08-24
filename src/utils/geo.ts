@@ -104,3 +104,28 @@ export function formatEta(minutes: number): string {
   const remainingMinutes = Math.round(minutes % 60)
   return `${hours}h ${remainingMinutes}min`
 }
+
+/**
+ * Rumo (bearing) de `from` para `to`, em graus 0–360 no sentido horário a
+ * partir do norte — o mesmo referencial que o MapLibre usa em `bearing` e que
+ * a Geolocation API usa em `coords.heading`.
+ *
+ * Serve de FALLBACK para quando o dispositivo não fornece heading: em muitos
+ * aparelhos `coords.heading` só vem preenchido em movimento, e vem `null`
+ * parado ou em GPS de baixa precisão. Derivar do deslocamento entre duas
+ * posições é a única fonte honesta nesse caso — quando nem isso existe
+ * (posições iguais), quem chama mantém o rumo anterior em vez de inventar.
+ */
+export function computeBearingDegrees(from: LngLat, to: LngLat): number {
+  const toRad = (value: number) => (value * Math.PI) / 180
+  const toDeg = (value: number) => (value * 180) / Math.PI
+
+  const lat1 = toRad(from.lat)
+  const lat2 = toRad(to.lat)
+  const deltaLng = toRad(to.lng - from.lng)
+
+  const y = Math.sin(deltaLng) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng)
+
+  return (toDeg(Math.atan2(y, x)) + 360) % 360
+}

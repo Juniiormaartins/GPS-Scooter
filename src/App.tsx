@@ -21,6 +21,7 @@ import { isSpeechSupported, primeFromUserGesture } from '@/services/navigation/v
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
 import { planRoute } from '@/services/routing'
+import { classifySegment } from '@/services/routing/roadClassification'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
@@ -332,6 +333,20 @@ export default function App() {
   const allRoutes = routeResult ? [routeResult.selected, ...routeResult.alternatives] : []
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
+  /**
+   * Trechos inadequados DENTRO da rota ativa, para destaque no mapa.
+   * A classificação por segmento já existia (roadClassification.classifySegment)
+   * e alimentava só a pontuação — aqui ela também vira geometria, permitindo
+   * ver ONDE está o pedaço ruim de uma rota que no geral é recomendada.
+   */
+  const routeWarnings = (activeScoredRoute?.route.segments ?? [])
+    .map((segment) => ({ segment, tier: classifySegment(segment) }))
+    .filter(({ tier }) => tier === 'caution' || tier === 'unsuitable' || tier === 'prohibited')
+    .map(({ segment, tier }) => ({
+      path: segment.path,
+      severity: (tier === 'caution' ? 'caution' : 'unsuitable') as 'caution' | 'unsuitable',
+    }))
+
   const navigationSession = useNavigationSession(activeScoredRoute?.route ?? null, isNavigating)
   useVoiceGuidance(navigationSession.progress, voiceEnabled, isNavigating)
 
@@ -376,6 +391,8 @@ export default function App() {
           userPoint={navPosition}
           routeGeometry={activeScoredRoute.route.geometry}
           followUser={isFollowingUser}
+          headingDeg={navigationSession.headingDeg}
+          routeWarnings={routeWarnings}
           theme={preferences.theme}
           onUserInteraction={() => setIsFollowingUser(false)}
         />
@@ -495,7 +512,7 @@ export default function App() {
             <div className="mb-3 flex justify-end">
               <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
             </div>
-            <VehicleStatusBar bluetooth={vehicleBluetooth} />
+            <VehicleStatusBar bluetooth={vehicleBluetooth} preferences={preferences} />
             <BottomNavBar
               active={activePanel ?? 'explore'}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}

@@ -13,6 +13,17 @@ export interface RouteOptionGeometry {
   isActive: boolean
 }
 
+/**
+ * Trecho específico da rota classificado como inadequado. Existe para que uma
+ * rota "recomendada" que contenha 200 m inevitáveis de via ruim mostre ONDE
+ * está esse pedaço, em vez de esconder a diferença sob uma cor única.
+ */
+export interface RouteWarningSegment {
+  path: LngLat[]
+  /** 'caution' = atenção (âmbar); 'unsuitable'/'prohibited' = inadequado (vermelho). */
+  severity: 'caution' | 'unsuitable'
+}
+
 interface MapViewProps {
   originPoint: LngLat | null
   destinationPoint: LngLat | null
@@ -21,8 +32,17 @@ interface MapViewProps {
   routeGeometry: LngLat[] | null
   /** Várias candidatas simultâneas (tela de seleção de rota) — cada uma colorida pela própria elegibilidade. Ignorado se vazio/ausente; nesse caso usa `routeGeometry`. */
   routeOptions?: RouteOptionGeometry[]
+  /** Trechos problemáticos da rota ATIVA, destacados por cima do traçado principal. */
+  routeWarnings?: RouteWarningSegment[]
   /** Quando true, a câmera acompanha `userPoint` continuamente (uso: navegação ativa). */
   followUser?: boolean
+  /**
+   * Direção de deslocamento em graus. Quando presente e `followUser` está
+   * ligado, o mapa gira para que o caminho à frente aponte sempre para cima —
+   * é o que torna "vire à esquerda" coerente com o que se vê na tela.
+   * Ausente = mapa mantém o norte para cima (sem girar às cegas).
+   */
+  headingDeg?: number | null
   /**
    * Incremente este valor para fazer a câmera voar até `userPoint` UMA vez
    * (uso: botão "minha localização" fora da navegação — centraliza sem
@@ -44,6 +64,17 @@ const ROUTE_LAYER_ID = 'gps-scooter-route-line'
 const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
 const ROUTE_OPTIONS_LAYER_ID = 'gps-scooter-route-options-line'
 const ROUTE_OPTIONS_DASHED_LAYER_ID = 'gps-scooter-route-options-line-dashed'
+/**
+ * Camada INVISÍVEL e larga sobre as mesmas linhas, só para capturar toque.
+ * As linhas visíveis têm 4–7px: acertá-las com o dedo é impraticável (o alvo
+ * mínimo confortável é ~44px). Esta camada tem opacidade 0 e 30px de largura,
+ * então o usuário toca "perto da rota" e a seleção funciona — no toque e no
+ * mouse, em qualquer tema.
+ */
+const ROUTE_OPTIONS_HIT_LAYER_ID = 'gps-scooter-route-options-hit'
+/** Trechos inadequados DENTRO da rota selecionada — desenhados por cima dela. */
+const ROUTE_WARN_SOURCE_ID = 'gps-scooter-route-warn'
+const ROUTE_WARN_LAYER_ID = 'gps-scooter-route-warn-line'
 
 // Zoom "de rua" usado durante a navegação ativa — próximo o bastante para ler
 // nomes de rua e a próxima manobra, mas sem escapar do enquadramento útil.
@@ -87,7 +118,9 @@ export function MapView({
   userPoint,
   routeGeometry,
   routeOptions = [],
+  routeWarnings = [],
   followUser = false,
+  headingDeg = null,
   centerRequestId = 0,
   onUserInteraction,
   onSelectRouteOption,
@@ -192,10 +225,39 @@ export function MapView({
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { ...optionsPaint(), 'line-dasharray': [2, 1.6] },
       })
+      map.addSource(ROUTE_WARN_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: ROUTE_WARN_LAYER_ID,
+        type: 'line',
+        source: ROUTE_WARN_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'severity'],
+            'caution',
+            routePalette(themeRef.current).routeByEligibility.discouraged,
+            routePalette(themeRef.current).routeByEligibility['not-allowed'],
+          ],
+          // Mais estreita que a rota (que tem 7px quando ativa): fica DENTRO
+          // dela, como um trecho marcado, sem virar uma faixa de alerta.
+          'line-width': 4,
+          'line-opacity': 0.95,
+        },
+      })
+
+      map.addLayer({
+        id: ROUTE_OPTIONS_HIT_LAYER_ID,
+        type: 'line',
+        source: ROUTE_OPTIONS_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 30 },
+      })
+
       // Escolher a rota tocando na linha do mapa, além do card. `routeId` vem
       // das properties da feature, então mapa e lista ficam sincronizados: quem
       // recebe o id é o mesmo `onSelectRoute` usado pelos cards.
-      for (const layerId of [ROUTE_OPTIONS_LAYER_ID, ROUTE_OPTIONS_DASHED_LAYER_ID]) {
+      for (const layerId of [ROUTE_OPTIONS_HIT_LAYER_ID]) {
         map.on('click', layerId, (event) => {
           const routeId = event.features?.[0]?.properties?.routeId
           if (typeof routeId === 'string') onSelectRouteOptionRef.current?.(routeId)
@@ -219,6 +281,46 @@ export function MapView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Trechos problemáticos da rota ativa. Redesenhados sempre que a rota ou o
+  // tema mudam — a cor vem da mesma paleta semântica das candidatas.
+  useEffect(() => {
+    const map = mapRef.current
+    const source = map?.getSource(ROUTE_WARN_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (!map || !source) return
+
+    source.setData({
+      type: 'FeatureCollection',
+      features: routeWarnings
+        .filter((segment) => segment.path.length >= 2)
+        .map((segment) => ({
+          type: 'Feature' as const,
+          properties: { severity: segment.severity },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: segment.path.map((point) => [point.lng, point.lat]),
+          },
+        })),
+    })
+
+    if (map.getLayer(ROUTE_WARN_LAYER_ID)) {
+      map.setPaintProperty(ROUTE_WARN_LAYER_ID, 'line-color', [
+        'match',
+        ['get', 'severity'],
+        'caution',
+        routePalette(theme).routeByEligibility.discouraged,
+        routePalette(theme).routeByEligibility['not-allowed'],
+      ])
+    }
+  }, [routeWarnings, theme])
+
+  // Ao sair do modo "seguir" (fim da navegação), desfaz a rotação: fora da
+  // navegação o norte para cima é o que o usuário espera para se orientar.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || followUser) return
+    if (map.getBearing() !== 0) map.easeTo({ bearing: 0, duration: 400 })
+  }, [followUser])
 
   // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
   // interface clara sobre um mapa escuro (e vice-versa).
@@ -255,6 +357,7 @@ export function MapView({
     setVisibility(ROUTE_CASING_LAYER_ID, !showingOptions)
     setVisibility(ROUTE_OPTIONS_LAYER_ID, showingOptions)
     setVisibility(ROUTE_OPTIONS_DASHED_LAYER_ID, showingOptions)
+    setVisibility(ROUTE_OPTIONS_HIT_LAYER_ID, showingOptions)
   }, [routeOptions.length])
 
   useEffect(() => {
@@ -353,10 +456,14 @@ export function MapView({
         center: [userPoint.lng, userPoint.lat],
         zoom: NAVIGATION_ZOOM,
         padding: NAVIGATION_PADDING,
+        // Gira o mapa na direção do deslocamento. Sem heading conhecido,
+        // mantém o ângulo atual em vez de forçar o norte — evita que o mapa
+        // "pule" de volta toda vez que o GPS perde a direção momentaneamente.
+        bearing: headingDeg ?? map.getBearing(),
         duration: 500,
       })
     }
-  }, [userPoint, followUser])
+  }, [userPoint, followUser, headingDeg])
 
   // Centralização de disparo único (botão "minha localização" fora da
   // navegação) — dispara ao mudar `centerRequestId`, não a cada atualização

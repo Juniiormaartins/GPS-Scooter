@@ -1,8 +1,10 @@
-import { VEHICLE_PROFILE } from '@/config/vehicle'
+import { resolveVehicleLabel, type UserPreferences } from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 
 interface VehicleStatusBarProps {
   bluetooth: ReturnType<typeof useVehicleBluetooth>
+  /** Preferências do usuário — fonte de verdade do veículo ativo, não a constante fixa. */
+  preferences: UserPreferences
 }
 
 /**
@@ -16,11 +18,11 @@ interface VehicleStatusBarProps {
  * reais. O mock do design traz "84% · 38 km restáveis"; reproduzir isso sem
  * telemetria seria inventar número na interface.
  */
-export function VehicleStatusBar({ bluetooth }: VehicleStatusBarProps) {
+export function VehicleStatusBar({ bluetooth, preferences }: VehicleStatusBarProps) {
   const isConnected = bluetooth.status === 'connected'
   const hasBattery = isConnected && bluetooth.batteryPercent != null
   const remainingRangeKm = hasBattery
-    ? Math.round((bluetooth.batteryPercent! / 100) * VEHICLE_PROFILE.estimatedRangeKm)
+    ? Math.round((bluetooth.batteryPercent! / 100) * preferences.rangeKm)
     : null
 
   return (
@@ -40,9 +42,9 @@ export function VehicleStatusBar({ bluetooth }: VehicleStatusBarProps) {
       </svg>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[19px] font-extrabold text-content-primary">{VEHICLE_PROFILE.label}</p>
+        <p className="truncate text-[19px] font-extrabold text-content-primary">{resolveVehicleLabel(preferences)}</p>
         <p className="mt-0.5 truncate text-body text-content-secondary">
-          {isConnected ? 'Conectado via Bluetooth' : `Ref. ${VEHICLE_PROFILE.maxOperationalSpeedKmh} km/h`}
+          {isConnected ? 'Conectado via Bluetooth' : `Ref. ${preferences.referenceSpeedKmh} km/h`}
         </p>
       </div>
 

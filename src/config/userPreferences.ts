@@ -75,3 +75,17 @@ export const ROUTE_PREFERENCE_TOLERANCE: Record<RoutePreference, number> = {
   balanced: 5,
   fast: 15,
 }
+
+/**
+ * Rótulo do veículo ativo. Fonte única de verdade para a UI: quando o usuário
+ * escolhe outro modelo no Perfil, TODAS as telas passam a mostrar este valor.
+ *
+ * `custom` aparece quando velocidade/autonomia foram ajustadas à mão, saindo
+ * de qualquer preset — nesse caso o rótulo descreve o que foi configurado em
+ * vez de mentir dizendo que ainda é um dos modelos prontos.
+ */
+export function resolveVehicleLabel(preferences: UserPreferences): string {
+  const preset = VEHICLE_PRESETS.find((entry) => entry.id === preferences.vehicleModelId)
+  if (preset) return preset.label
+  return `Veículo personalizado · ${preferences.referenceSpeedKmh} km/h`
+}
