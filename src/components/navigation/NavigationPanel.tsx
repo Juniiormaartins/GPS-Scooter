@@ -20,6 +20,9 @@ interface NavigationPanelProps {
   vehicleBattery: number | null
   /** Botão de recentralizar, injetado por App.tsx para ficar na faixa inferior sem sobrepor os painéis. */
   recenterControl?: ReactNode
+  /** Instruções por voz ligadas? */
+  voiceEnabled: boolean
+  onToggleVoice: () => void
   onStop: () => void
 }
 
@@ -40,6 +43,8 @@ export function NavigationPanel({
   isRecalculating,
   vehicleBattery,
   recenterControl,
+  voiceEnabled,
+  onToggleVoice,
   onStop,
 }: NavigationPanelProps) {
   const { route, etaMinutes } = scoredRoute
@@ -66,16 +71,19 @@ export function NavigationPanel({
                 </span>
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onStop}
-              aria-label="Encerrar navegação"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-surface-tile text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-              </svg>
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <VoiceToggle enabled={voiceEnabled} onToggle={onToggleVoice} />
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="Encerrar navegação"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-surface-tile text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="pointer-events-auto rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-card py-3.5 text-body text-content-secondary shadow-float backdrop-blur-xl">
@@ -205,5 +213,29 @@ function ManeuverIcon({ maneuver }: { maneuver: ManeuverType }) {
         </svg>
       )}
     </span>
+  )
+}
+
+/** Liga/desliga as instruções faladas. Ícone de alto-falante com ou sem ondas. */
+function VoiceToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={enabled ? 'Desativar instruções por voz' : 'Ativar instruções por voz'}
+      aria-pressed={enabled}
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-pill transition-all duration-fast active:scale-[.97] active:opacity-[.88] ${
+        enabled ? 'bg-brand-500 text-content-on-accent' : 'bg-surface-tile text-content-secondary'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path d="M11 5L6 9H3v6h3l5 4V5z" strokeLinejoin="round" />
+        {enabled ? (
+          <path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" strokeLinecap="round" />
+        ) : (
+          <path d="M16 9l5 6M21 9l-5 6" strokeLinecap="round" />
+        )}
+      </svg>
+    </button>
   )
 }

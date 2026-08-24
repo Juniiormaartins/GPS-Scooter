@@ -5,6 +5,11 @@ import { formatDistance, formatEta } from '@/utils/geo'
 
 interface ActivityPanelProps {
   onClose: () => void
+  /**
+   * Refaz o trajeto: recalcula a rota do zero com a posição e as regras
+   * ATUAIS, em vez de reexibir uma rota antiga que pode estar desatualizada.
+   */
+  onRepeatTrip: (entry: ActivityEntry) => void
 }
 
 /**
@@ -38,7 +43,7 @@ function groupEntries(entries: ActivityEntry[]): { label: string; entries: Activ
   return groups
 }
 
-export function ActivityPanel({ onClose }: ActivityPanelProps) {
+export function ActivityPanel({ onClose, onRepeatTrip }: ActivityPanelProps) {
   const entries = listActivity()
   const groups = groupEntries(entries)
 
@@ -63,6 +68,9 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
                     title={`${entry.originLabel} → ${entry.destinationLabel}`}
                     subtitle={`${formatDistance(entry.distanceMeters)}  •  ${formatEta(entry.etaMinutes)}`}
                     chevron
+                    // Registros antigos não têm coordenadas — nesses, a linha
+                    // fica sem ação em vez de prometer algo que falharia.
+                    onClick={entry.destinationPoint ? () => onRepeatTrip(entry) : undefined}
                   />
                 ))}
               </div>

@@ -38,6 +38,19 @@ export const MAP_COLORS_LIGHT = {
   roadMinor: '#F7F9FD',
   poi: '#C3CDDE',
   label: '#4A5A72',
+
+  /**
+   * Rotas no tema claro: tons mais escuros/saturados que os do tema escuro.
+   * O ciano #35B7F7 e o verde #2FD16A brilham sobre fundo escuro, mas perdem
+   * contraste sobre um mapa claro — aqui usam as variantes 600 da paleta.
+   */
+  routeSelected: '#0E86C6',
+  routeCasing: '#FFFFFF',
+  routeByEligibility: {
+    allowed: '#17A34A',
+    discouraged: '#B3730A',
+    'not-allowed': '#D92626',
+  },
 } as const
 
 export const MAP_COLORS = {

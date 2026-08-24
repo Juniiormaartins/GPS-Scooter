@@ -64,22 +64,32 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
               placeholder="Para onde?"
               className="min-w-0 flex-1 bg-transparent text-[17px] font-bold text-content-primary placeholder:text-content-tertiary focus:outline-none"
             />
-            {query && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery('')
-                  setActiveCategory(null)
-                  inputRef.current?.focus()
-                }}
-                aria-label="Limpar"
-                className="shrink-0 text-content-tertiary transition-colors active:text-content-primary"
-              >
-                <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M9 9l6 6M15 9l-6 6" strokeLinecap="round" />
-                </svg>
-              </button>
+            {/* Spinner NO CAMPO enquanto busca: é onde o olho já está, então o
+                usuário percebe na hora que o app está procurando. Some assim
+                que os resultados chegam, dando lugar ao botão de limpar. */}
+            {isLoading ? (
+              <span
+                aria-label="Buscando"
+                className="h-[18px] w-[18px] shrink-0 animate-spin rounded-pill border-2 border-brand-500 border-t-transparent"
+              />
+            ) : (
+              query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('')
+                    setActiveCategory(null)
+                    inputRef.current?.focus()
+                  }}
+                  aria-label="Limpar"
+                  className="shrink-0 text-content-tertiary transition-colors active:text-content-primary"
+                >
+                  <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M9 9l6 6M15 9l-6 6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )
             )}
           </div>
         </div>
@@ -148,7 +158,15 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
           )
         ) : (
           <>
-            <SectionLabel className="mb-1">Resultados</SectionLabel>
+            {/* O eyebrow também comunica o estado: "BUSCANDO LUGARES…" enquanto
+                a consulta corre, "RESULTADOS" quando ela termina. */}
+            <SectionLabel className="mb-1">
+              {isLoading ? (
+                <span className="text-brand-500">Buscando lugares…</span>
+              ) : (
+                'Resultados'
+              )}
+            </SectionLabel>
 
             {error && <p className="py-3 text-body text-warning-500">{error}</p>}
 
@@ -172,7 +190,14 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
             ))}
 
             {/* Skeleton estático no fim da lista enquanto carrega — sem shimmer, como manda o handoff. */}
-            {isLoading && <SkeletonRow />}
+            {/* Dois skeletons quando a lista ainda está vazia (dá corpo à espera),
+                um só quando já há resultados do histórico e faltam os externos. */}
+            {isLoading && (
+              <>
+                <SkeletonRow />
+                {suggestions.length === 0 && <SkeletonRow />}
+              </>
+            )}
           </>
         )}
       </div>

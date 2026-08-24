@@ -16,12 +16,14 @@ import { useGeolocation, LOW_ACCURACY_THRESHOLD_METERS } from '@/hooks/useGeoloc
 import { useNavigationSession } from '@/hooks/useNavigationSession'
 import { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
+import { useVoiceGuidance } from '@/hooks/useVoiceGuidance'
+import { isSpeechSupported, primeFromUserGesture } from '@/services/navigation/voiceGuidance'
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
 import { planRoute } from '@/services/routing'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
-import { recordActivity } from '@/services/storage/activityHistory'
+import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
 import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult } from '@/types/routing'
 
@@ -45,6 +47,8 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   /** Tela de busca em tela cheia (SearchScreen do handoff) — aberta pelo campo "Para onde?" e pela lupa. */
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  /** Instruções faladas. Começa ligada quando o dispositivo suporta — num GPS, voz é o padrão esperado. */
+  const [voiceEnabled, setVoiceEnabled] = useState(isSpeechSupported)
   const [selectedPoi, setSelectedPoi] = useState<GeocodingResult | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(
     isMapConfigured ? null : 'Mapa em modo demonstração — configure VITE_MAP_STYLE_URL no .env para produção.',
@@ -195,6 +199,19 @@ export default function App() {
     setSelectedPoi(result)
   }
 
+  /**
+   * "Repetir trajeto" a partir da aba Atividade. Recalcula do zero com a
+   * posição/regras atuais — nunca reexibe a rota antiga, que pode estar
+   * desatualizada (obras, mudança de sentido, outra preferência de rota).
+   * Reaproveita `handleTraceRouteToPlace`, então herda de graça o caso de
+   * ainda não haver origem conhecida (espera o GPS e completa sozinho).
+   */
+  function handleRepeatTrip(entry: ActivityEntry) {
+    if (!entry.destinationPoint) return
+    setActivePanel(null)
+    handleTraceRouteToPlace(entry.destinationLabel, entry.destinationPoint)
+  }
+
   /** Resultado escolhido na tela de busca: registra no histórico, fecha a busca e abre a ficha do local. */
   function handlePickFromSearch(result: GeocodingResult) {
     recordSearch(result)
@@ -248,6 +265,10 @@ export default function App() {
       recordActivity({
         originLabel: oText,
         destinationLabel: dText,
+        // Guardadas para permitir "Repetir trajeto" na aba Atividade — sem elas,
+        // o histórico seria só uma lista de texto sem ação possível.
+        originPoint: origin,
+        destinationPoint: destination,
         distanceMeters: result.selected.route.totalDistanceMeters,
         etaMinutes: result.selected.etaMinutes,
         suitabilityScore: result.selected.suitabilityScore,
@@ -312,6 +333,7 @@ export default function App() {
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
   const navigationSession = useNavigationSession(activeScoredRoute?.route ?? null, isNavigating)
+  useVoiceGuidance(navigationSession.progress, voiceEnabled, isNavigating)
 
   // Desvio de rota sustentado (não ruído pontual do GPS) → recalcula a partir
   // da posição atual, mantendo o mesmo destino e perfil de veículo. As regras
@@ -354,6 +376,7 @@ export default function App() {
           userPoint={navPosition}
           routeGeometry={activeScoredRoute.route.geometry}
           followUser={isFollowingUser}
+          theme={preferences.theme}
           onUserInteraction={() => setIsFollowingUser(false)}
         />
         <NavigationPanel
@@ -364,6 +387,13 @@ export default function App() {
           routeDeviated={navigationSession.routeDeviated}
           isRecalculating={isRecalculating}
           vehicleBattery={vehicleBluetooth.status === 'connected' ? vehicleBluetooth.batteryPercent : null}
+          voiceEnabled={voiceEnabled}
+          onToggleVoice={() => {
+            // Ligar a voz precisa acontecer DENTRO do toque: o iOS só libera a
+            // síntese de fala a partir de um gesto real do usuário.
+            if (!voiceEnabled) primeFromUserGesture()
+            setVoiceEnabled((current) => !current)
+          }}
           recenterControl={
             <MapControls
               onCenterOnUser={handleCenterOnUser}
@@ -449,6 +479,9 @@ export default function App() {
             activeRouteId={activeScoredRoute.route.id}
             onSelectRoute={setActiveRouteId}
             onStartNavigation={() => {
+              // Destrava o áudio no iOS aproveitando este toque — as instruções
+              // seguintes vêm do GPS, que não conta como gesto do usuário.
+              if (voiceEnabled) primeFromUserGesture()
               setIsFollowingUser(true)
               setIsNavigating(true)
             }}
@@ -477,7 +510,9 @@ export default function App() {
           onTraceRoute={(place: SavedPlace) => handleTraceRouteToPlace(place.label, place.point)}
         />
       )}
-      {activePanel === 'activity' && <ActivityPanel onClose={() => setActivePanel(null)} />}
+      {activePanel === 'activity' && (
+        <ActivityPanel onClose={() => setActivePanel(null)} onRepeatTrip={handleRepeatTrip} />
+      )}
 
       {isSearchOpen && (
         <SearchScreen

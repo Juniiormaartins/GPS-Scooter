@@ -4,10 +4,19 @@
  * (ver App.tsx). Cap de MAX_ENTRIES para não crescer indefinidamente.
  */
 
+import type { LngLat } from '@/config/region'
+
 export interface ActivityEntry {
   id: string
   originLabel: string
   destinationLabel: string
+  /**
+   * Coordenadas de origem/destino. OPCIONAIS porque registros gravados antes
+   * desta versão não as têm — a UI oferece "Repetir trajeto" só quando o
+   * destino existe, em vez de quebrar com dados antigos.
+   */
+  originPoint?: LngLat
+  destinationPoint?: LngLat
   distanceMeters: number
   etaMinutes: number
   suitabilityScore: number

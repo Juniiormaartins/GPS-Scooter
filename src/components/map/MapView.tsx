@@ -53,6 +53,34 @@ const NAVIGATION_ZOOM = 17.5
 // deixando a rota à frente visível acima dele, como num app de navegação real.
 const NAVIGATION_PADDING = { top: 260, bottom: 40, left: 0, right: 0 }
 
+/** Paleta de rota do tema atual — o mapa claro precisa de tons mais escuros para ter contraste. */
+function routePalette(theme: 'dark' | 'light') {
+  return theme === 'light' ? MAP_COLORS_LIGHT : MAP_COLORS
+}
+
+/**
+ * Cor das candidatas: a SELECIONADA usa sempre o azul da marca (liga a rota
+ * aos marcadores e ao resto da UI); as demais mantêm a cor semântica da
+ * elegibilidade, que é onde a cor carrega informação de verdade.
+ */
+function routeOptionsColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecification {
+  const palette = routePalette(theme)
+  return [
+    'case',
+    ['get', 'active'],
+    palette.routeSelected,
+    [
+      'match',
+      ['get', 'eligibility'],
+      'allowed',
+      palette.routeByEligibility.allowed,
+      'discouraged',
+      palette.routeByEligibility.discouraged,
+      palette.routeByEligibility['not-allowed'],
+    ],
+  ]
+}
+
 export function MapView({
   originPoint,
   destinationPoint,
@@ -123,14 +151,14 @@ export function MapView({
         type: 'line',
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': MAP_COLORS.routeCasing, 'line-width': 9, 'line-opacity': 0.9 },
+        paint: { 'line-color': routePalette(themeRef.current).routeCasing, 'line-width': 9, 'line-opacity': 0.9 },
       })
       map.addLayer({
         id: ROUTE_LAYER_ID,
         type: 'line',
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': MAP_COLORS.routeLine, 'line-width': 5, 'line-opacity': 0.95 },
+        paint: { 'line-color': routePalette(themeRef.current).routeSelected, 'line-width': 5, 'line-opacity': 0.95 },
       })
 
       // Múltiplas candidatas simultâneas (tela de seleção). Precisa de DUAS camadas
@@ -142,22 +170,7 @@ export function MapView({
       map.addSource(ROUTE_OPTIONS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
       const optionsPaint = (): maplibregl.LineLayerSpecification['paint'] => ({
-        // Selecionada = azul da marca (liga a rota aos marcadores e ao resto da UI);
-        // as demais mantêm a cor semântica da elegibilidade. Ver config/theme.ts.
-        'line-color': [
-          'case',
-          ['get', 'active'],
-          MAP_COLORS.routeSelected,
-          [
-            'match',
-            ['get', 'eligibility'],
-            'allowed',
-            MAP_COLORS.routeByEligibility.allowed,
-            'discouraged',
-            MAP_COLORS.routeByEligibility.discouraged,
-            MAP_COLORS.routeByEligibility['not-allowed'],
-          ],
-        ],
+        'line-color': routeOptionsColor(themeRef.current),
         // Largura e opacidade SÃO data-driven — a rota ativa fica mais grossa e opaca.
         'line-width': ['case', ['get', 'active'], 7, 4],
         'line-opacity': ['case', ['get', 'active'], 1, 0.5],
@@ -214,9 +227,16 @@ export function MapView({
     if (!map || !map.isStyleLoaded()) return
     applyCartography(map, theme)
 
-    // O contorno da rota é o próprio fundo do mapa, então acompanha o tema.
-    const casing = theme === 'light' ? MAP_COLORS_LIGHT.background : MAP_COLORS.routeCasing
-    if (map.getLayer(ROUTE_CASING_LAYER_ID)) map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-color', casing)
+    // As camadas de rota do app também trocam de paleta: os tons do tema
+    // escuro (ciano/verde vivos) perdem contraste sobre um mapa claro.
+    const palette = routePalette(theme)
+    const repaint = (layerId: string, color: unknown) => {
+      if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-color', color)
+    }
+    repaint(ROUTE_CASING_LAYER_ID, palette.routeCasing)
+    repaint(ROUTE_LAYER_ID, palette.routeSelected)
+    repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
+    repaint(ROUTE_OPTIONS_DASHED_LAYER_ID, routeOptionsColor(theme))
   }, [theme])
 
   // Alterna visibilidade entre a camada de rota única (navegação) e a de
@@ -398,6 +418,12 @@ function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
   }
 
   for (const layer of map.getStyle().layers ?? []) {
+    // NUNCA recolorir as camadas do próprio app. Elas são `type: 'line'` e
+    // sem isso a heurística de vias as tratava como "via secundária" — no tema
+    // claro isso pintava a rota de #F7F9FD (quase branco) sobre um mapa claro,
+    // fazendo o traçado sumir por completo ao trocar de tema. Bug real.
+    if (layer.id.startsWith('gps-scooter-')) continue
+
     const id = layer.id.toLowerCase()
 
     if (layer.type === 'background') {
