@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/Button'
+import { Tag } from '@/components/ui/primitives'
 import type { LngLat } from '@/config/region'
 import type { GeocodingResult } from '@/services/geocoding'
 import { formatDistance, haversineDistanceMeters } from '@/utils/geo'
@@ -8,72 +10,78 @@ interface PoiCardProps {
   onSave: () => void
   onDismiss: () => void
   isSaved: boolean
-  /** Posição atual do usuário, quando conhecida — usada só para o chip de distância (dado real; sem ela, o chip simplesmente não aparece). */
+  /** Posição atual — usada só para a distância real; sem ela o chip não aparece. */
   userPoint?: LngLat | null
 }
 
 /**
- * Ficha exibida ao selecionar um resultado de busca — nome, categoria/cidade
- * (quando o provedor forneceu) e as duas ações principais do fluxo "encontrei
- * um lugar → quero ir até ele". Não inventa dados que o provedor não deu:
- * `secondaryLabel` já vem formatado por services/geocoding.ts (categoria ·
- * cidade, quando disponível) e simplesmente não aparece quando ausente — o
- * mesmo vale para nota/horário de funcionamento, que nenhuma das nossas
- * fontes (Nominatim/Overpass/Mapbox) retorna: não aparecem aqui.
+ * Ficha do local, no formato de bottom sheet do handoff: nome grande, linha
+ * de categoria + distância, endereço, e as duas ações ("Traçar Rota" primária
+ * azul, "Salvar" secundária).
+ *
+ * Não inventa dados que os provedores não retornam: nota, horário de
+ * funcionamento e amenidades aparecem no mock do design, mas nenhuma das
+ * nossas fontes (Nominatim/Overpass/Mapbox) fornece — então não são exibidos.
  */
 export function PoiCard({ poi, onTraceRoute, onSave, onDismiss, isSaved, userPoint }: PoiCardProps) {
   const distanceMeters = userPoint ? haversineDistanceMeters(userPoint, poi.point) : null
 
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-white/5 bg-surface-card p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-floating">
-      <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" />
+    <div className="pointer-events-auto absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-white/10 bg-surface-card px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet">
+      <div className="mx-auto mb-4 h-[5px] w-14 rounded-pill bg-white/20" />
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-lg font-bold text-slate-100">{poi.label}</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
-            {poi.secondaryLabel && <span className="truncate">{poi.secondaryLabel}</span>}
-            {poi.secondaryLabel && distanceMeters != null && <span>·</span>}
-            {distanceMeters != null && <span className="shrink-0">{formatDistance(distanceMeters)}</span>}
-          </p>
-        </div>
-        <button type="button" onClick={onDismiss} aria-label="Fechar" className="shrink-0 text-slate-500 active:text-slate-300">
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="min-w-0 flex-1 text-nav-title text-content-primary">{poi.label}</h2>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Fechar"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-surface-tile text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
           </svg>
         </button>
       </div>
 
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
+      {(poi.secondaryLabel || distanceMeters != null) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
+          {poi.secondaryLabel && <Tag tone="neutral">{poi.secondaryLabel}</Tag>}
+          {distanceMeters != null && (
+            <span className="text-body text-content-secondary">{formatDistance(distanceMeters)} de distância</span>
+          )}
+        </div>
+      )}
+
+      <div className="mt-gutter flex gap-stack">
+        <Button
+          variant="primary"
+          size="lg"
           onClick={onTraceRoute}
-          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-brand-500 py-3 text-[15px] font-bold text-surface shadow-sm active:scale-[0.99] active:bg-brand-400"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.4}>
+              <circle cx="6" cy="6" r="2.4" />
+              <circle cx="18" cy="18" r="2.4" />
+              <path d="M8 7h5a3 3 0 013 3v0a3 3 0 01-3 3H8" strokeLinecap="round" />
+            </svg>
+          }
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.4}>
-            <circle cx="6" cy="6" r="2.4" />
-            <circle cx="18" cy="18" r="2.4" />
-            <path d="M8 7h5a3 3 0 013 3v0a3 3 0 01-3 3H8" strokeLinecap="round" />
-          </svg>
-          Traçar rota
-        </button>
-        <button
-          type="button"
+          Traçar Rota
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
           onClick={onSave}
           disabled={isSaved}
-          className="flex items-center gap-1.5 rounded-full border border-white/10 px-4 py-3 text-[15px] font-semibold text-slate-100 active:bg-white/5 disabled:border-transparent disabled:bg-success-500/15 disabled:text-success-400"
+          className="max-w-[140px]"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+              <path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6L12 3z" strokeLinejoin="round" />
+            </svg>
+          }
         >
-          {isSaved ? (
-            <>
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path d="M5 12l4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Salvo
-            </>
-          ) : (
-            'Salvar'
-          )}
-        </button>
+          {isSaved ? 'Salvo' : 'Salvar'}
+        </Button>
       </div>
     </div>
   )

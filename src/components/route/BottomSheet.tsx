@@ -69,25 +69,26 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
 
   return (
     <div
-      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-white/5 bg-surface-card shadow-floating ${
-        isDragging ? '' : 'transition-[height] duration-200 ease-out'
+      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-white/10 bg-surface-card shadow-sheet ${
+        isDragging ? '' : 'transition-[height] duration-slow ease-ease-out-soft'
       }`}
       style={{ height: `${liveHeightVh}vh` }}
     >
       <div
-        className="flex shrink-0 touch-none flex-col items-center pb-1 pt-2.5 active:cursor-grabbing"
+        className="flex shrink-0 touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <div className="h-1 w-10 rounded-full bg-white/15" />
+        {/* Handle 56×5, como especifica o handoff. */}
+        <div className="h-[5px] w-14 rounded-pill bg-white/20" />
       </div>
 
       {snap === 'collapsed' ? (
-        <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{collapsedContent}</div>
+        <div className="px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">{collapsedContent}</div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div>
+        <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
       )}
     </div>
   )
