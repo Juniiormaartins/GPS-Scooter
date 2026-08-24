@@ -5,38 +5,34 @@ interface SearchPanelProps {
   originText: string
   destinationText: string
   onOriginChange: (value: string) => void
-  onDestinationChange: (value: string) => void
   onSelectOrigin: (result: GeocodingResult) => void
-  onSelectDestination: (result: GeocodingResult) => void
   onUseCurrentLocation: () => void
-  onCalculateRoute: () => void
+  /** Abre a tela de busca em tela cheia (SearchScreen) — o fluxo desenhado no handoff. */
+  onOpenSearch: () => void
   onProfileClick: () => void
   isCalculating: boolean
-  canCalculate: boolean
   warningMessage: string | null
 }
 
 /**
  * Barra flutuante origem → destino sobre o mapa (RouteSearchField do handoff):
- * avatar 44px à esquerda, duas linhas separadas por hairline — origem em
- * 16px/600 secundário e destino em 19px/800 primário — e a lupa azul à direita.
+ * avatar à esquerda, duas linhas separadas por hairline e a lupa à direita.
  *
- * Superfície translúcida com blur (`surface-overlay`) e raio 28px, porque é
- * chrome flutuando sobre o mapa; a regra do handoff é que só esse tipo de
- * elemento usa sombra e blur.
+ * A linha de DESTINO não é um campo de digitação aqui — é um gatilho. Tocar
+ * nela (ou na lupa) abre a tela de busca em tela cheia, que é onde o handoff
+ * colocou a experiência de pesquisa (campo focado, categorias rápidas,
+ * resultados). A origem continua editável em linha porque quase sempre é
+ * "sua localização" e trocá-la é a exceção, não o fluxo principal.
  */
 export function SearchPanel({
   originText,
   destinationText,
   onOriginChange,
-  onDestinationChange,
   onSelectOrigin,
-  onSelectDestination,
   onUseCurrentLocation,
-  onCalculateRoute,
+  onOpenSearch,
   onProfileClick,
   isCalculating,
-  canCalculate,
   warningMessage,
 }: SearchPanelProps) {
   return (
@@ -79,24 +75,27 @@ export function SearchPanel({
             />
           </div>
 
-          <div className="pt-2">
-            <AddressAutocompleteInput
-              value={destinationText}
-              onChangeText={onDestinationChange}
-              onSelect={onSelectDestination}
-              placeholder="Para onde?"
-              variant="primary"
-              leftIcon={<span className="h-[9px] w-[9px] shrink-0 rounded-pill bg-content-tertiary" />}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="flex w-full items-center gap-2.5 pt-2 text-left"
+          >
+            <span className="h-[9px] w-[9px] shrink-0 rounded-pill bg-content-tertiary" />
+            <span
+              className={`min-w-0 flex-1 truncate text-[19px] font-extrabold ${
+                destinationText ? 'text-content-primary' : 'text-content-primary/90'
+              }`}
+            >
+              {destinationText || 'Para onde?'}
+            </span>
+          </button>
         </div>
 
         <button
           type="button"
-          onClick={onCalculateRoute}
-          disabled={!canCalculate || isCalculating}
-          aria-label="Calcular rota"
-          className="shrink-0 p-1 text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88] disabled:text-content-tertiary"
+          onClick={onOpenSearch}
+          aria-label="Pesquisar destino"
+          className="shrink-0 p-1 text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
         >
           {isCalculating ? (
             <span className="block h-[26px] w-[26px] animate-spin rounded-pill border-[2.5px] border-brand-500 border-t-transparent" />

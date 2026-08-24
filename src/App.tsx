@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapView } from '@/components/map/MapView'
 import { SearchPanel } from '@/components/search/SearchPanel'
+import { SearchScreen } from '@/components/search/SearchScreen'
 import { PoiCard } from '@/components/search/PoiCard'
 import { MapControls } from '@/components/controls/MapControls'
 import { RoutePanel, RouteSummary } from '@/components/route/RoutePanel'
@@ -40,6 +41,8 @@ export default function App() {
   const [isFollowingUser, setIsFollowingUser] = useState(true)
   const [sheetSnap, setSheetSnap] = useState<SheetSnapPoint>('half')
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
+  /** Tela de busca em tela cheia (SearchScreen do handoff) — aberta pelo campo "Para onde?" e pela lupa. */
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [selectedPoi, setSelectedPoi] = useState<GeocodingResult | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(
     isMapConfigured ? null : 'Mapa em modo demonstração — configure VITE_MAP_STYLE_URL no .env para produção.',
@@ -120,6 +123,32 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCenter, userPosition])
 
+  /**
+   * Encerra a espera por localização quando o GPS FALHA.
+   *
+   * Sem isto, "Traçar rota" a partir de um POI/salvo sem origem conhecida
+   * deixava a tela presa para sempre em "Obtendo sua localização para traçar
+   * a rota…": o efeito acima só dispara quando `userPosition` chega, e se a
+   * permissão for negada ela nunca chega. Era um dos travamentos infinitos
+   * relatados — reproduzido neste ambiente com a permissão bloqueada.
+   *
+   * Aqui o estado pendente é limpo e o usuário recebe uma instrução acionável
+   * (definir a origem manualmente), em vez de um carregamento eterno.
+   */
+  useEffect(() => {
+    if (!locationError || !pendingCenter) return
+
+    setPendingCenter(false)
+    setFollowUserAsOrigin(false)
+    if (originText === 'Localizando…') setOriginText('')
+
+    if (pendingTraceDestination) {
+      setPendingTraceDestination(null)
+      setStatusMessage('Não foi possível obter sua localização. Defina a origem manualmente para traçar a rota.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationError, pendingCenter])
+
   const idleLocationMessage = useMemo(() => {
     if (isLocating) return 'Localizando você…'
     if (locationError) return locationError
@@ -151,11 +180,6 @@ export default function App() {
     setFollowUserAsOrigin(false)
   }
 
-  function handleDestinationTextChange(text: string) {
-    setDestinationText(text)
-    setDestinationPoint(null)
-  }
-
   function handleSelectOrigin(result: GeocodingResult) {
     setFollowUserAsOrigin(false)
     setOriginText(result.label)
@@ -166,6 +190,12 @@ export default function App() {
     setDestinationText(result.label)
     setDestinationPoint(result.point)
     setSelectedPoi(result)
+  }
+
+  /** Resultado escolhido na tela de busca: fecha a busca e abre a ficha do local, continuando o fluxo. */
+  function handlePickFromSearch(result: GeocodingResult) {
+    setIsSearchOpen(false)
+    handleSelectDestination(result)
   }
 
   async function resolveAddress(text: string, knownPoint: LngLat | null): Promise<LngLat> {
@@ -223,10 +253,6 @@ export default function App() {
     } finally {
       setIsCalculating(false)
     }
-  }
-
-  function handleCalculateRoute() {
-    calculateRoute()
   }
 
   /** "Traçar rota" a partir de uma ficha de POI ou de um lugar salvo: origem = localização atual (se já disponível) ou dispara localização; destino = coordenadas já conhecidas do lugar — usuário não precisa digitar nada. */
@@ -369,14 +395,11 @@ export default function App() {
           originText={originText}
           destinationText={destinationText}
           onOriginChange={handleOriginTextChange}
-          onDestinationChange={handleDestinationTextChange}
           onSelectOrigin={handleSelectOrigin}
-          onSelectDestination={handleSelectDestination}
           onUseCurrentLocation={handleUseCurrentLocation}
-          onCalculateRoute={handleCalculateRoute}
+          onOpenSearch={() => setIsSearchOpen(true)}
           onProfileClick={() => setActivePanel('profile')}
           isCalculating={isCalculating}
-          canCalculate={Boolean(originText.trim() && destinationText.trim())}
           warningMessage={statusMessage ?? warningMessage}
         />
       </div>
@@ -421,7 +444,7 @@ export default function App() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <VehicleStatusBar bluetooth={vehicleBluetooth} />
             <BottomNavBar
-              active={activePanel === 'saved' || activePanel === 'activity' ? activePanel : 'explore'}
+              active={activePanel ?? 'explore'}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
             />
           </div>
@@ -436,6 +459,15 @@ export default function App() {
         />
       )}
       {activePanel === 'activity' && <ActivityPanel onClose={() => setActivePanel(null)} />}
+
+      {isSearchOpen && (
+        <SearchScreen
+          onBack={() => setIsSearchOpen(false)}
+          onPick={handlePickFromSearch}
+          userPoint={userPosition}
+          initialQuery={destinationText}
+        />
+      )}
     </div>
   )
 }

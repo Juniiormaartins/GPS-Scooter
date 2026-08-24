@@ -86,6 +86,20 @@ function boundingBoxCacheKey(bbox: BoundingBox): string {
   return `${round(bbox.south)},${round(bbox.west)},${round(bbox.north)},${round(bbox.east)}`
 }
 
+/**
+ * Teto de espera do lado do CLIENTE. O `[out:json][timeout:N]` da consulta é
+ * uma instrução para o servidor abortar o processamento — ele não cobre o
+ * caso de a resposta simplesmente nunca chegar (fila, rede, servidor
+ * pendurado), que é comum na instância pública do Overpass e foi observado
+ * várias vezes durante o desenvolvimento.
+ *
+ * Sem este teto, o fetch fica pendente para sempre, o Promise.all de
+ * planRoute() nunca resolve e a tela fica em "Calculando rota…" eternamente —
+ * exatamente o travamento relatado. O enriquecimento é best-effort: se
+ * estourar, a rota é avaliada sem as tags do OSM em vez de travar o app.
+ */
+const CLIENT_TIMEOUT_MS = 6000
+
 async function fetchWaysInBoundingBox(bbox: BoundingBox): Promise<OverpassWay[]> {
   const cacheKey = boundingBoxCacheKey(bbox)
   const cached = boundingBoxCache.get(cacheKey)
@@ -93,17 +107,32 @@ async function fetchWaysInBoundingBox(bbox: BoundingBox): Promise<OverpassWay[]>
 
   const query = `[out:json][timeout:20];way["highway"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});out tags geom;`
 
+  const abortController = new AbortController()
+  const abortTimer = setTimeout(() => abortController.abort(), CLIENT_TIMEOUT_MS)
+
   const request = fetch(OVERPASS_BASE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: query,
+    signal: abortController.signal,
   })
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) throw new Error('Overpass request failed')
-      return response.json() as Promise<OverpassResponse>
+      // Sob carga o Overpass responde 200 com uma PÁGINA HTML de erro; sem
+      // esta checagem, o response.json() estoura de um jeito confuso.
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('json')) throw new Error('Overpass respondeu em formato inesperado')
+      const data = (await response.json()) as OverpassResponse
+      return data.elements ?? []
     })
-    .then((data) => data.elements ?? [])
-    .catch(() => [] as OverpassWay[])
+    .catch(() => {
+      // Falha (timeout, rede, HTML de erro): remove do cache para que a
+      // próxima rota nesta mesma área possa tentar de novo. Sem isso, uma
+      // única falha deixaria a região sem classificação pelo resto da sessão.
+      boundingBoxCache.delete(cacheKey)
+      return [] as OverpassWay[]
+    })
+    .finally(() => clearTimeout(abortTimer))
 
   boundingBoxCache.set(cacheKey, request)
   return request

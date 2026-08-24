@@ -13,6 +13,24 @@ export interface RoutingProvider {
   fetchCandidateRoutes(request: RouteRequest): Promise<CandidateRoute[]>
 }
 
+/**
+ * Teto de espera para os provedores de rota. Ambos são servidores públicos de
+ * demonstração, sem SLA — se um pendurar, o app não pode ficar em
+ * "Calculando rota…" para sempre. Como as duas fontes são combinadas via
+ * Promise.allSettled, uma que estoure não impede a outra de responder.
+ */
+const ROUTE_FETCH_TIMEOUT_MS = 12000
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const abortController = new AbortController()
+  const abortTimer = setTimeout(() => abortController.abort(), ROUTE_FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: abortController.signal })
+  } finally {
+    clearTimeout(abortTimer)
+  }
+}
+
 class UnconfiguredRoutingProvider implements RoutingProvider {
   isConfigured = false
 
@@ -67,7 +85,7 @@ class OsrmRoutingProvider implements RoutingProvider {
       alternatives: 'true',
     })
 
-    const response = await fetch(`${this.baseUrl}/route/v1/driving/${coords}?${params.toString()}`)
+    const response = await fetchWithTimeout(`${this.baseUrl}/route/v1/driving/${coords}?${params.toString()}`)
     if (!response.ok) {
       throw new Error('Não foi possível calcular a rota agora. Tente novamente.')
     }
@@ -303,7 +321,7 @@ class ValhallaRoutingProvider implements RoutingProvider {
       id: 'gps-scooter',
     }
 
-    const response = await fetch(`${VALHALLA_BASE_URL}/route`, {
+    const response = await fetchWithTimeout(`${VALHALLA_BASE_URL}/route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Client-Id': VALHALLA_CLIENT_ID },
       body: JSON.stringify(body),

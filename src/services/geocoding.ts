@@ -223,6 +223,18 @@ class MapTilerGeocodingProvider implements GeocodingProvider {
 
 const OVERPASS_BASE_URL = 'https://overpass-api.de/api/interpreter'
 const OVERPASS_POI_TIMEOUT_S = 8
+/**
+ * Teto curto e agressivo do lado do cliente para a busca. Medido: Mapbox
+ * responde em ~720ms e Nominatim em ~900ms, mas o Overpass oscila entre
+ * responder rápido, devolver HTML de erro (406) e ficar completamente
+ * inacessível. Como o CombinedPoiProvider espera as três fontes, sem este
+ * teto o Overpass sozinho definia a latência da busca inteira.
+ *
+ * 3,5s é o suficiente para ele contribuir quando está saudável, e curto o
+ * bastante para não estragar a experiência quando não está. Ele é uma fonte
+ * COMPLEMENTAR — Mapbox e Nominatim já cobrem a maioria dos casos.
+ */
+const OVERPASS_SEARCH_CLIENT_TIMEOUT_MS = 3500
 /** Chaves de tag OSM usadas para reconhecer um nó/via como um estabelecimento nomeado (não apenas uma via/endereço). */
 const OVERPASS_POI_TAG_KEYS = ['shop', 'amenity', 'leisure', 'tourism', 'office', 'healthcare'] as const
 
@@ -330,7 +342,7 @@ class OverpassPoiProvider implements PoiProvider {
     // as fontes. AbortController garante que essa fonte sempre desiste a
     // tempo, mesmo quando o servidor simplesmente não responde nada.
     const abortController = new AbortController()
-    const abortTimer = setTimeout(() => abortController.abort(), (OVERPASS_POI_TIMEOUT_S + 2) * 1000)
+    const abortTimer = setTimeout(() => abortController.abort(), OVERPASS_SEARCH_CLIENT_TIMEOUT_MS)
     try {
       const response = await fetch(OVERPASS_BASE_URL, {
         method: 'POST',

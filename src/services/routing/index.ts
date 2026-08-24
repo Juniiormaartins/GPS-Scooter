@@ -20,6 +20,33 @@ import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
  * 6. anexar explicações legíveis (highlights) e retornar rota selecionada +
  *    alternativas para o usuário.
  */
+/**
+ * Prazo máximo do enriquecimento por rota. Ele é OPCIONAL para o produto — a
+ * rota existe e pode ser exibida sem as tags do OSM; ela só perde precisão na
+ * classificação de adequação. Portanto nunca deve segurar a tela: se estourar,
+ * seguimos com os segmentos originais do provedor de rota.
+ *
+ * Este é um segundo cinto de segurança além do timeout dentro de
+ * segmentEnrichment.ts — protege contra qualquer caminho que, por bug, deixe
+ * uma promise pendente e trave o "Calculando rota…" para sempre.
+ */
+const ENRICHMENT_DEADLINE_MS = 8000
+
+function withDeadline<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms)
+    promise
+      .then((value) => {
+        clearTimeout(timer)
+        resolve(value)
+      })
+      .catch(() => {
+        clearTimeout(timer)
+        resolve(fallback)
+      })
+  })
+}
+
 export async function planRoute(request: RouteRequest): Promise<RouteResult> {
   const provider = getRoutingProvider()
   const candidates = await provider.fetchCandidateRoutes(request)
@@ -30,7 +57,7 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
 
   const scored: ScoredRoute[] = await Promise.all(
     candidates.map(async (route) => {
-      const enrichedSegments = await enrichRouteSegments(route)
+      const enrichedSegments = await withDeadline(enrichRouteSegments(route), ENRICHMENT_DEADLINE_MS, route.segments)
       const enrichedRoute = { ...route, segments: enrichedSegments }
       const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute)
       return {
