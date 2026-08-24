@@ -129,3 +129,15 @@ export function computeBearingDegrees(from: LngLat, to: LngLat): number {
 
   return (toDeg(Math.atan2(y, x)) + 360) % 360
 }
+
+/**
+ * Duas coordenadas descrevem o mesmo lugar?
+ *
+ * A tolerância de 1e-6 grau (~11 cm) existe porque as coordenadas passam por
+ * serialização (localStorage, JSON dos provedores) e voltam com o último
+ * dígito diferente. Comparar com `===` faria o mesmo destino parecer outro.
+ */
+export function isSamePoint(a: LngLat | null, b: LngLat | null): boolean {
+  if (!a || !b) return false
+  return Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6
+}

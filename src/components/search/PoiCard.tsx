@@ -12,6 +12,17 @@ interface PoiCardProps {
   isSaved: boolean
   /** Posição atual — usada só para a distância real; sem ela o chip não aparece. */
   userPoint?: LngLat | null
+  /**
+   * Distância REAL da rota de preview, quando ela já foi calculada.
+   *
+   * Tem prioridade sobre a linha reta: é o mesmo número que o cartão da rota
+   * vai mostrar em seguida, então o valor deixa de "mudar" depois do clique
+   * em Traçar rota. Enquanto o preview não chega, a linha reta continua
+   * aparecendo — rotulada como tal, para não prometer o que não é.
+   */
+  routeDistanceMeters?: number | null
+  /** Preview em cálculo — mostra que o número da linha reta ainda vai ser substituído. */
+  isRouteLoading?: boolean
 }
 
 /**
@@ -23,8 +34,19 @@ interface PoiCardProps {
  * funcionamento e amenidades aparecem no mock do design, mas nenhuma das
  * nossas fontes (Nominatim/Overpass/Mapbox) fornece — então não são exibidos.
  */
-export function PoiCard({ poi, onTraceRoute, onSave, onDismiss, isSaved, userPoint }: PoiCardProps) {
-  const distanceMeters = userPoint ? haversineDistanceMeters(userPoint, poi.point) : null
+export function PoiCard({
+  poi,
+  onTraceRoute,
+  onSave,
+  onDismiss,
+  isSaved,
+  userPoint,
+  routeDistanceMeters = null,
+  isRouteLoading = false,
+}: PoiCardProps) {
+  const straightLineMeters = userPoint ? haversineDistanceMeters(userPoint, poi.point) : null
+  const distanceMeters = routeDistanceMeters ?? straightLineMeters
+  const isRealRoute = routeDistanceMeters != null
 
   return (
     <div className="pointer-events-auto absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-hairline/15 bg-surface-card px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet">
@@ -47,10 +69,18 @@ export function PoiCard({ poi, onTraceRoute, onSave, onDismiss, isSaved, userPoi
       {(poi.secondaryLabel || distanceMeters != null) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
           {poi.secondaryLabel && <Tag tone="neutral">{poi.secondaryLabel}</Tag>}
-          {/* Explicitamente "em linha reta": a distância da rota calculada é
-              maior (desvio das ruas) e aparece depois, no card da rota. */}
           {distanceMeters != null && (
-            <span className="text-body text-content-secondary">≈{formatDistance(distanceMeters)} em linha reta</span>
+            <span className="text-body text-content-secondary">
+              {isRealRoute ? (
+                // Distância de rota: número exato, sem "≈" e sem ressalva.
+                `${formatDistance(distanceMeters)} pela rota`
+              ) : (
+                <>
+                  ≈{formatDistance(distanceMeters)} em linha reta
+                  {isRouteLoading && <span className="text-content-tertiary"> · calculando rota…</span>}
+                </>
+              )}
+            </span>
           )}
         </div>
       )}

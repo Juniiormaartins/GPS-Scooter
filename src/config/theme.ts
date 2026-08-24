@@ -32,12 +32,31 @@ export const ACCENT = {
  * quente para se destacarem das secundárias.
  */
 export const MAP_COLORS_LIGHT = {
-  background: '#EEF1F7',
-  water: '#D6E4F0',
+  /**
+   * MEDIDO, não escolhido no olho. A versão anterior usava fundo #EEF1F7 com
+   * vias #F7F9FD/#FFFFFF, o que dá razão de contraste de 1,07:1 entre rua e
+   * fundo e 1,05:1 entre rua secundária e principal — ou seja, nenhuma
+   * hierarquia e ruas praticamente invisíveis. Somado a isso, os prédios
+   * ficavam MAIS escuros que as ruas, então a massa construída lia como
+   * figura e a malha viária como fundo: exatamente o inverso do que um GPS
+   * precisa. Escurecer o fundo é o que faz a rua branca aparecer.
+   */
+  background: '#D3DCEA',
+  water: '#A8C6E0',
+  /** Vias brancas: o elemento mais claro do mapa, por decisão. */
   roadMajor: '#FFFFFF',
-  roadMinor: '#F7F9FD',
-  poi: '#C3CDDE',
-  label: '#4A5A72',
+  roadMinor: '#FFFFFF',
+  /** Expressas/rodovias em âmbar — no nosso caso isso é informação, não enfeite: é o que o app recomenda evitar. */
+  roadHighway: '#F5C87A',
+  /** Contorno das vias. É ele que separa duas ruas paralelas e dá definição ao traçado. */
+  roadCasing: '#A9B9D1',
+  /** Prédios DELIBERADAMENTE discretos — quase o fundo. Eles não são a informação. */
+  building: '#C6D1E2',
+  rail: '#B4C1D4',
+  /** Trilhas/calçadões em tom quente, para não serem confundidos com rua. */
+  path: '#E0D3B8',
+  poi: '#AFBDD2',
+  label: '#2B3A52',
 
   /**
    * Rotas no tema claro: tons mais escuros/saturados que os do tema escuro.
@@ -54,21 +73,40 @@ export const MAP_COLORS_LIGHT = {
 } as const
 
 export const MAP_COLORS = {
-  background: '#0E1424',
-  water: '#0E1424',
-  roadMajor: '#2B3A56', // --ink-600, exatamente como o handoff especifica
+  background: '#0B111F',
+  /**
+   * Água precisa diferir do fundo. Antes era EXATAMENTE a mesma cor (#0E1424),
+   * então rio e lago liam como quarteirão vazio. O primeiro ajuste (#10263F)
+   * ainda dava só 1,23:1; este dá ~1,9:1, na mesma faixa das vias — água é
+   * referência de orientação, precisa ser reconhecível de relance.
+   */
+  water: '#17395E',
+  roadMajor: '#4A5D82',
+  /** Expressas/rodovias em âmbar apagado — mesma função informativa do tema claro. */
+  roadHighway: '#7A6437',
+  roadCasing: '#0B111F',
+  building: '#131B2D',
+  rail: '#2B3752',
+  path: '#2F4038',
   /**
    * DESVIO CONSCIENTE do handoff, documentado: ele especifica #131C2E
    * (--ink-850) para vias secundárias, mas contra o fundo #0E1424 isso dá
    * razão de contraste ~1,07:1 — invisível. Como a maioria das ruas de
    * Goiânia é "via secundária", o mapa ficaria só com as duas artérias
    * principais visíveis (foi exatamente o sintoma relatado antes).
-   * Subimos um degrau da mesma rampa (--ink-700), que mantém a hierarquia
-   * (continua bem abaixo da via principal) mas fica legível.
+   * Subimos a rampa de novo depois de medir: com #212D45 o contraste com o
+   * fundo era 1,35:1 e o degrau para a via principal, 1,20:1. Os valores
+   * atuais dão 1,85:1 para o fundo e 1,52:1 entre secundária e principal —
+   * na mesma faixa em que um GPS de referência opera, mantendo a paleta.
    */
-  roadMinor: '#212D45',
+  roadMinor: '#33425F',
   poi: '#3B4C6B',
-  label: '#8A9CB6',
+  /**
+   * Rótulos bem mais claros que antes (#8A9CB6). Nome de rua é lido de
+   * relance, em movimento, muitas vezes sob sol — é o texto que menos pode
+   * economizar contraste.
+   */
+  label: '#C6D5EA',
 
   /** Rota confirmada em navegação ativa. */
   routeLine: ACCENT.primary,

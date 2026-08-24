@@ -16,6 +16,7 @@ import { useGeolocation, LOW_ACCURACY_THRESHOLD_METERS } from '@/hooks/useGeoloc
 import { useNavigationSession } from '@/hooks/useNavigationSession'
 import { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
+import { isSamePoint } from '@/utils/geo'
 import { useVoiceGuidance } from '@/hooks/useVoiceGuidance'
 import { isSpeechSupported, primeFromUserGesture } from '@/services/navigation/voiceGuidance'
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
@@ -39,6 +40,19 @@ export default function App() {
   const [originPoint, setOriginPoint] = useState<LngLat | null>(null)
   const [destinationPoint, setDestinationPoint] = useState<LngLat | null>(null)
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null)
+  /**
+   * Rota de PREVIEW: calculada automaticamente assim que um destino é
+   * escolhido, antes de o usuário pedir "Traçar rota".
+   *
+   * É o resultado completo do mesmo `planRoute` usado depois — o que muda é
+   * só quanto dele a interface mostra. Aqui aparece apenas a recomendada,
+   * como uma linha única pelas vias; quando o usuário confirma, este mesmo
+   * objeto é promovido a `routeResult` e as alternativas aparecem. Guardar o
+   * resultado inteiro evita recalcular tudo de novo no clique — o "Traçar
+   * rota" fica instantâneo quando o preview já terminou.
+   */
+  const [preview, setPreview] = useState<{ destination: LngLat; result: RouteResult } | null>(null)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
@@ -288,6 +302,28 @@ export default function App() {
     setDestinationText(label)
     setDestinationPoint(point)
 
+    // O preview já rodou o pipeline completo para ESTE destino: promovê-lo
+    // revela as alternativas na hora, sem uma segunda espera por algo que já
+    // foi calculado. A comparação é pelo destino PEDIDO (guardado junto com o
+    // resultado), não pelo fim da geometria — a rota termina encaixada na via
+    // mais próxima, que quase nunca é a coordenada exata do local.
+    if (preview && isSamePoint(preview.destination, point)) {
+      const scored = preview.result.selected
+      setRouteResult(preview.result)
+      setActiveRouteId(scored.route.id)
+      setSheetSnap('half')
+      recordActivity({
+        originLabel: originText.trim() || CURRENT_LOCATION_LABEL,
+        destinationLabel: label,
+        originPoint: originPoint ?? userPosition ?? undefined,
+        destinationPoint: point,
+        distanceMeters: scored.route.totalDistanceMeters,
+        etaMinutes: scored.etaMinutes,
+        suitabilityScore: scored.suitabilityScore,
+      })
+      return
+    }
+
     if (originPoint) {
       calculateRoute(undefined, { text: label, point })
       return
@@ -321,7 +357,13 @@ export default function App() {
 
   function handleCenterOnUser() {
     if (isNavigating) {
+      // Retoma o acompanhamento E pede a recentralização explícita. Os dois
+      // são necessários: `isFollowingUser` religa o rastreamento contínuo, e o
+      // token dispara a animação que restaura zoom, padding e orientação de
+      // uma vez — sem ele, o enquadramento só voltaria ao normal na próxima
+      // amostra de GPS, que pode demorar segundos.
       setIsFollowingUser(true)
+      setCenterToken((current) => current + 1)
       return
     }
     setFollowUserAsOrigin(true)
@@ -329,6 +371,55 @@ export default function App() {
     if (!originText.trim()) setOriginText('Localizando…')
     locate()
   }
+
+  /**
+   * Calcula o preview assim que existem destino e origem conhecidos.
+   *
+   * Usa o MESMO pipeline (`planRoute`) do fluxo confirmado — não há um
+   * "roteador de preview" simplificado, então o traçado mostrado aqui é a
+   * geometria real pelas vias e já respeita as regras do veículo e as
+   * preferências de rota. A diferença é só quanto do resultado a UI revela.
+   *
+   * Falha em silêncio de propósito: o preview é uma conveniência. Se o
+   * provedor não responder, o usuário ainda vê os dois pontos no mapa e o
+   * botão "Traçar rota" continua fazendo o cálculo com tratamento de erro
+   * visível. Poluir a tela com um erro de algo que ele não pediu seria pior.
+   */
+  useEffect(() => {
+    // Rota já confirmada (ou navegando): o preview não tem mais função.
+    if (routeResult || isNavigating) return
+
+    const destination = selectedPoi?.point ?? null
+    const origin = originPoint ?? userPosition
+    if (!destination || !origin || !isRoutingConfigured) {
+      setPreview(null)
+      return
+    }
+    if (!isPointWithinRegion(origin) || !isPointWithinRegion(destination)) {
+      setPreview(null)
+      return
+    }
+
+    let cancelled = false
+    setIsPreviewLoading(true)
+    planRoute({ origin, destination })
+      .then((result) => {
+        if (!cancelled) setPreview({ destination, result })
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null)
+      })
+      .finally(() => {
+        if (!cancelled) setIsPreviewLoading(false)
+      })
+
+    return () => {
+      // Destino trocado antes de a resposta chegar: descarta o resultado
+      // antigo em vez de desenhar a rota do lugar anterior.
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPoi, originPoint, userPosition, routeResult, isNavigating])
 
   const allRoutes = routeResult ? [routeResult.selected, ...routeResult.alternatives] : []
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
@@ -407,6 +498,8 @@ export default function App() {
           userPoint={navPosition}
           routeGeometry={activeScoredRoute.route.geometry}
           followUser={isFollowingUser}
+          isNavigating
+          centerRequestId={centerToken}
           headingDeg={navigationSession.headingDeg}
           routeWarnings={routeWarnings}
           theme={preferences.theme}
@@ -457,8 +550,9 @@ export default function App() {
         originPoint={originPoint}
         destinationPoint={destinationPoint}
         userPoint={userPosition}
-        routeGeometry={activeScoredRoute?.route.geometry ?? null}
+        routeGeometry={activeScoredRoute?.route.geometry ?? preview?.result.selected.route.geometry ?? null}
         routeOptions={routeOptions}
+        isRoutePreview={!activeScoredRoute && preview != null}
         theme={preferences.theme}
         onSelectRouteOption={setActiveRouteId}
         centerRequestId={centerToken}
@@ -484,6 +578,12 @@ export default function App() {
           poi={selectedPoi}
           isSaved={isPoiSaved}
           userPoint={userPosition}
+          routeDistanceMeters={
+            preview && isSamePoint(preview.destination, selectedPoi.point)
+              ? preview.result.selected.route.totalDistanceMeters
+              : null
+          }
+          isRouteLoading={isPreviewLoading}
           onDismiss={() => setSelectedPoi(null)}
           onSave={() => handleSavePoi(selectedPoi)}
           onTraceRoute={() => handleTraceRouteToPlace(selectedPoi.label, selectedPoi.point)}

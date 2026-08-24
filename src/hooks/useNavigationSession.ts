@@ -21,6 +21,50 @@ const SUSTAINED_OFF_ROUTE_SAMPLES = 3
 const MIN_MOVEMENT_FOR_BEARING_METERS = 6
 
 /**
+ * Abaixo desta velocidade a direção não é atualizada.
+ *
+ * O heading do GPS é derivado do deslocamento: parado, ele aponta para onde o
+ * ruído da posição pulou por último e gira sozinho. Sem esta trava, o mapa
+ * roda no semáforo com o usuário imóvel — que é o pior momento para isso,
+ * porque a pessoa está olhando a tela. 3 km/h é abaixo de passo de caminhada.
+ */
+const MIN_SPEED_FOR_HEADING_KMH = 3
+
+/**
+ * Suavização angular do heading (0 = trava, 1 = segue o valor bruto na hora).
+ *
+ * O heading bruto oscila alguns graus a cada amostra mesmo em linha reta, e
+ * repassar isso direto para a câmera faz o mapa tremer. 0.25 absorve o ruído
+ * e ainda vira uma esquina de 90° em ~4 amostras (≈4 s), que é o tempo real
+ * de fazer a curva.
+ */
+const HEADING_SMOOTHING = 0.25
+
+/**
+ * Acima desta diferença, assume a direção nova de uma vez em vez de
+ * interpolar. É o caso do retorno/curva fechada: interpolar 170° faria a
+ * câmera girar lentamente por vários segundos, apontando para o lado errado
+ * durante a manobra inteira.
+ */
+const HEADING_SNAP_THRESHOLD_DEGREES = 100
+
+/**
+ * Interpola entre dois ângulos pelo caminho mais curto. Sem tratar o
+ * wrap-around, ir de 350° para 10° (20° de diferença real) seria interpretado
+ * como uma volta de 340° para o outro lado — o mapa girando quase por
+ * completo cada vez que o usuário cruza o norte.
+ */
+function smoothHeading(previous: number | null, next: number): number {
+  if (previous == null) return next
+
+  let delta = ((next - previous + 540) % 360) - 180
+  if (Math.abs(delta) >= HEADING_SNAP_THRESHOLD_DEGREES) return next
+
+  delta *= HEADING_SMOOTHING
+  return (previous + delta + 360) % 360
+}
+
+/**
  * Orquestra a navegação ativa (Estado D): liga o rastreamento contínuo de
  * localização (useGeolocation.startWatching) enquanto `active` for true,
  * recalcula o progresso a cada nova amostra de GPS (progress.ts) e sinaliza
@@ -71,12 +115,22 @@ export function useNavigationSession(route: CandidateRoute | null, active: boole
     speedStateRef.current = trackSpeed(speedStateRef.current, sample)
     setCurrentSpeedKmh(speedKmhForDisplay(speedStateRef.current))
 
-    if (sample.headingDeg != null && !Number.isNaN(sample.headingDeg)) {
-      setHeadingDeg(sample.headingDeg)
-    } else {
+    const speedKmh = speedKmhForDisplay(speedStateRef.current)
+
+    // A direção só é atualizada com movimento comprovado. Parado, mantém a
+    // última direção conhecida — melhor um valor levemente velho do que a
+    // câmera girando sozinha.
+    if (speedKmh == null || speedKmh >= MIN_SPEED_FOR_HEADING_KMH) {
       const previous = lastPositionRef.current
-      if (previous && haversineDistanceMeters(previous, sample.position) >= MIN_MOVEMENT_FOR_BEARING_METERS) {
-        setHeadingDeg(computeBearingDegrees(previous, sample.position))
+      const raw =
+        sample.headingDeg != null && !Number.isNaN(sample.headingDeg)
+          ? sample.headingDeg
+          : previous && haversineDistanceMeters(previous, sample.position) >= MIN_MOVEMENT_FOR_BEARING_METERS
+            ? computeBearingDegrees(previous, sample.position)
+            : null
+
+      if (raw != null) {
+        setHeadingDeg((current) => smoothHeading(current, raw))
       }
     }
     lastPositionRef.current = sample.position
