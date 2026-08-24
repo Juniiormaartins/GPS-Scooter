@@ -114,7 +114,7 @@ function RouteOptionCard({
       type="button"
       onClick={onSelect}
       className={`flex w-full items-center gap-4 rounded-lg px-card py-3.5 text-left transition-all duration-base ease-standard ${
-        isSelected ? 'border-2 border-brand-500 bg-surface-raised' : 'border border-white/[.06] bg-surface-sunken'
+        isSelected ? 'border-2 border-brand-500 bg-surface-raised' : 'border border-hairline/10 bg-surface-sunken'
       }`}
     >
       <div className="min-w-0 flex-1">

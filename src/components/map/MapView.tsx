@@ -3,7 +3,7 @@ import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
-import { MAP_COLORS } from '@/config/theme'
+import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
 import type { Eligibility } from '@/types/routing'
 
 export interface RouteOptionGeometry {
@@ -31,6 +31,10 @@ interface MapViewProps {
   centerRequestId?: number
   /** Disparado quando o usuário arrasta/pinça o mapa manualmente — usado para interromper o modo "seguir". */
   onUserInteraction?: () => void
+  /** Disparado ao tocar numa das linhas de rota candidatas — permite escolher a rota pelo mapa, não só pelo card. */
+  onSelectRouteOption?: (routeId: string) => void
+  /** Tema atual — o mapa tem uma paleta própria para cada um (ver config/theme.ts). */
+  theme?: 'dark' | 'light'
   onMapReady?: (map: MapLibreMap) => void
 }
 
@@ -58,6 +62,8 @@ export function MapView({
   followUser = false,
   centerRequestId = 0,
   onUserInteraction,
+  onSelectRouteOption,
+  theme = 'dark',
   onMapReady,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -69,6 +75,10 @@ export function MapView({
   routeGeometryRef.current = routeGeometry
   const onUserInteractionRef = useRef(onUserInteraction)
   onUserInteractionRef.current = onUserInteraction
+  const onSelectRouteOptionRef = useRef(onSelectRouteOption)
+  onSelectRouteOptionRef.current = onSelectRouteOption
+  const themeRef = useRef(theme)
+  themeRef.current = theme
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -91,7 +101,7 @@ export function MapView({
     map.on('zoomstart', notifyUserInteraction)
 
     map.on('load', () => {
-      applyDarkCartography(map)
+      applyCartography(map, themeRef.current)
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -132,18 +142,25 @@ export function MapView({
       map.addSource(ROUTE_OPTIONS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
       const optionsPaint = (): maplibregl.LineLayerSpecification['paint'] => ({
+        // Selecionada = azul da marca (liga a rota aos marcadores e ao resto da UI);
+        // as demais mantêm a cor semântica da elegibilidade. Ver config/theme.ts.
         'line-color': [
-          'match',
-          ['get', 'eligibility'],
-          'allowed',
-          MAP_COLORS.routeByEligibility.allowed,
-          'discouraged',
-          MAP_COLORS.routeByEligibility.discouraged,
-          MAP_COLORS.routeByEligibility['not-allowed'],
+          'case',
+          ['get', 'active'],
+          MAP_COLORS.routeSelected,
+          [
+            'match',
+            ['get', 'eligibility'],
+            'allowed',
+            MAP_COLORS.routeByEligibility.allowed,
+            'discouraged',
+            MAP_COLORS.routeByEligibility.discouraged,
+            MAP_COLORS.routeByEligibility['not-allowed'],
+          ],
         ],
         // Largura e opacidade SÃO data-driven — a rota ativa fica mais grossa e opaca.
         'line-width': ['case', ['get', 'active'], 7, 4],
-        'line-opacity': ['case', ['get', 'active'], 1, 0.55],
+        'line-opacity': ['case', ['get', 'active'], 1, 0.5],
       })
 
       map.addLayer({
@@ -162,6 +179,23 @@ export function MapView({
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { ...optionsPaint(), 'line-dasharray': [2, 1.6] },
       })
+      // Escolher a rota tocando na linha do mapa, além do card. `routeId` vem
+      // das properties da feature, então mapa e lista ficam sincronizados: quem
+      // recebe o id é o mesmo `onSelectRoute` usado pelos cards.
+      for (const layerId of [ROUTE_OPTIONS_LAYER_ID, ROUTE_OPTIONS_DASHED_LAYER_ID]) {
+        map.on('click', layerId, (event) => {
+          const routeId = event.features?.[0]?.properties?.routeId
+          if (typeof routeId === 'string') onSelectRouteOptionRef.current?.(routeId)
+        })
+        // Sinaliza que a linha é clicável (relevante no desktop; inofensivo no toque).
+        map.on('mouseenter', layerId, () => {
+          map.getCanvas().style.cursor = 'pointer'
+        })
+        map.on('mouseleave', layerId, () => {
+          map.getCanvas().style.cursor = ''
+        })
+      }
+
       onMapReady?.(map)
     })
 
@@ -172,6 +206,18 @@ export function MapView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
+  // interface clara sobre um mapa escuro (e vice-versa).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    applyCartography(map, theme)
+
+    // O contorno da rota é o próprio fundo do mapa, então acompanha o tema.
+    const casing = theme === 'light' ? MAP_COLORS_LIGHT.background : MAP_COLORS.routeCasing
+    if (map.getLayer(ROUTE_CASING_LAYER_ID)) map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-color', casing)
+  }, [theme])
 
   // Alterna visibilidade entre a camada de rota única (navegação) e a de
   // múltiplas candidatas (seleção) — nunca as duas ao mesmo tempo.
@@ -229,7 +275,7 @@ export function MapView({
 
     const features: GeoJSON.Feature<GeoJSON.LineString>[] = routeOptions.map((option) => ({
       type: 'Feature',
-      properties: { eligibility: option.eligibility, active: option.isActive },
+      properties: { routeId: option.id, eligibility: option.eligibility, active: option.isActive },
       geometry: { type: 'LineString', coordinates: option.geometry.map((point) => [point.lng, point.lat]) },
     }))
     source.setData({ type: 'FeatureCollection', features })
@@ -255,6 +301,26 @@ export function MapView({
     const map = mapRef.current
     if (!map) return
     updateMarker(destinationMarkerRef, map, destinationPoint, 'destination')
+
+    // Destino escolhido mas rota ainda NÃO calculada: enquadra origem e
+    // destino juntos para o usuário entender onde fica o lugar antes de
+    // decidir traçar a rota. Quando a rota chega, o enquadramento dela
+    // (mais preciso, segue a geometria) assume — por isso a condição.
+    if (!destinationPoint || routeGeometry || routeOptions.length > 0) return
+
+    const anchor = userPoint ?? originPoint
+    if (!anchor) {
+      map.flyTo({ center: [destinationPoint.lng, destinationPoint.lat], zoom: 15, duration: 700 })
+      return
+    }
+
+    const bounds = new maplibregl.LngLatBounds(
+      [anchor.lng, anchor.lat],
+      [anchor.lng, anchor.lat],
+    ).extend([destinationPoint.lng, destinationPoint.lat])
+    // `bottom` maior por causa da ficha do local, que ocupa a base da tela.
+    map.fitBounds(bounds, { padding: { top: 180, bottom: 300, left: 56, right: 56 }, duration: 700, maxZoom: 16 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinationPoint])
 
   useEffect(() => {
@@ -321,7 +387,8 @@ function updateMarker(
  * testamos (Mapbox dark-v11) têm contraste fundo/via de ~1,5x, ilegível para
  * um GPS. A paleta do handoff tem ~3x, medido.
  */
-function applyDarkCartography(map: MapLibreMap) {
+function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
+  const C = theme === 'light' ? MAP_COLORS_LIGHT : MAP_COLORS
   const setPaint = (layerId: string, property: string, value: string) => {
     try {
       map.setPaintProperty(layerId, property, value)
@@ -334,16 +401,16 @@ function applyDarkCartography(map: MapLibreMap) {
     const id = layer.id.toLowerCase()
 
     if (layer.type === 'background') {
-      setPaint(layer.id, 'background-color', MAP_COLORS.background)
+      setPaint(layer.id, 'background-color', C.background)
       continue
     }
 
     if (layer.type === 'fill') {
-      if (id.includes('water') || id.includes('ocean')) setPaint(layer.id, 'fill-color', MAP_COLORS.water)
-      else if (id.includes('building')) setPaint(layer.id, 'fill-color', MAP_COLORS.roadMinor)
+      if (id.includes('water') || id.includes('ocean')) setPaint(layer.id, 'fill-color', C.water)
+      else if (id.includes('building')) setPaint(layer.id, 'fill-color', C.roadMinor)
       else if (id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('landcover')) {
-        setPaint(layer.id, 'fill-color', '#101B2C')
-      } else setPaint(layer.id, 'fill-color', MAP_COLORS.background)
+        setPaint(layer.id, 'fill-color', theme === 'light' ? '#E3EDE3' : '#101B2C')
+      } else setPaint(layer.id, 'fill-color', C.background)
       continue
     }
 
@@ -354,24 +421,24 @@ function applyDarkCartography(map: MapLibreMap) {
       // cor de via secundária, que é quase o fundo, e o mapa some.
       if (id.endsWith('outline')) {
         // Contorno fica no tom do fundo: separa as vias sem competir com elas.
-        setPaint(layer.id, 'line-color', MAP_COLORS.background)
+        setPaint(layer.id, 'line-color', C.background)
       } else if (id.includes('highway') || id.includes('major road') || id.includes('bridge')) {
-        setPaint(layer.id, 'line-color', MAP_COLORS.roadMajor)
+        setPaint(layer.id, 'line-color', C.roadMajor)
       } else {
-        setPaint(layer.id, 'line-color', MAP_COLORS.roadMinor)
+        setPaint(layer.id, 'line-color', C.roadMinor)
       }
       continue
     }
 
     if (layer.type === 'symbol') {
       // Rótulos sem halo branco (regra explícita do handoff).
-      setPaint(layer.id, 'text-color', MAP_COLORS.label)
-      setPaint(layer.id, 'text-halo-color', MAP_COLORS.background)
+      setPaint(layer.id, 'text-color', C.label)
+      setPaint(layer.id, 'text-halo-color', C.background)
       continue
     }
 
     if (layer.type === 'circle') {
-      setPaint(layer.id, 'circle-color', MAP_COLORS.poi)
+      setPaint(layer.id, 'circle-color', C.poi)
     }
   }
 }

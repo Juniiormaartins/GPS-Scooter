@@ -25,6 +25,21 @@ export const ACCENT = {
  * diferença de luminosidade ~3x — legível de verdade, diferente do estilo
  * "dark" pronto do Mapbox que tínhamos antes (~1,5x, ilegível).
  */
+/**
+ * Cartografia do tema CLARO. Mesma lógica do escuro, invertida com cuidado:
+ * as vias ficam BRANCAS sobre um fundo cinza-azulado (é assim que mapas
+ * claros criam hierarquia), e as principais ganham um cinza levemente mais
+ * quente para se destacarem das secundárias.
+ */
+export const MAP_COLORS_LIGHT = {
+  background: '#EEF1F7',
+  water: '#D6E4F0',
+  roadMajor: '#FFFFFF',
+  roadMinor: '#F7F9FD',
+  poi: '#C3CDDE',
+  label: '#4A5A72',
+} as const
+
 export const MAP_COLORS = {
   background: '#0E1424',
   water: '#0E1424',
@@ -47,7 +62,21 @@ export const MAP_COLORS = {
   /** Contorno sob a linha da rota — no tema escuro é o próprio fundo do mapa, não branco. */
   routeCasing: '#0E1424',
 
-  /** Candidatas simultâneas na tela de seleção de rota, por elegibilidade. */
+  /**
+   * Candidatas simultâneas na tela de seleção.
+   *
+   * A rota SELECIONADA usa sempre o azul da marca (`routeSelected`), não a
+   * cor da elegibilidade: azul é o token de "seleção/navegação" em todo o
+   * app (botão ativo, aba ativa, marcador do usuário), então a linha
+   * escolhida fica visualmente ligada aos marcadores de origem/destino e ao
+   * resto da interface — o verde antes fazia a rota principal parecer
+   * desconectada da identidade.
+   *
+   * As NÃO selecionadas mantêm a cor semântica, que é onde ela carrega
+   * informação de verdade: dá para bater o olho e ver qual alternativa é
+   * adequada (verde), com ressalva (âmbar) ou inadequada (vermelha).
+   */
+  routeSelected: ACCENT.primary,
   routeByEligibility: {
     allowed: ACCENT.go,
     discouraged: ACCENT.warn,

@@ -8,14 +8,48 @@
  */
 
 export type RoutePreference = 'tranquil' | 'balanced' | 'fast'
+export type ThemeMode = 'dark' | 'light'
+
+/** Modelos oferecidos na seleção de veículo. `custom` guarda o que o usuário ajustar manualmente. */
+export type VehicleModelId = 'scooter-32' | 'scooter-25' | 'ebike-25' | 'custom'
+
+export interface VehicleModelPreset {
+  id: VehicleModelId
+  label: string
+  topSpeedKmh: number
+  rangeKm: number
+}
+
+/**
+ * Presets de veículo. Os números são de catálogo (não medições) e alimentam
+ * ETA e estimativa de autonomia — por isso mudar o veículo muda de verdade o
+ * comportamento do app, não é rótulo decorativo.
+ */
+export const VEHICLE_PRESETS: VehicleModelPreset[] = [
+  { id: 'scooter-32', label: 'Scooter elétrica (autopropelido)', topSpeedKmh: 32, rangeKm: 40 },
+  { id: 'scooter-25', label: 'Patinete elétrico urbano', topSpeedKmh: 25, rangeKm: 30 },
+  { id: 'ebike-25', label: 'Bicicleta elétrica', topSpeedKmh: 25, rangeKm: 60 },
+]
 
 export interface UserPreferences {
   routePreference: RoutePreference
+  theme: ThemeMode
+  vehicleModelId: VehicleModelId
+  /** Velocidade de referência efetiva (km/h) — usada no cálculo de ETA. */
+  referenceSpeedKmh: number
+  /** Autonomia estimada efetiva (km). */
+  rangeKm: number
 }
 
 const STORAGE_KEY = 'gps-scooter:preferences'
 
-const DEFAULT_PREFERENCES: UserPreferences = { routePreference: 'balanced' }
+const DEFAULT_PREFERENCES: UserPreferences = {
+  routePreference: 'balanced',
+  theme: 'dark',
+  vehicleModelId: 'scooter-32',
+  referenceSpeedKmh: 32,
+  rangeKm: 40,
+}
 
 export function getUserPreferences(): UserPreferences {
   try {

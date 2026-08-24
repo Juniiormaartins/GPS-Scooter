@@ -27,8 +27,8 @@ export function PoiCard({ poi, onTraceRoute, onSave, onDismiss, isSaved, userPoi
   const distanceMeters = userPoint ? haversineDistanceMeters(userPoint, poi.point) : null
 
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-white/10 bg-surface-card px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet">
-      <div className="mx-auto mb-4 h-[5px] w-14 rounded-pill bg-white/20" />
+    <div className="pointer-events-auto absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-hairline/15 bg-surface-card px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet">
+      <div className="mx-auto mb-4 h-[5px] w-14 rounded-pill bg-hairline/20" />
 
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0 flex-1 text-nav-title text-content-primary">{poi.label}</h2>

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
+import { matchSearchHistory } from '@/services/storage/searchHistory'
+import { haversineDistanceMeters } from '@/utils/geo'
 
 /**
  * Autocomplete de endereços sobre o mesmo provedor de geocodificação já
@@ -22,6 +24,9 @@ import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding
 const MIN_QUERY_LENGTH = 3
 const DEBOUNCE_MS = 400
 
+/** Distância abaixo da qual um resultado externo é considerado o mesmo lugar de uma entrada do histórico. */
+const HISTORY_DEDUPE_METERS = 40
+
 export function useAddressSuggestions(query: string) {
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -38,6 +43,18 @@ export function useAddressSuggestions(query: string) {
       return
     }
 
+    // O histórico é local e casa por prefixo de palavra, então aparece
+    // IMEDIATAMENTE — sem debounce e sem esperar rede. É o que resolve o caso
+    // "digitei 'Pos' e quero o Posto Líder que já pesquisei", que os
+    // provedores externos só resolvem com o nome quase completo.
+    const historyMatches: GeocodingResult[] = matchSearchHistory(trimmed).map((entry) => ({
+      label: entry.label,
+      secondaryLabel: entry.secondaryLabel,
+      point: entry.point,
+      fromHistory: true,
+    }))
+    setSuggestions(historyMatches)
+
     setIsLoading(true)
     setError(null)
     const requestId = ++requestIdRef.current
@@ -47,13 +64,20 @@ export function useAddressSuggestions(query: string) {
         .search(trimmed)
         .then((results) => {
           if (requestIdRef.current !== requestId) return // resposta obsoleta — uma busca mais nova já está em andamento
-          setSuggestions(results)
+          // Histórico primeiro; resultados externos que apontam para o mesmo
+          // lugar são descartados para não duplicar a linha na lista.
+          const withoutDuplicates = results.filter(
+            (result) => !historyMatches.some((entry) => haversineDistanceMeters(entry.point, result.point) < HISTORY_DEDUPE_METERS),
+          )
+          setSuggestions([...historyMatches, ...withoutDuplicates])
           setIsLoading(false)
         })
         .catch(() => {
           if (requestIdRef.current !== requestId) return
-          setSuggestions([])
-          setError('Não foi possível buscar sugestões agora.')
+          // Mantém o que veio do histórico: uma falha de rede não pode apagar
+          // sugestões que já estavam corretas e são locais.
+          setSuggestions(historyMatches)
+          if (historyMatches.length === 0) setError('Não foi possível buscar sugestões agora.')
           setIsLoading(false)
         })
     }, DEBOUNCE_MS)

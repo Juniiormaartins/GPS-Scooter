@@ -87,7 +87,7 @@ function QuickSlot({
       type="button"
       onClick={() => place && onTraceRoute(place)}
       disabled={!place}
-      className="flex flex-col items-start gap-2.5 rounded-xl border border-white/[.06] bg-surface-card p-card text-left transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88] disabled:active:scale-100"
+      className="flex flex-col items-start gap-2.5 rounded-xl border border-hairline/10 bg-surface-card p-card text-left transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88] disabled:active:scale-100"
     >
       <span className="text-brand-500">{kind === 'home' ? <HomeIcon /> : <WorkIcon />}</span>
       <span className="w-full">

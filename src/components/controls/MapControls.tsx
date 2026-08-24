@@ -24,7 +24,7 @@ export function MapControls({ onCenterOnUser, isLocating, isFollowing = false }:
       type="button"
       onClick={onCenterOnUser}
       aria-label={isFollowing ? 'Seguindo sua localização' : 'Centralizar na sua localização'}
-      className={`pointer-events-auto flex h-12 w-12 items-center justify-center rounded-pill border border-white/10 shadow-float backdrop-blur-xl transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88] ${
+      className={`pointer-events-auto flex h-12 w-12 items-center justify-center rounded-pill border border-hairline/15 shadow-float backdrop-blur-xl transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88] ${
         isFollowing ? 'bg-brand-500 text-content-on-accent' : 'bg-surface-card/[.86] text-brand-500'
       }`}
     >

@@ -7,6 +7,8 @@ export interface GeocodingResult {
   /** Cidade/bairro ou categoria do local, quando disponível — para exibição em duas linhas na UI. */
   secondaryLabel?: string
   point: LngLat
+  /** True quando a sugestão veio do histórico local, não de um provedor externo — a UI marca essas com ícone de relógio. */
+  fromHistory?: boolean
 }
 
 export interface GeocodingProvider {

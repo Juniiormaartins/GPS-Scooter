@@ -36,7 +36,7 @@ export function SearchPanel({
   warningMessage,
 }: SearchPanelProps) {
   return (
-    <div className="pointer-events-auto rounded-2xl border border-white/10 bg-surface-card/[.86] px-card py-3 shadow-float backdrop-blur-xl">
+    <div className="pointer-events-auto rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-card py-3 shadow-float backdrop-blur-xl">
       <div className="flex items-center gap-3.5">
         <button
           type="button"
@@ -51,7 +51,7 @@ export function SearchPanel({
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className="border-b border-white/10 pb-2">
+          <div className="border-b border-hairline/15 pb-2">
             <AddressAutocompleteInput
               value={originText}
               onChangeText={onOriginChange}
@@ -66,9 +66,9 @@ export function SearchPanel({
                   aria-label="Usar localização atual"
                   className="shrink-0 p-1 text-content-tertiary transition-colors active:text-brand-500"
                 >
+                  {/* Mesma seta de localização usada no botão de recentralizar do mapa — a mira com traços radiais saiu do app inteiro. */}
                   <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v3M12 19v3M22 12h-3M5 12H2" strokeLinecap="round" />
+                    <path d="M21 3L3 10.5l7.5 3.2L13.5 21 21 3z" strokeLinejoin="round" strokeLinecap="round" />
                   </svg>
                 </button>
               }

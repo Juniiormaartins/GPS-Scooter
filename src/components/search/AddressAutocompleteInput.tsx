@@ -20,7 +20,7 @@ interface AddressAutocompleteInputProps {
 const VARIANT_ROW: Record<NonNullable<AddressAutocompleteInputProps['variant']>, string> = {
   primary: 'flex items-center gap-2.5 py-0.5',
   secondary: 'flex items-center gap-2.5 py-0.5',
-  boxed: 'flex items-center gap-2 rounded-full border border-white/5 bg-surface-raised px-4 py-3 transition-colors has-[input:focus]:border-brand-400/60',
+  boxed: 'flex items-center gap-2 rounded-full border border-hairline/10 bg-surface-raised px-4 py-3 transition-colors has-[input:focus]:border-brand-400/60',
 }
 
 const VARIANT_INPUT: Record<NonNullable<AddressAutocompleteInputProps['variant']>, string> = {
@@ -69,7 +69,7 @@ export function AddressAutocompleteInput({
       </div>
 
       {showDropdown && (
-        <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-surface-card py-1 shadow-float">
+        <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-64 overflow-y-auto rounded-xl border border-hairline/15 bg-surface-card py-1 shadow-float">
           {isLoading && <p className="px-card py-3 text-body text-content-secondary">Buscando…</p>}
           {!isLoading && error && <p className="px-card py-3 text-body text-warning-500">{error}</p>}
           {!isLoading && !error && suggestions.length === 0 && (

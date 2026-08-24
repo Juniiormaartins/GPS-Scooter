@@ -69,7 +69,7 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
 
   return (
     <div
-      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-white/10 bg-surface-card shadow-sheet ${
+      className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-hairline/15 bg-surface-card shadow-sheet ${
         isDragging ? '' : 'transition-[height] duration-slow ease-ease-out-soft'
       }`}
       style={{ height: `${liveHeightVh}vh` }}
@@ -82,7 +82,7 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
         onPointerCancel={handlePointerUp}
       >
         {/* Handle 56×5, como especifica o handoff. */}
-        <div className="h-[5px] w-14 rounded-pill bg-white/20" />
+        <div className="h-[5px] w-14 rounded-pill bg-hairline/20" />
       </div>
 
       {snap === 'collapsed' ? (

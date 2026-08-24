@@ -2,13 +2,19 @@ import { useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
 import { SectionLabel } from '@/components/ui/primitives'
 import { SettingsRow } from '@/components/ui/SettingsRow'
-import { VEHICLE_PROFILE } from '@/config/vehicle'
-import { getUserPreferences, setUserPreferences, type RoutePreference } from '@/config/userPreferences'
+import {
+  VEHICLE_PRESETS,
+  type RoutePreference,
+  type UserPreferences,
+  type VehicleModelId,
+} from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 
 interface ProfilePanelProps {
   onClose: () => void
   vehicleBluetooth: ReturnType<typeof useVehicleBluetooth>
+  preferences: UserPreferences
+  onUpdatePreferences: (patch: Partial<UserPreferences>) => void
 }
 
 const ROUTE_PREFERENCE_OPTIONS: { key: RoutePreference; label: string }[] = [
@@ -17,37 +23,102 @@ const ROUTE_PREFERENCE_OPTIONS: { key: RoutePreference; label: string }[] = [
   { key: 'fast', label: 'Priorizar rotas rápidas' },
 ]
 
-/**
- * Tela "Perfil" na estrutura do handoff: grupos rotulados por eyebrow
- * ("MEU VEÍCULO", "PREFERÊNCIAS DE ROTA", "APARÊNCIA & UNIDADES") e a ação
- * destrutiva por último.
- *
- * Duas diferenças conscientes em relação ao mock, porque o app não tem os
- * dados correspondentes e inventá-los seria mentir na interface:
- * - não há avatar/nome/e-mail: não existe sistema de conta neste app;
- * - "Sair da Conta" não é renderizado pelo mesmo motivo.
- * As preferências de rota continuam sendo as três reais do projeto (elas
- * afetam o ranking em services/routing/index.ts), apresentadas como toggles
- * mutuamente exclusivos.
- */
-export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth }: ProfilePanelProps) {
-  const [preferences, setPreferences] = useState(getUserPreferences())
+const SPEED_OPTIONS = [20, 25, 32, 40, 45]
+const RANGE_OPTIONS = [20, 30, 40, 60, 80]
 
-  function selectPreference(routePreference: RoutePreference) {
-    const next = { ...preferences, routePreference }
-    setPreferences(next)
-    setUserPreferences(next)
+/**
+ * Perfil: grupos rotulados por eyebrow, como no handoff. Todas as
+ * configurações aqui têm EFEITO REAL — velocidade de referência alimenta o
+ * cálculo de ETA, autonomia alimenta a estimativa de alcance, e o tema
+ * repinta o app inteiro. Nada é rótulo decorativo.
+ *
+ * Não há avatar/nome/e-mail nem "Sair da Conta": o app não tem sistema de
+ * conta, e exibir isso seria inventar uma funcionalidade inexistente.
+ */
+export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences, onUpdatePreferences }: ProfilePanelProps) {
+  const [openPicker, setOpenPicker] = useState<'vehicle' | 'speed' | 'range' | null>(null)
+
+  const currentVehicle = VEHICLE_PRESETS.find((preset) => preset.id === preferences.vehicleModelId)
+  const vehicleLabel = currentVehicle?.label ?? 'Personalizado'
+
+  /** Trocar de veículo traz junto velocidade e autonomia do preset — é o que torna a escolha significativa. */
+  function selectVehicle(id: VehicleModelId) {
+    const preset = VEHICLE_PRESETS.find((entry) => entry.id === id)
+    if (preset) {
+      onUpdatePreferences({ vehicleModelId: preset.id, referenceSpeedKmh: preset.topSpeedKmh, rangeKm: preset.rangeKm })
+    }
+    setOpenPicker(null)
   }
 
   return (
     <Panel title="Perfil" onClose={onClose}>
       <SectionLabel className="mb-stack">Meu veículo</SectionLabel>
       <div className="flex flex-col gap-stack">
-        <SettingsRow label={VEHICLE_PROFILE.label} icon={<ScooterIcon />} control="none" />
-        <SettingsRow label="Velocidade de referência" control="value" value={`${VEHICLE_PROFILE.maxOperationalSpeedKmh} km/h`} />
-        <SettingsRow label="Autonomia estimada" control="value" value={`≈${VEHICLE_PROFILE.estimatedRangeKm} km`} />
+        <SettingsRow
+          label={vehicleLabel}
+          icon={<ScooterIcon />}
+          control="action"
+          action="Alterar"
+          onClick={() => setOpenPicker(openPicker === 'vehicle' ? null : 'vehicle')}
+        />
+        {openPicker === 'vehicle' && (
+          <OptionList
+            options={VEHICLE_PRESETS.map((preset) => ({
+              key: preset.id,
+              label: preset.label,
+              hint: `${preset.topSpeedKmh} km/h · ≈${preset.rangeKm} km`,
+              selected: preset.id === preferences.vehicleModelId,
+            }))}
+            onSelect={(key) => selectVehicle(key as VehicleModelId)}
+          />
+        )}
+
+        <SettingsRow
+          label="Velocidade de referência"
+          control="value"
+          value={`${preferences.referenceSpeedKmh} km/h`}
+          onClick={() => setOpenPicker(openPicker === 'speed' ? null : 'speed')}
+        />
+        {openPicker === 'speed' && (
+          <OptionList
+            options={SPEED_OPTIONS.map((speed) => ({
+              key: String(speed),
+              label: `${speed} km/h`,
+              selected: speed === preferences.referenceSpeedKmh,
+            }))}
+            onSelect={(key) => {
+              onUpdatePreferences({ referenceSpeedKmh: Number(key), vehicleModelId: 'custom' })
+              setOpenPicker(null)
+            }}
+          />
+        )}
+
+        <SettingsRow
+          label="Autonomia estimada"
+          control="value"
+          value={`≈${preferences.rangeKm} km`}
+          onClick={() => setOpenPicker(openPicker === 'range' ? null : 'range')}
+        />
+        {openPicker === 'range' && (
+          <OptionList
+            options={RANGE_OPTIONS.map((range) => ({
+              key: String(range),
+              label: `≈${range} km`,
+              selected: range === preferences.rangeKm,
+            }))}
+            onSelect={(key) => {
+              onUpdatePreferences({ rangeKm: Number(key), vehicleModelId: 'custom' })
+              setOpenPicker(null)
+            }}
+          />
+        )}
+
         <BluetoothRow bluetooth={bluetooth} />
       </div>
+      <p className="mt-3 text-caption text-content-tertiary">
+        A velocidade de referência é usada no cálculo do tempo estimado das rotas. Ela não autoriza vias inadequadas —
+        as regras de circulação continuam avaliando cada via.
+      </p>
 
       <SectionLabel className="mb-stack mt-group">Preferências de rota</SectionLabel>
       <div className="flex flex-col gap-stack">
@@ -57,21 +128,58 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth }: ProfilePa
             label={option.label}
             control="toggle"
             checked={preferences.routePreference === option.key}
-            onChange={() => selectPreference(option.key)}
+            onChange={() => onUpdatePreferences({ routePreference: option.key })}
           />
         ))}
       </div>
-      <p className="mt-3 text-caption text-content-tertiary">
-        Influencia qual rota é recomendada entre as elegíveis — nunca libera uma via que a classificação considera
-        inadequada.
-      </p>
 
       <SectionLabel className="mb-stack mt-group">Aparência & unidades</SectionLabel>
       <div className="flex flex-col gap-stack">
-        <SettingsRow label="Tema da aparência" control="value" value="Escuro" />
+        <SettingsRow
+          label="Tema escuro"
+          control="toggle"
+          checked={preferences.theme === 'dark'}
+          onChange={(next) => onUpdatePreferences({ theme: next ? 'dark' : 'light' })}
+        />
         <SettingsRow label="Unidades métricas" control="value" value="Kilômetros (km)" />
       </div>
     </Panel>
+  )
+}
+
+/** Lista de escolha inline, aberta abaixo da linha que a acionou. */
+function OptionList({
+  options,
+  onSelect,
+}: {
+  options: { key: string; label: string; hint?: string; selected: boolean }[]
+  onSelect: (key: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-hairline/10 bg-surface-sunken p-1.5">
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          onClick={() => onSelect(option.key)}
+          className={`flex items-center justify-between rounded-md px-3 py-3 text-left transition-all duration-fast active:scale-[.97] ${
+            option.selected ? 'bg-brand-500/[.16]' : 'active:bg-hairline/5'
+          }`}
+        >
+          <span className="min-w-0">
+            <span className={`block text-[15px] font-bold ${option.selected ? 'text-brand-500' : 'text-content-primary'}`}>
+              {option.label}
+            </span>
+            {option.hint && <span className="mt-0.5 block text-caption text-content-tertiary">{option.hint}</span>}
+          </span>
+          {option.selected && (
+            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-brand-500" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path d="M5 12l4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+      ))}
+    </div>
   )
 }
 

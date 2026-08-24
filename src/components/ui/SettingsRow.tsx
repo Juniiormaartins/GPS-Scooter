@@ -34,7 +34,7 @@ export function SettingsRow({
       <button
         type="button"
         onClick={onClick}
-        className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl border border-white/[.06] bg-surface-card px-card text-row-title text-danger-500 transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
+        className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl border border-hairline/10 bg-surface-card px-card text-row-title text-danger-500 transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
       >
         {icon}
         {label}
@@ -45,7 +45,7 @@ export function SettingsRow({
   return (
     <Element
       {...(interactive ? { type: 'button' as const, onClick } : {})}
-      className={`flex min-h-[64px] w-full items-center gap-3.5 rounded-xl border border-white/[.06] bg-surface-card px-card py-3 text-left ${
+      className={`flex min-h-[64px] w-full items-center gap-3.5 rounded-xl border border-hairline/10 bg-surface-card px-card py-3 text-left ${
         interactive ? 'transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]' : ''
       }`}
     >

@@ -3,6 +3,7 @@ import { Chip, ListRow, SectionLabel } from '@/components/ui/primitives'
 import type { LngLat } from '@/config/region'
 import { useAddressSuggestions } from '@/hooks/useAddressSuggestions'
 import type { GeocodingResult } from '@/services/geocoding'
+import { clearSearchHistory, listSearchHistory, removeSearchHistoryEntry } from '@/services/storage/searchHistory'
 import { formatDistance, haversineDistanceMeters } from '@/utils/geo'
 
 interface SearchScreenProps {
@@ -19,6 +20,7 @@ const CATEGORIES = ['Restaurantes', 'Postos', 'Estacionar'] as const
 export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: SearchScreenProps) {
   const [query, setQuery] = useState(initialQuery)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [history, setHistory] = useState(() => listSearchHistory())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { suggestions, isLoading, error } = useAddressSuggestions(query)
@@ -94,9 +96,56 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
       {/* Corpo: eyebrow "RESULTADOS" e as linhas em variante divider. */}
       <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-gutter">
         {query.trim().length < 3 ? (
-          <p className="text-body text-content-secondary">
-            Digite o nome de um lugar, endereço ou escolha uma categoria acima.
-          </p>
+          // Sem busca ativa: mostra o histórico, para voltar a um destino recorrente sem digitar.
+          history.length > 0 ? (
+            <>
+              <div className="mb-1 flex items-center justify-between">
+                <SectionLabel>Pesquisas recentes</SectionLabel>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearSearchHistory()
+                    setHistory([])
+                  }}
+                  className="text-caption font-bold text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+                >
+                  Limpar
+                </button>
+              </div>
+              {history.map((entry) => (
+                <div key={entry.id} className="relative">
+                  <ListRow
+                    divider
+                    iconShape="circle"
+                    tone="neutral"
+                    icon={<ClockIcon />}
+                    title={entry.label}
+                    subtitle={entry.secondaryLabel}
+                    onClick={() =>
+                      onPick({ label: entry.label, secondaryLabel: entry.secondaryLabel, point: entry.point })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      removeSearchHistoryEntry(entry.id)
+                      setHistory(listSearchHistory())
+                    }}
+                    aria-label={`Remover ${entry.label} do histórico`}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-content-tertiary transition-all duration-fast active:scale-[.97] active:text-danger-500"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </>
+          ) : (
+            <p className="text-body text-content-secondary">
+              Digite o nome de um lugar, endereço ou escolha uma categoria acima.
+            </p>
+          )
         ) : (
           <>
             <SectionLabel className="mb-1">Resultados</SectionLabel>
@@ -112,8 +161,9 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 key={`${result.point.lat},${result.point.lng}`}
                 divider
                 iconShape="circle"
-                tone="accent"
-                icon={<PinIcon />}
+                // Relógio + tom neutro distingue "já pesquisei isso antes" de um resultado novo da busca.
+                tone={result.fromHistory ? 'neutral' : 'accent'}
+                icon={result.fromHistory ? <ClockIcon /> : <PinIcon />}
                 title={result.label}
                 subtitle={result.secondaryLabel}
                 trailing={userPoint ? formatDistance(haversineDistanceMeters(userPoint, result.point)) : undefined}
@@ -146,6 +196,15 @@ function PinIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
       <path d="M12 2C7.6 2 4 5.6 4 10c0 5.4 7 11.5 7.3 11.8.4.3 1 .3 1.4 0C13 21.5 20 15.4 20 10c0-4.4-3.6-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" />
+    </svg>
+  )
+}
+
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

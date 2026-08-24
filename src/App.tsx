@@ -15,12 +15,14 @@ import { ActivityPanel } from '@/components/panels/ActivityPanel'
 import { useGeolocation, LOW_ACCURACY_THRESHOLD_METERS } from '@/hooks/useGeolocation'
 import { useNavigationSession } from '@/hooks/useNavigationSession'
 import { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
+import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
 import { planRoute } from '@/services/routing'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity } from '@/services/storage/activityHistory'
+import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult } from '@/types/routing'
 
 type ActivePanel = 'profile' | 'saved' | 'activity' | null
@@ -52,6 +54,7 @@ export default function App() {
   // Vivendo em App.tsx (não dentro do ProfilePanel) para a conexão persistir
   // entre navegação de painéis e alimentar o NavigationPanel com bateria real quando disponível.
   const vehicleBluetooth = useVehicleBluetooth()
+  const { preferences, update: updatePreferences } = useUserPreferences()
   const userPosition = sample?.position ?? null
   const [followUserAsOrigin, setFollowUserAsOrigin] = useState(false)
   const [pendingCenter, setPendingCenter] = useState(false)
@@ -192,8 +195,9 @@ export default function App() {
     setSelectedPoi(result)
   }
 
-  /** Resultado escolhido na tela de busca: fecha a busca e abre a ficha do local, continuando o fluxo. */
+  /** Resultado escolhido na tela de busca: registra no histórico, fecha a busca e abre a ficha do local. */
   function handlePickFromSearch(result: GeocodingResult) {
+    recordSearch(result)
     setIsSearchOpen(false)
     handleSelectDestination(result)
   }
@@ -391,6 +395,8 @@ export default function App() {
         userPoint={userPosition}
         routeGeometry={activeScoredRoute?.route.geometry ?? null}
         routeOptions={routeOptions}
+        theme={preferences.theme}
+        onSelectRouteOption={setActiveRouteId}
         centerRequestId={centerToken}
       />
 
@@ -464,7 +470,7 @@ export default function App() {
         )
       )}
 
-      {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} vehicleBluetooth={vehicleBluetooth} />}
+      {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} vehicleBluetooth={vehicleBluetooth} preferences={preferences} onUpdatePreferences={updatePreferences} />}
       {activePanel === 'saved' && (
         <SavedPanel
           onClose={() => setActivePanel(null)}

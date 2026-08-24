@@ -53,7 +53,7 @@ export function NavigationPanel({
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-gutter pt-[max(1rem,env(safe-area-inset-top))]">
         {progress?.nextStep ? (
-          <div className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-white/10 bg-surface-card/[.86] px-3.5 py-3 shadow-float backdrop-blur-xl">
+          <div className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-3.5 py-3 shadow-float backdrop-blur-xl">
             <ManeuverIcon maneuver={progress.nextStep.maneuver} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[21px] font-extrabold leading-tight text-content-primary">
@@ -78,7 +78,7 @@ export function NavigationPanel({
             </button>
           </div>
         ) : (
-          <div className="pointer-events-auto rounded-2xl border border-white/10 bg-surface-card/[.86] px-card py-3.5 text-body text-content-secondary shadow-float backdrop-blur-xl">
+          <div className="pointer-events-auto rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-card py-3.5 text-body text-content-secondary shadow-float backdrop-blur-xl">
             {locationError ?? 'Obtendo sua localização…'}
           </div>
         )}
@@ -90,7 +90,7 @@ export function NavigationPanel({
         )}
 
         {progress && lowAccuracy && (
-          <div className="pointer-events-auto rounded-lg border border-white/10 bg-surface-card/[.86] px-card py-2 text-caption text-content-secondary shadow-float backdrop-blur-xl">
+          <div className="pointer-events-auto rounded-lg border border-hairline/15 bg-surface-card/[.86] px-card py-2 text-caption text-content-secondary shadow-float backdrop-blur-xl">
             Localização com baixa precisão (±{Math.round(gpsSample!.accuracyMeters)} m) — tente uma área aberta.
           </div>
         )}
@@ -113,7 +113,7 @@ export function NavigationPanel({
           {recenterControl}
         </div>
 
-        <div className="pointer-events-auto grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-surface-card/[.86] px-3 py-card shadow-float backdrop-blur-xl">
+        <div className="pointer-events-auto grid grid-cols-3 gap-2 rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-3 py-card shadow-float backdrop-blur-xl">
           <NavStat value={arrivalTime(remainingDurationMinutes)} label="Hora de chegada" tone="accent" />
           <NavStat value={formatEta(remainingDurationMinutes)} label="Tempo restante" />
           <NavStat value={formatDistance(remainingDistanceMeters)} label="Distância restante" />
@@ -138,7 +138,7 @@ function StatPill({
   return (
     <div
       title={title}
-      className="pointer-events-auto inline-flex flex-col gap-1 rounded-lg border border-white/10 bg-surface-card/[.86] px-card py-2.5 shadow-float backdrop-blur-xl"
+      className="pointer-events-auto inline-flex flex-col gap-1 rounded-lg border border-hairline/15 bg-surface-card/[.86] px-card py-2.5 shadow-float backdrop-blur-xl"
     >
       <span className="text-eyebrow uppercase text-content-tertiary">{label}</span>
       <span className={`text-[24px] font-extrabold ${tone === 'go' ? 'text-success-500' : 'text-content-primary'}`}>

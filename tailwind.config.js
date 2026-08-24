@@ -18,54 +18,54 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Rampa de superfícies — do fundo do app ao elemento mais elevado.
+        // Todas as cores vêm de variáveis CSS definidas em src/index.css, com
+        // uma paleta por tema (claro/escuro). Assim `bg-surface-card` &
+        // companhia funcionam nos dois temas sem duplicar classe no JSX.
         ink: {
           1000: '#05080F',
-          950: '#0A0E1A',
-          900: '#0E1424',
-          850: '#131C2E',
-          800: '#1A2438',
-          700: '#212D45',
-          600: '#2B3A56',
           500: '#3B4C6B',
         },
         surface: {
-          DEFAULT: '#0A0E1A', // --bg-app
-          map: '#0E1424', // --bg-map
-          sunken: '#131C2E', // faixa de busca, opção de rota não selecionada
-          card: '#1A2438', // cards, linhas de lista, bottom sheet
-          raised: '#212D45', // chips, card selecionado, botão secundário
-          tile: '#2B3A56', // tile de ícone
+          DEFAULT: 'var(--surface)',
+          map: 'var(--surface-map)',
+          sunken: 'var(--surface-sunken)', // faixa de busca, opção de rota não selecionada
+          card: 'var(--surface-card)', // cards, linhas de lista, bottom sheet
+          raised: 'var(--surface-raised)', // chips, card selecionado, botão secundário
+          tile: 'var(--surface-tile)', // tile de ícone
         },
         brand: {
-          300: '#8EDAFC',
-          400: '#5CC7FA',
-          500: '#35B7F7', // --accent-primary
-          600: '#0E86C6',
+          300: 'var(--brand-300)',
+          400: 'var(--brand-400)',
+          500: 'var(--brand-500)', // --accent-primary
+          600: 'var(--brand-600)',
         },
         success: {
-          400: '#5CE08E',
-          500: '#2FD16A', // --accent-go
-          600: '#20B457',
+          400: 'var(--success-400)',
+          500: 'var(--success-500)', // --accent-go
+          600: 'var(--success-600)',
         },
         warning: {
-          // O handoff define um único âmbar (500). As variantes claras existem só
-          // para os componentes ainda não migrados; elas somem na etapa de acabamento.
-          300: '#F9CA80',
-          400: '#F7B851',
-          500: '#F5A623', // --accent-warn
+          300: 'var(--warning-500)',
+          400: 'var(--warning-500)',
+          500: 'var(--warning-500)', // --accent-warn
         },
         danger: {
-          400: '#F46B6B',
-          500: '#F04545', // --accent-danger
+          400: 'var(--danger-500)',
+          500: 'var(--danger-500)', // --accent-danger
         },
         // Texto — hierarquia vem de peso e tamanho; a cor só separa níveis.
         content: {
-          primary: '#FFFFFF',
-          secondary: '#8A9CB6',
-          tertiary: '#64748B',
-          'on-accent': '#05080F', // texto sobre botão azul/verde
+          primary: 'var(--content-primary)',
+          secondary: 'var(--content-secondary)',
+          tertiary: 'var(--content-tertiary)',
+          'on-accent': 'var(--content-on-accent)', // texto sobre botão azul/verde
         },
+        /**
+         * Bordas e realces sutis. No escuro são brancos translúcidos; no claro,
+         * escuros — por isso `--hairline` é um trio RGB e a opacidade continua
+         * vindo do Tailwind (`border-hairline/10`).
+         */
+        hairline: 'rgb(var(--hairline) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Nunito', '"SF Pro Rounded"', '"Segoe UI"', 'system-ui', 'sans-serif'],

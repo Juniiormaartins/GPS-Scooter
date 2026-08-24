@@ -35,7 +35,7 @@ export function Card({
   return (
     <div
       className={`rounded-xl ${TONE} ${padded ? 'p-card' : ''} ${blur ? 'backdrop-blur-xl' : ''} ${
-        selected ? 'border-2 border-brand-500' : 'border border-white/[.06]'
+        selected ? 'border-2 border-brand-500' : 'border border-hairline/10'
       } ${className}`}
     >
       {children}
@@ -79,7 +79,7 @@ export function Chip({
       type="button"
       onClick={onClick}
       className={`shrink-0 rounded-pill px-4 py-2.5 text-[15px] font-bold transition-all duration-base ease-standard active:scale-[.97] active:opacity-[.88] ${
-        selected ? 'border-2 border-brand-500 bg-surface-raised text-content-primary' : 'border border-white/[.06] bg-surface-raised text-content-secondary'
+        selected ? 'border-2 border-brand-500 bg-surface-raised text-content-primary' : 'border border-hairline/10 bg-surface-raised text-content-secondary'
       }`}
     >
       {children}
@@ -107,7 +107,7 @@ export function StatTile({
   const VALUE_TONE = { default: 'text-content-primary', go: 'text-success-500', accent: 'text-brand-500' }[tone]
 
   return (
-    <div className={`rounded-lg border border-white/[.06] bg-surface-card p-card ${className}`}>
+    <div className={`rounded-lg border border-hairline/10 bg-surface-card p-card ${className}`}>
       <p className="text-eyebrow uppercase text-content-tertiary">{label}</p>
       <p className={`mt-1.5 text-metric ${VALUE_TONE}`}>{value}</p>
     </div>
@@ -153,7 +153,7 @@ export function ListRow({
     <Element
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={`flex min-h-row w-full items-center gap-4 px-card py-3 text-left transition-all duration-fast ease-standard ${
-        divider ? 'border-b border-white/[.06]' : 'rounded-xl border border-white/[.06] bg-surface-card'
+        divider ? 'border-b border-hairline/10' : 'rounded-xl border border-hairline/10 bg-surface-card'
       } ${onClick ? 'active:scale-[.97] active:opacity-[.88]' : ''}`}
     >
       {icon && (

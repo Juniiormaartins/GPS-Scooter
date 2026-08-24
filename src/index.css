@@ -2,6 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Dois temas intencionalmente projetados, não uma inversão automática.
+ *
+ * As classes do Tailwind (bg-surface-card, text-content-primary…) apontam
+ * para estas variáveis, então trocar `data-theme` no <html> repinta o app
+ * inteiro — inclusive telas que não recebem nenhuma prop de tema.
+ *
+ * ESCURO: paleta original do handoff de design (rampa `ink`, azul #35B7F7).
+ * CLARO: mesma identidade, re-derivada — o azul da marca ESCURECE (#0E86C6)
+ * para manter contraste sobre fundo claro, as superfícies sobem do cinza-azulado
+ * para o branco conforme a elevação (o inverso da rampa escura), e as bordas
+ * viram linhas escuras translúcidas em vez de brancas.
+ */
+:root,
+:root[data-theme='dark'] {
+  --surface: #0a0e1a;
+  --surface-map: #0e1424;
+  --surface-sunken: #131c2e;
+  --surface-card: #1a2438;
+  --surface-raised: #212d45;
+  --surface-tile: #2b3a56;
+
+  --brand-300: #8edafc;
+  --brand-400: #5cc7fa;
+  --brand-500: #35b7f7;
+  --brand-600: #0e86c6;
+
+  --success-400: #5ce08e;
+  --success-500: #2fd16a;
+  --success-600: #20b457;
+
+  --warning-500: #f5a623;
+  --danger-500: #f04545;
+
+  --content-primary: #ffffff;
+  --content-secondary: #8a9cb6;
+  --content-tertiary: #64748b;
+  --content-on-accent: #05080f;
+
+  /* Bordas/realces: claros sobre fundo escuro. */
+  --hairline: 255 255 255;
+}
+
+:root[data-theme='light'] {
+  /* Superfícies sobem para o branco conforme a elevação (inverso do escuro). */
+  --surface: #f4f6fb;
+  --surface-map: #eef1f7;
+  --surface-sunken: #e7ebf3;
+  --surface-card: #ffffff;
+  --surface-raised: #f7f9fd;
+  --surface-tile: #dfe5f0;
+
+  /* Azul mais profundo: o #35B7F7 do escuro não tem contraste sobre branco. */
+  --brand-300: #35b7f7;
+  --brand-400: #1a9ee0;
+  --brand-500: #0e86c6;
+  --brand-600: #0a6b9e;
+
+  --success-400: #2fd16a;
+  --success-500: #17a34a;
+  --success-600: #12833c;
+
+  --warning-500: #b3730a;
+  --danger-500: #d92626;
+
+  --content-primary: #0d1626;
+  --content-secondary: #4a5a72;
+  --content-tertiary: #6b7a90;
+  --content-on-accent: #ffffff;
+
+  /* Bordas/realces: escuros sobre fundo claro. */
+  --hairline: 13 22 38;
+}
+
 html,
 body,
 #root {
@@ -12,7 +86,7 @@ body,
 
 body {
   font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
-  background-color: #0a0e1a; /* --bg-app */
+  background-color: var(--surface);
   -webkit-tap-highlight-color: transparent;
 }
 
