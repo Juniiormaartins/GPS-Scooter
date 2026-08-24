@@ -1,0 +1,13 @@
+/** Lucide glyph rendered at the brand's 2px stroke weight. */
+export interface IconProps {
+  /** Lucide icon name, kebab-case (e.g. "map-pin", "circle-x"). */
+  name: string;
+  /** Pixel box. Default 20. Row icons 24, banner maneuver 30. */
+  size?: number;
+  /** Any CSS color; defaults to currentColor so it inherits the row's tone. */
+  color?: string;
+  /** Default 2. */
+  strokeWidth?: number;
+  style?: React.CSSProperties;
+}
+export declare function Icon(props: IconProps): JSX.Element;

@@ -1,0 +1,12 @@
+/**
+ * Floating origin → destination bar over the map.
+ */
+export interface RouteSearchFieldProps {
+  origin?: string;
+  destination?: string;
+  avatarSrc?: string;
+  onSearch?: () => void;
+  onPress?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function RouteSearchField(props: RouteSearchFieldProps): JSX.Element;

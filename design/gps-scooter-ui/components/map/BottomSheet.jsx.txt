@@ -1,0 +1,18 @@
+import React from "react";
+
+/* Bottom sheet anchored to the bottom of the map with a grabber handle. */
+export function BottomSheet({ children, style, ...rest }) {
+  return (
+    <div
+      style={{
+        background: "var(--surface-card)", borderTopLeftRadius: "var(--radius-2xl)", borderTopRightRadius: "var(--radius-2xl)",
+        borderTop: "var(--border-width) solid var(--border-subtle)", boxShadow: "var(--shadow-sheet)",
+        padding: "10px var(--screen-gutter) var(--safe-bottom)", ...style,
+      }}
+      {...rest}
+    >
+      <div style={{ width: 56, height: 5, borderRadius: "var(--radius-pill)", background: "var(--ink-500)", margin: "0 auto 16px" }} />
+      {children}
+    </div>
+  );
+}

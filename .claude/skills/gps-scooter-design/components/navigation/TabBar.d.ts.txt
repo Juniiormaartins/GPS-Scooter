@@ -1,0 +1,12 @@
+/**
+ * Floating pill tab bar.
+ * @startingPoint section="Navigation" subtitle="Floating three-up tab bar" viewport="700x120"
+ */
+export interface TabBarItem { id: string; label: string; /** Lucide name */ icon: string; }
+export interface TabBarProps {
+  items?: TabBarItem[];
+  active?: string;
+  onChange?: (id: string) => void;
+  style?: React.CSSProperties;
+}
+export declare function TabBar(props: TabBarProps): JSX.Element;

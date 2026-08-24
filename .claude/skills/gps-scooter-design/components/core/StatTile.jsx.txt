@@ -1,0 +1,19 @@
+import React from "react";
+
+const TONES = { default: "var(--text-primary)", go: "var(--accent-go)", accent: "var(--accent-primary)" };
+
+export function StatTile({ label, value, tone = "default", style, ...rest }) {
+  return (
+    <div
+      style={{
+        background: "var(--surface-card)", borderRadius: "var(--radius-lg)",
+        border: "var(--border-width) solid var(--border-hairline)",
+        padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: "6px", ...style,
+      }}
+      {...rest}
+    >
+      <div style={{ fontSize: "var(--type-eyebrow-size)", fontWeight: "var(--type-eyebrow-weight)", letterSpacing: "var(--type-eyebrow-track)", textTransform: "uppercase", color: "var(--text-tertiary)" }}>{label}</div>
+      <div style={{ fontSize: "var(--type-metric-size)", fontWeight: "var(--type-metric-weight)", lineHeight: "var(--type-metric-lh)", letterSpacing: "var(--type-metric-track)", color: TONES[tone] }}>{value}</div>
+    </div>
+  );
+}

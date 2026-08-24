@@ -1,0 +1,69 @@
+const { StatusBar, MapCanvas, LocationPuck, BottomSheet, SectionLabel, RouteOptionCard, Button, Icon,
+  GuidanceBanner, StatPill, NavStatsBar } = window.GPSScooterDesignSystem_7b8022;
+
+const OPTIONS = [
+  { kind: "recommended", tagLabel: "Recomendada", distance: "1.8 km", description: "Ciclovias e vias calmas e residenciais", duration: "8 min" },
+  { kind: "alternative", tagLabel: "Alternativa", distance: "2.1 km", description: "Tráfego moderado, trecho sem ciclovia", duration: "11 min" },
+  { kind: "fast", tagLabel: "Muito rápida", distance: "1.4 km", description: "Via rápida, não recomendada para scooters", duration: "5 min" },
+];
+
+const PREVIEW_ROUTES = [
+  { d: "M60 840 L360 620 L640 890", color: "var(--route-recommended)", width: 16 },
+  { d: "M130 1270 L310 880", color: "var(--route-caution)", width: 16, dashed: true },
+  { d: "M50 560 L260 545", color: "var(--route-hazard)", width: 14, dashed: true },
+];
+
+function RouteOptionsScreen({ onStart }) {
+  const [sel, setSel] = React.useState(0);
+  return (
+    <Screen>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <MapCanvas routes={PREVIEW_ROUTES}>
+          <LocationPuck style={{ position: "absolute", left: "33%", top: "44%" }} />
+        </MapCanvas>
+      </div>
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%" }}>
+        <StatusBar />
+        <div style={{ flex: 1 }} />
+        <BottomSheet>
+          <SectionLabel style={{ marginBottom: "12px" }}>Opções de rota</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            {OPTIONS.map(function (o, i) {
+              return <RouteOptionCard key={o.tagLabel} {...o} selected={sel === i} onClick={function () { setSel(i); }} />;
+            })}
+          </div>
+          <Button variant="go" size="lg" style={{ marginTop: "20px" }} icon={<Icon name="navigation" size={22} />} onClick={onStart}>Iniciar Navegação</Button>
+        </BottomSheet>
+      </div>
+    </Screen>
+  );
+}
+
+function NavigationScreen({ onStop }) {
+  return (
+    <Screen>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <MapCanvas routes={[{ d: "M600 300 L600 1750", color: "var(--route-active)", width: 16, glow: true }, { d: "M760 280 L1020 600", color: "var(--route-active)", width: 16 }]}>
+          <LocationPuck variant="navigating" style={{ position: "absolute", left: "52%", top: "54%", transform: "translate(-50%,-50%)" }} />
+        </MapCanvas>
+      </div>
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%" }}>
+        <StatusBar />
+        <div style={{ padding: "0 var(--screen-gutter)" }}>
+          <GuidanceBanner maneuver="arrow-left" instruction="Vire à esquerda" street="na R. Augusta em" distance="350m" onDismiss={onStop} />
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ padding: "0 var(--screen-gutter)", display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+          <StatPill label="Velocidade" value="22 km/h" />
+          <StatPill label="Bateria" value="82%" tone="go" align="right" />
+        </div>
+        <div style={{ padding: "0 var(--screen-gutter)" }}>
+          <NavStatsBar stats={[{ value: "10:04", label: "Hora de chegada", tone: "accent" }, { value: "6 min", label: "Tempo restável" }, { value: "1.3 km", label: "Distância restante" }]} />
+        </div>
+        <div style={{ height: "var(--safe-bottom)" }} />
+      </div>
+    </Screen>
+  );
+}
+
+Object.assign(window, { RouteOptionsScreen, NavigationScreen });

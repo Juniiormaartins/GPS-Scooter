@@ -1,0 +1,4 @@
+/** Three-up ETA strip for the navigation screen. */
+export interface NavStat { value: React.ReactNode; label: string; tone?: "default" | "accent" }
+export interface NavStatsBarProps { stats?: NavStat[]; style?: React.CSSProperties }
+export declare function NavStatsBar(props: NavStatsBarProps): JSX.Element;

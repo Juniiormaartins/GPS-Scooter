@@ -1,0 +1,9 @@
+/** Small floating live readout over the map. */
+export interface StatPillProps {
+  label: string;
+  value: React.ReactNode;
+  tone?: "default" | "go" | "accent";
+  align?: "left" | "right" | "center";
+  style?: React.CSSProperties;
+}
+export declare function StatPill(props: StatPillProps): JSX.Element;

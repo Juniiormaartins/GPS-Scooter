@@ -1,0 +1,7 @@
+/** User position marker. */
+export interface LocationPuckProps {
+  variant?: "idle" | "navigating";
+  size?: number;
+  style?: React.CSSProperties;
+}
+export declare function LocationPuck(props: LocationPuckProps): JSX.Element;

@@ -1,0 +1,21 @@
+import React from "react";
+
+const TONES = { default: "var(--text-primary)", go: "var(--accent-go)", accent: "var(--accent-primary)" };
+
+/* Small floating readout over the map — speed, battery, and similar live values. */
+export function StatPill({ label, value, tone = "default", align = "left", style, ...rest }) {
+  return (
+    <div
+      style={{
+        display: "inline-flex", flexDirection: "column", gap: "4px", padding: "10px 16px",
+        background: "var(--surface-overlay)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "var(--radius-lg)", border: "var(--border-width) solid var(--border-subtle)",
+        boxShadow: "var(--shadow-float)", textAlign: align, ...style,
+      }}
+      {...rest}
+    >
+      <span style={{ fontSize: "var(--type-eyebrow-size)", fontWeight: "var(--type-eyebrow-weight)", letterSpacing: "var(--type-eyebrow-track)", textTransform: "uppercase", color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ fontSize: "24px", fontWeight: "var(--fw-extrabold)", color: TONES[tone] }}>{value}</span>
+    </div>
+  );
+}

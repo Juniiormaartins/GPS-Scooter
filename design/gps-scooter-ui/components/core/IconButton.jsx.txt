@@ -1,0 +1,35 @@
+import React from "react";
+import { Icon } from "./Icon.jsx";
+
+const SHAPES = { circle: "var(--radius-pill)", square: "var(--radius-md)" };
+const TONES = {
+  neutral: { background: "var(--surface-tile)", color: "var(--text-secondary)" },
+  accent: { background: "var(--accent-primary)", color: "var(--text-on-accent)" },
+  quiet: { background: "transparent", color: "var(--text-secondary)" },
+  overlay: { background: "var(--surface-overlay)", color: "var(--text-secondary)" },
+};
+
+export function IconButton({ icon, label, tone = "quiet", shape = "circle", size = 44, iconSize = 20, style, onClick, ...rest }) {
+  const [down, setDown] = React.useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      onPointerDown={function () { setDown(true); }}
+      onPointerUp={function () { setDown(false); }}
+      onPointerLeave={function () { setDown(false); }}
+      style={{
+        width: size, height: size, minWidth: size, display: "inline-flex", alignItems: "center", justifyContent: "center",
+        border: "none", cursor: "pointer", borderRadius: SHAPES[shape], ...TONES[tone],
+        opacity: down ? "var(--press-dim)" : 1,
+        transform: down ? "scale(var(--press-scale))" : "scale(1)",
+        transition: "transform var(--dur-fast) var(--ease-standard), opacity var(--dur-fast) var(--ease-standard)",
+        ...style,
+      }}
+      {...rest}
+    >
+      <Icon name={icon} size={iconSize} />
+    </button>
+  );
+}

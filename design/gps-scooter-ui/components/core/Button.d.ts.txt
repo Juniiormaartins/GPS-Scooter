@@ -1,0 +1,16 @@
+/**
+ * Full-width action button.
+ */
+export interface ButtonProps {
+  /** go = green primary CTA ("Iniciar Navegação"); primary = blue; destructive = red label on card fill. */
+  variant?: "go" | "primary" | "secondary" | "quiet" | "ghost" | "destructive";
+  /** lg (56px) is the screen-level CTA; sm (36px) is a pill inside a header. */
+  size?: "lg" | "md" | "sm";
+  disabled?: boolean;
+  /** Optional leading <Icon/>. */
+  icon?: React.ReactNode;
+  children?: React.ReactNode;
+  onClick?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function Button(props: ButtonProps): JSX.Element;

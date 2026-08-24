@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Mobile screen" description="iPhone-sized GPS Scooter screen: map, floating search, vehicle strip and tab bar" -->
+<helmet>
+<script src="./ds-base.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<style>body{margin:0;background:#05080F;display:flex;align-items:center;justify-content:center;min-height:100vh}</style>
+</helmet>
+<div style="position:relative;width:393px;height:852px;border-radius:44px;overflow:hidden;background:#0A0E1A;font-family:Nunito,system-ui,sans-serif;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08)">
+<div style="position:absolute;inset:0">
+<x-import component-from-global-scope="GPSScooterDesignSystem_7b8022.MapCanvas" hint-size="393px,852px"></x-import>
+</div>
+<div style="position:absolute;left:42%;top:48%">
+<x-import component-from-global-scope="GPSScooterDesignSystem_7b8022.LocationPuck" hint-size="48px,48px"></x-import>
+</div>
+<div style="position:relative;display:flex;flex-direction:column;height:100%">
+<div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;color:#fff;font-size:17px;font-weight:700"><span>9:41</span><span style="color:#8A9CB6;font-size:13px;letter-spacing:1px">▪▪▪ ᯤ ▮</span></div>
+<div style="padding:0 20px">
+<x-import component-from-global-scope="GPSScooterDesignSystem_7b8022.RouteSearchField" origin="Sua localização" destination="Para onde?" hint-size="353px,84px"></x-import>
+</div>
+<div style="flex:1"></div>
+<div style="padding:0 20px;display:flex;flex-direction:column;gap:12px">
+<x-import component-from-global-scope="GPSScooterDesignSystem_7b8022.VehicleStatusBar" model="Ninebot Max G30" battery="84%" range="38 km restáveis" hint-size="353px,72px"></x-import>
+<x-import component-from-global-scope="GPSScooterDesignSystem_7b8022.TabBar" items="{{ tabs }}" active="{{ tab }}" onChange="{{ setTab }}" hint-size="353px,64px"></x-import>
+</div>
+<div style="height:34px;display:flex;align-items:center;justify-content:center"><span style="width:140px;height:5px;border-radius:999px;background:#B6C4D6"></span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: "explore" };
+  renderVals() {
+    return {
+      tabs: [
+        { id: "explore", label: "Explorar", icon: "map" },
+        { id: "saved", label: "Salvos", icon: "star" },
+        { id: "activity", label: "Atividade", icon: "clock" },
+      ],
+      tab: this.state.tab,
+      setTab: (id) => this.setState({ tab: id }),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -11,8 +11,8 @@ body,
 }
 
 body {
-  font-family: 'Baloo 2', system-ui, sans-serif;
-  background-color: #0a0e1a;
+  font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+  background-color: #0a0e1a; /* --bg-app */
   -webkit-tap-highlight-color: transparent;
 }
 

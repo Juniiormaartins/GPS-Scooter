@@ -1,0 +1,69 @@
+:root{
+/* ---- base palette ---------------------------------------------------- */
+--ink-1000:#05080F;
+--ink-950:#0A0E1A;   /* app background */
+--ink-900:#0E1424;   /* map background */
+--ink-850:#131C2E;   /* recessed surface */
+--ink-800:#1A2438;   /* card / sheet */
+--ink-700:#212D45;   /* raised card, chip */
+--ink-600:#2B3A56;   /* icon tile, hairline-strong */
+--ink-500:#3B4C6B;   /* disabled fill, map road */
+--slate-400:#64748B;
+--slate-300:#8A9CB6; /* secondary text */
+--slate-200:#B6C4D6;
+--slate-100:#DCE4EF;
+--white:#FFFFFF;
+
+--blue-600:#0E86C6;
+--blue-500:#35B7F7;  /* primary accent */
+--blue-400:#5CC7FA;
+--blue-300:#8EDAFC;
+--blue-a16:rgba(53,183,247,.16);
+--blue-a10:rgba(53,183,247,.10);
+
+--green-600:#20B457;
+--green-500:#2FD16A; /* go / success / battery */
+--green-400:#5CE08E;
+--green-a16:rgba(47,209,106,.16);
+
+--amber-500:#F5A623; /* saved places, "alternativa" */
+--amber-a16:rgba(245,166,35,.16);
+
+--red-500:#F04545;   /* destructive, hazard route */
+--red-a16:rgba(240,69,69,.16);
+
+/* ---- semantic aliases ------------------------------------------------ */
+--bg-app:var(--ink-950);
+--bg-map:var(--ink-900);
+--surface-card:var(--ink-800);
+--surface-card-raised:var(--ink-700);
+--surface-sunken:var(--ink-850);
+--surface-tile:var(--ink-600);
+--surface-overlay:rgba(26,36,56,.86);
+
+--text-primary:var(--white);
+--text-secondary:var(--slate-300);
+--text-tertiary:var(--slate-400);
+--text-accent:var(--blue-500);
+--text-on-accent:var(--ink-1000);
+--text-inverse:var(--ink-950);
+
+--border-hairline:rgba(255,255,255,.06);
+--border-subtle:rgba(255,255,255,.10);
+--border-selected:var(--blue-500);
+
+--accent-primary:var(--blue-500);
+--accent-go:var(--green-500);
+--accent-warn:var(--amber-500);
+--accent-danger:var(--red-500);
+
+--map-road:var(--ink-600);
+--map-road-minor:var(--ink-850);
+--map-grid:rgba(53,183,247,.05);
+--route-active:var(--blue-500);
+--route-recommended:var(--green-500);
+--route-caution:var(--amber-500);
+--route-hazard:var(--red-500);
+--puck-fill:var(--blue-500);
+--puck-halo:rgba(53,183,247,.22);
+}

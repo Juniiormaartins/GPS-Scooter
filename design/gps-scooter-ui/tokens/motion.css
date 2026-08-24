@@ -1,0 +1,10 @@
+:root{
+--ease-standard:cubic-bezier(.4,0,.2,1); /* @kind other */
+--ease-out:cubic-bezier(.16,1,.3,1); /* @kind other */   /* sheets, screen pushes */
+--ease-in:cubic-bezier(.4,0,1,1); /* @kind other */
+--dur-fast:120ms; /* @kind other */    /* press / hover feedback */
+--dur-base:200ms; /* @kind other */    /* toggles, chips, selection */
+--dur-slow:320ms; /* @kind other */    /* sheet + screen transitions */
+--press-scale:0.97; /* @kind other */
+--press-dim:0.88; /* @kind other */    /* opacity applied on press */
+}

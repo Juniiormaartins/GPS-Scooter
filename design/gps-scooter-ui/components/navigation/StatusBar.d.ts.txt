@@ -1,0 +1,4 @@
+/** iOS chrome used to frame UI-kit screens. Also exports HomeIndicator. */
+export interface StatusBarProps { time?: string; style?: React.CSSProperties }
+export declare function StatusBar(props: StatusBarProps): JSX.Element;
+export declare function HomeIndicator(props: { style?: React.CSSProperties }): JSX.Element;

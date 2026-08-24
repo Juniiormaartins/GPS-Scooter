@@ -1,0 +1,35 @@
+const { StatusBar, HomeIndicator, SearchField, Chip, SectionLabel, ListRow, SkeletonRow } = window.GPSScooterDesignSystem_7b8022;
+
+const RESULTS = [
+  { icon: "map-pin", title: "Av. Paulista, 1000", subtitle: "Bela Vista, São Paulo - SP", trailing: "1.2 km" },
+  { icon: "map-pin", title: "Shopping Cidade São Paulo", subtitle: "Av. Paulista, 1230 - São Paulo", trailing: "1.5 km" },
+  { icon: "clock", title: "Parque do Ibirapuera", subtitle: "Av. Pedro Álvares Cabral - SP", trailing: "4.2 km" },
+];
+
+function SearchScreen({ onBack, onPick }) {
+  const [q, setQ] = React.useState("Av. Paulista");
+  const [chip, setChip] = React.useState(null);
+  return (
+    <Screen>
+      <StatusBar />
+      <div style={{ background: "var(--surface-sunken)", padding: "4px var(--screen-gutter) 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        <SearchField value={q} focused onChange={function (e) { setQ(e.target.value); }} onClear={function () { setQ(""); }} onBack={onBack} />
+        <div style={{ display: "flex", gap: "12px", overflowX: "auto" }}>
+          {["Restaurantes", "Postos", "Estacionar"].map(function (c) {
+            return <Chip key={c} selected={chip === c} onClick={function () { setChip(chip === c ? null : c); }}>{c}</Chip>;
+          })}
+        </div>
+      </div>
+      <ScreenBody style={{ paddingTop: "20px", gap: "0" }}>
+        <SectionLabel style={{ marginBottom: "4px" }}>Resultados</SectionLabel>
+        {RESULTS.map(function (r) {
+          return <ListRow key={r.title} divider iconShape="circle" tone="accent" {...r} onClick={function () { onPick(r); }} />;
+        })}
+        <SkeletonRow />
+      </ScreenBody>
+      <HomeIndicator />
+    </Screen>
+  );
+}
+
+Object.assign(window, { SearchScreen });

@@ -90,6 +90,8 @@ export function MapView({
     map.on('zoomstart', notifyUserInteraction)
 
     map.on('load', () => {
+      applyDarkCartography(map)
+
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
         data: {
@@ -281,9 +283,86 @@ function updateMarker(
   ref.current.setLngLat([point.lng, point.lat]).addTo(map)
 }
 
+/**
+ * Aplica a cartografia escura do handoff de design ao estilo REAL do provedor
+ * (MapTiler), recolorindo as camadas já carregadas — não substitui o mapa por
+ * um desenho. Ver design/gps-scooter-ui/README.md → "Cartografia".
+ *
+ * O casamento é por heurística no id/tipo da camada porque o MapTiler não
+ * expõe papéis semânticos; por isso cada `setPaintProperty` é protegido por
+ * try/catch: uma camada com propriedade inesperada é ignorada em vez de
+ * derrubar o mapa inteiro. Se o provedor mudar os ids, o mapa continua
+ * funcionando — só volta às cores originais dele.
+ *
+ * Por que recolorir em vez de usar um estilo "dark" pronto: os prontos que
+ * testamos (Mapbox dark-v11) têm contraste fundo/via de ~1,5x, ilegível para
+ * um GPS. A paleta do handoff tem ~3x, medido.
+ */
+function applyDarkCartography(map: MapLibreMap) {
+  const setPaint = (layerId: string, property: string, value: string) => {
+    try {
+      map.setPaintProperty(layerId, property, value)
+    } catch {
+      // Camada não aceita essa propriedade — ignorar e seguir com as demais.
+    }
+  }
+
+  for (const layer of map.getStyle().layers ?? []) {
+    const id = layer.id.toLowerCase()
+
+    if (layer.type === 'background') {
+      setPaint(layer.id, 'background-color', MAP_COLORS.background)
+      continue
+    }
+
+    if (layer.type === 'fill') {
+      if (id.includes('water') || id.includes('ocean')) setPaint(layer.id, 'fill-color', MAP_COLORS.water)
+      else if (id.includes('building')) setPaint(layer.id, 'fill-color', MAP_COLORS.roadMinor)
+      else if (id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('landcover')) {
+        setPaint(layer.id, 'fill-color', '#101B2C')
+      } else setPaint(layer.id, 'fill-color', MAP_COLORS.background)
+      continue
+    }
+
+    if (layer.type === 'line') {
+      // Os ids reais do MapTiler são "Highway", "Major road", "Minor road",
+      // "Bridge", "Path"… (não "motorway/primary" como em outros provedores) —
+      // conferido contra o style.json em uso. Errar isso pinta TODA via com a
+      // cor de via secundária, que é quase o fundo, e o mapa some.
+      if (id.endsWith('outline')) {
+        // Contorno fica no tom do fundo: separa as vias sem competir com elas.
+        setPaint(layer.id, 'line-color', MAP_COLORS.background)
+      } else if (id.includes('highway') || id.includes('major road') || id.includes('bridge')) {
+        setPaint(layer.id, 'line-color', MAP_COLORS.roadMajor)
+      } else {
+        setPaint(layer.id, 'line-color', MAP_COLORS.roadMinor)
+      }
+      continue
+    }
+
+    if (layer.type === 'symbol') {
+      // Rótulos sem halo branco (regra explícita do handoff).
+      setPaint(layer.id, 'text-color', MAP_COLORS.label)
+      setPaint(layer.id, 'text-halo-color', MAP_COLORS.background)
+      continue
+    }
+
+    if (layer.type === 'circle') {
+      setPaint(layer.id, 'circle-color', MAP_COLORS.poi)
+    }
+  }
+}
+
+/**
+ * Marcadores sobre o mapa escuro. O do usuário segue a spec do handoff
+ * ("LocationPuck"): disco azul 22px com halo translúcido de 48px — bem maior
+ * que origem/destino, porque é o elemento vivo da tela.
+ */
 function markerClassName(kind: 'origin' | 'destination' | 'user'): string {
-  const base = 'h-4 w-4 rounded-full border-2 border-white shadow-md'
-  if (kind === 'origin') return `${base} bg-brand-600`
-  if (kind === 'destination') return `${base} bg-success-600`
-  return `${base} bg-brand-500 ring-4 ring-brand-500/30`
+  if (kind === 'user') {
+    return 'h-[22px] w-[22px] rounded-pill bg-brand-500 ring-[13px] ring-brand-500/[.22] shadow-route'
+  }
+  const base = 'h-3.5 w-3.5 rounded-pill border-2 border-surface-map'
+  if (kind === 'origin') return `${base} bg-brand-500`
+  return `${base} bg-success-500`
 }

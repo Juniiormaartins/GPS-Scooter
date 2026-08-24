@@ -1,0 +1,11 @@
+/**
+ * Boxed label + metric, used in 2-up grids.
+ */
+export interface StatTileProps {
+  label: string;
+  value: React.ReactNode;
+  /** go = green (eco/battery wins). */
+  tone?: "default" | "go" | "accent";
+  style?: React.CSSProperties;
+}
+export declare function StatTile(props: StatTileProps): JSX.Element;

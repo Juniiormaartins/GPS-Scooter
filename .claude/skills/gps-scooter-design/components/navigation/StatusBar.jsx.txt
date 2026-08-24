@@ -1,0 +1,24 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+
+/* iOS status bar + home indicator used to frame every screen in the UI kit. */
+export function StatusBar({ time = "09:41", style, ...rest }) {
+  return (
+    <div style={{ height: "var(--safe-top)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", color: "var(--text-primary)", ...style }} {...rest}>
+      <span style={{ fontSize: "17px", fontWeight: "var(--fw-bold)" }}>{time}</span>
+      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <Icon name="signal-high" size={18} />
+        <Icon name="wifi" size={18} />
+        <Icon name="battery-full" size={22} />
+      </span>
+    </div>
+  );
+}
+
+export function HomeIndicator({ style, ...rest }) {
+  return (
+    <div style={{ height: "var(--safe-bottom)", display: "flex", alignItems: "center", justifyContent: "center", ...style }} {...rest}>
+      <span style={{ width: 140, height: 5, borderRadius: "var(--radius-pill)", background: "var(--slate-200)" }} />
+    </div>
+  );
+}

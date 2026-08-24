@@ -1,0 +1,23 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+
+/* Two forms: "title" (large screen title, optional trailing action) and
+   "back" (compact bar with a back chevron), both seen in the source screens. */
+export function NavHeader({ title, variant = "title", action, onBack, style, ...rest }) {
+  if (variant === "back") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "14px", minHeight: "56px", ...style }} {...rest}>
+        <button type="button" aria-label="Voltar" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer", display: "flex", padding: 0 }}>
+          <Icon name="arrow-left" size={26} strokeWidth={2.5} />
+        </button>
+        <span style={{ fontSize: "var(--type-nav-title-size)", fontWeight: "var(--type-nav-title-weight)", lineHeight: "var(--type-nav-title-lh)" }}>{title}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", minHeight: "56px", ...style }} {...rest}>
+      <h1 style={{ margin: 0, fontSize: "var(--type-screen-title-size)", fontWeight: "var(--type-screen-title-weight)", lineHeight: "var(--type-screen-title-lh)", letterSpacing: "var(--type-screen-title-track)" }}>{title}</h1>
+      {action}
+    </div>
+  );
+}

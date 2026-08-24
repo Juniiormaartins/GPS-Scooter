@@ -1,0 +1,19 @@
+/**
+ * Labelled preference row with a trailing control.
+ */
+export interface SettingsRowProps {
+  label: string;
+  /** Optional leading Lucide icon name. */
+  icon?: string;
+  iconColor?: string;
+  control?: "toggle" | "value" | "action" | "chevron" | "none";
+  checked?: boolean;
+  value?: string;
+  action?: string;
+  /** danger centres the label and paints it red (sign out). */
+  tone?: "default" | "danger";
+  onChange?: (next: boolean) => void;
+  onClick?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function SettingsRow(props: SettingsRowProps): JSX.Element;

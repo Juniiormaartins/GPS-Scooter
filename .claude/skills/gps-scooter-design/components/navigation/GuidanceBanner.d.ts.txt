@@ -1,0 +1,14 @@
+/**
+ * Turn-by-turn instruction banner.
+ */
+export interface GuidanceBannerProps {
+  /** Lucide maneuver glyph, e.g. "arrow-left", "corner-up-right". */
+  maneuver?: string;
+  instruction: string;
+  street?: string;
+  /** Highlighted in blue, e.g. "350m". */
+  distance?: string;
+  onDismiss?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function GuidanceBanner(props: GuidanceBannerProps): JSX.Element;

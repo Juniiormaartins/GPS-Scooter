@@ -1,0 +1,45 @@
+import React from "react";
+
+/* Loads the Lucide UMD build once, on demand. Lucide is a SUBSTITUTION for the
+   source app's icon set (screenshots only, no vector source was provided) —
+   stroke weight ~2 / rounded caps matches the screenshots closely. */
+const LUCIDE_URL = "https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js";
+let lucidePromise = null;
+function loadLucide() {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (window.lucide) return Promise.resolve(window.lucide);
+  if (lucidePromise) return lucidePromise;
+  lucidePromise = new Promise(function (resolve) {
+    var s = document.createElement("script");
+    s.src = LUCIDE_URL;
+    s.onload = function () { resolve(window.lucide); };
+    s.onerror = function () { resolve(null); };
+    document.head.appendChild(s);
+  });
+  return lucidePromise;
+}
+
+export function Icon({ name, size = 20, color = "currentColor", strokeWidth = 2, style, ...rest }) {
+  const host = React.useRef(null);
+  React.useEffect(function () {
+    let alive = true;
+    loadLucide().then(function (lucide) {
+      if (!alive || !lucide || !host.current) return;
+      host.current.innerHTML = '<i data-lucide="' + name + '"></i>';
+      lucide.createIcons({
+        nameAttr: "data-lucide",
+        attrs: { width: size, height: size, stroke: color, "stroke-width": strokeWidth },
+      });
+    });
+    return function () { alive = false; };
+  }, [name, size, color, strokeWidth]);
+
+  return (
+    <span
+      ref={host}
+      aria-hidden="true"
+      style={{ display: "inline-flex", width: size, height: size, flex: "0 0 auto", color: color, ...style }}
+      {...rest}
+    />
+  );
+}

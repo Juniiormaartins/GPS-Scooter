@@ -1,0 +1,45 @@
+import React from "react";
+
+const BASE = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px",
+  fontFamily: "var(--font-core)", fontWeight: "var(--fw-extrabold)", border: "none",
+  cursor: "pointer", width: "100%", transition: "transform var(--dur-fast) var(--ease-standard), opacity var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard)",
+};
+const SIZES = {
+  lg: { height: "56px", fontSize: "18px", borderRadius: "var(--radius-lg)", padding: "0 24px" },
+  md: { height: "48px", fontSize: "16px", borderRadius: "var(--radius-md)", padding: "0 20px" },
+  sm: { height: "36px", fontSize: "14px", borderRadius: "var(--radius-pill)", padding: "0 14px" },
+};
+const VARIANTS = {
+  go: { background: "var(--accent-go)", color: "var(--text-on-accent)" },
+  primary: { background: "var(--accent-primary)", color: "var(--text-on-accent)" },
+  secondary: { background: "var(--surface-card-raised)", color: "var(--text-primary)" },
+  quiet: { background: "var(--blue-a16)", color: "var(--text-accent)" },
+  ghost: { background: "transparent", color: "var(--text-accent)" },
+  destructive: { background: "var(--surface-card)", color: "var(--accent-danger)" },
+};
+
+export function Button({ variant = "primary", size = "lg", disabled = false, icon = null, children, style, onClick, ...rest }) {
+  const [down, setDown] = React.useState(false);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      onPointerDown={function () { setDown(true); }}
+      onPointerUp={function () { setDown(false); }}
+      onPointerLeave={function () { setDown(false); }}
+      style={{
+        ...BASE, ...SIZES[size], ...VARIANTS[variant],
+        opacity: disabled ? 0.4 : down ? "var(--press-dim)" : 1,
+        transform: down && !disabled ? "scale(var(--press-scale))" : "scale(1)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        ...style,
+      }}
+      {...rest}
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}

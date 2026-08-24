@@ -1,0 +1,41 @@
+const { StatusBar, HomeIndicator, TabBar, MapCanvas, LocationPuck, RouteSearchField, VehicleStatusBar } = window.GPSScooterDesignSystem_7b8022;
+
+const TABS = [
+  { id: "explore", label: "Explorar", icon: "map" },
+  { id: "saved", label: "Salvos", icon: "star" },
+  { id: "activity", label: "Atividade", icon: "clock" },
+];
+
+function Screen({ children, style }) {
+  return <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", background: "var(--bg-app)", ...style }}>{children}</div>;
+}
+
+function ScreenBody({ children, style }) {
+  return <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 var(--screen-gutter)", display: "flex", flexDirection: "column", ...style }}>{children}</div>;
+}
+
+function ExploreScreen({ tab, onTab, onSearch, onProfile }) {
+  return (
+    <Screen>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <MapCanvas>
+          <LocationPuck style={{ position: "absolute", left: "36%", top: "48%" }} />
+        </MapCanvas>
+      </div>
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%" }}>
+        <StatusBar />
+        <div style={{ padding: "0 var(--screen-gutter)" }}>
+          <RouteSearchField origin="Sua localização" destination="Para onde?" onPress={onSearch} onSearch={onSearch} avatarSrc={null} style={{ cursor: "pointer" }} />
+        </div>
+        <div style={{ flex: 1 }} onClick={onProfile} />
+        <div style={{ padding: "0 var(--screen-gutter)", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <VehicleStatusBar model="Ninebot Max G30" battery="84%" range="38 km restáveis" />
+          <TabBar items={TABS} active={tab} onChange={onTab} />
+        </div>
+        <HomeIndicator />
+      </div>
+    </Screen>
+  );
+}
+
+Object.assign(window, { Screen, ScreenBody, TABS, ExploreScreen });

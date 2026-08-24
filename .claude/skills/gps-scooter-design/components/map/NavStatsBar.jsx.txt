@@ -1,0 +1,26 @@
+import React from "react";
+
+/* The three-up ETA strip pinned above the home indicator during navigation. */
+export function NavStatsBar({ stats = [], style, ...rest }) {
+  return (
+    <div
+      style={{
+        display: "grid", gridTemplateColumns: "repeat(" + stats.length + ",1fr)", gap: "8px",
+        padding: "16px 12px", background: "var(--surface-overlay)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "var(--radius-2xl)", border: "var(--border-width) solid var(--border-subtle)",
+        boxShadow: "var(--shadow-float)", ...style,
+      }}
+      {...rest}
+    >
+      {stats.map(function (s, i) {
+        return (
+          <div key={i} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "27px", fontWeight: "var(--fw-extrabold)", lineHeight: 1.1, color: s.tone === "accent" ? "var(--accent-primary)" : "var(--text-primary)" }}>{s.value}</div>
+            <div style={{ fontSize: "14px", color: "var(--text-secondary)", marginTop: "4px" }}>{s.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

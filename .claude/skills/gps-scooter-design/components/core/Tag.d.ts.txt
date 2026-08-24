@@ -1,0 +1,7 @@
+/** Uppercase classification label. */
+export interface TagProps {
+  tone?: "go" | "accent" | "warn" | "danger" | "neutral";
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
+export declare function Tag(props: TagProps): JSX.Element;

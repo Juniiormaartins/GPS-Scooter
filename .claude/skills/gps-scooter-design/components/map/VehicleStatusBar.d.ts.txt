@@ -1,0 +1,13 @@
+/**
+ * Connected-vehicle strip.
+ */
+export interface VehicleStatusBarProps {
+  model: string;
+  connection?: string;
+  /** e.g. "84%" — always rendered green. */
+  battery: string;
+  /** e.g. "38 km restáveis". */
+  range?: string;
+  style?: React.CSSProperties;
+}
+export declare function VehicleStatusBar(props: VehicleStatusBarProps): JSX.Element;

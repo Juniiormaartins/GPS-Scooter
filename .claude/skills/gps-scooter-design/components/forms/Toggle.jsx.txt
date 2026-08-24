@@ -1,0 +1,24 @@
+import React from "react";
+
+export function Toggle({ checked = false, onChange, disabled = false, label, style, ...rest }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={function () { if (onChange) onChange(!checked); }}
+      style={{
+        width: "62px", height: "34px", padding: "3px", borderRadius: "var(--radius-pill)", border: "none",
+        background: checked ? "var(--accent-go)" : "var(--ink-500)",
+        cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1,
+        display: "flex", justifyContent: checked ? "flex-end" : "flex-start", alignItems: "center",
+        transition: "background var(--dur-base) var(--ease-standard)", ...style,
+      }}
+      {...rest}
+    >
+      <span style={{ width: "28px", height: "28px", borderRadius: "var(--radius-pill)", background: checked ? "var(--white)" : "var(--slate-200)", boxShadow: "var(--shadow-tile)", transition: "all var(--dur-base) var(--ease-out)" }} />
+    </button>
+  );
+}

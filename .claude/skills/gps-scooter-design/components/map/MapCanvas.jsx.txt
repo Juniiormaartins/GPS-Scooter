@@ -1,0 +1,52 @@
+import React from "react";
+
+/* Stylised dark basemap: faint grid, thick slate roads, POI dots, and any number of
+   route lines drawn on top. Geometry is decorative — this is a visual stand-in for the
+   real map tiles, matching the source app's dark cartography. */
+const ROADS = [
+  { d: "M330 30 L520 620 L500 1130", w: 26 },
+  { d: "M60 380 L940 800", w: 22 },
+  { d: "M160 660 L900 480", w: 20 },
+  { d: "M60 900 L960 1560", w: 34, opacity: 0.55 },
+  { d: "M60 1290 L820 1420", w: 18 },
+  { d: "M340 1900 L470 1060", w: 14 },
+];
+const DOTS = [
+  { x: 700, y: 460, r: 9 },
+  { x: 245, y: 530, r: 9 },
+  { x: 335, y: 1195, r: 9 },
+  { x: 600, y: 1470, r: 9 },
+];
+
+export function MapCanvas({ routes = [], children, grid = true, style, ...rest }) {
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--bg-map)", overflow: "hidden", ...style }} {...rest}>
+      {grid && (
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(var(--map-grid) 1px,transparent 1px),linear-gradient(90deg,var(--map-grid) 1px,transparent 1px)", backgroundSize: "120px 190px" }} />
+      )}
+      <svg viewBox="0 0 1000 1900" preserveAspectRatio="xMidYMid slice" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+        {ROADS.map(function (r, i) {
+          return <path key={i} d={r.d} stroke="var(--map-road)" strokeWidth={r.w} strokeLinecap="round" fill="none" opacity={r.opacity || 1} />;
+        })}
+        {DOTS.map(function (d, i) {
+          return <circle key={i} cx={d.x} cy={d.y} r={d.r} fill="var(--ink-500)" />;
+        })}
+        {routes.map(function (route, i) {
+          return (
+            <path
+              key={i}
+              d={route.d}
+              stroke={route.color || "var(--route-active)"}
+              strokeWidth={route.width || 14}
+              strokeLinecap="round"
+              strokeDasharray={route.dashed ? "2 26" : undefined}
+              fill="none"
+              style={route.glow ? { filter: "drop-shadow(0 0 10px rgba(53,183,247,.55))" } : undefined}
+            />
+          );
+        })}
+      </svg>
+      {children}
+    </div>
+  );
+}

@@ -1,0 +1,74 @@
+const { StatusBar, HomeIndicator, NavHeader, Button, SectionLabel, ListRow, Card, Icon, TabBar } = window.GPSScooterDesignSystem_7b8022;
+
+const FAVOURITES = [
+  { title: "Sujinho Hamburgueria", subtitle: "R. Augusta, 1005 - Consolação" },
+  { title: "Parque do Ibirapuera", subtitle: "Av. Pedro Álvares Cabral" },
+  { title: "Livraria Cultura", subtitle: "Conjunto Nacional, Av. Paulista" },
+];
+
+function Shortcut({ icon, label, value }) {
+  return (
+    <Card style={{ flex: 1, display: "flex", alignItems: "center", gap: "12px", padding: "16px 14px" }}>
+      <Icon name={icon} size={26} color="var(--accent-primary)" />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: "17px", fontWeight: "var(--fw-bold)" }}>{label}</div>
+        <div style={{ fontSize: "14px", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      </div>
+    </Card>
+  );
+}
+
+function SavedScreen({ tab, onTab, onPick }) {
+  return (
+    <Screen>
+      <StatusBar />
+      <ScreenBody style={{ gap: "12px" }}>
+        <NavHeader title="Salvos" action={<Button variant="quiet" size="sm" style={{ width: "auto" }}>+ Adicionar</Button>} style={{ marginBottom: "8px" }} />
+        <div style={{ display: "flex", gap: "12px" }}>
+          <Shortcut icon="house" label="Casa" value="Definido: R. Pamplona" />
+          <Shortcut icon="briefcase" label="Trabalho" value="Definir endereço" />
+        </div>
+        <SectionLabel style={{ marginTop: "12px" }}>Locais favoritos</SectionLabel>
+        {FAVOURITES.map(function (p) {
+          return <ListRow key={p.title} icon="star" tone="warn" title={p.title} subtitle={p.subtitle} chevron onClick={onPick} />;
+        })}
+      </ScreenBody>
+      <div style={{ padding: "0 var(--screen-gutter)" }}><TabBar items={TABS} active={tab} onChange={onTab} /></div>
+      <HomeIndicator />
+    </Screen>
+  );
+}
+
+const RIDES = [
+  { group: "Hoje", items: [{ title: "R. Pamplona → Augusta", subtitle: "1.8 km  •  8 min", tone: "go" }] },
+  { group: "Ontem", items: [{ title: "Ibirapuera → Paulista", subtitle: "4.2 km  •  18 min", tone: "go" }] },
+  { group: "Esta semana", items: [
+    { title: "Consolação → Vila Madalena", subtitle: "5.1 km  •  24 min", tone: "neutral" },
+    { title: "Pinheiros → Faria Lima", subtitle: "2.3 km  •  11 min", tone: "neutral" },
+  ] },
+];
+
+function ActivityScreen({ tab, onTab, onPick }) {
+  return (
+    <Screen>
+      <StatusBar />
+      <ScreenBody style={{ gap: "8px" }}>
+        <NavHeader title="Atividade" style={{ marginBottom: "4px" }} />
+        {RIDES.map(function (g) {
+          return (
+            <React.Fragment key={g.group}>
+              <SectionLabel style={{ marginTop: "12px", marginBottom: "4px" }}>{g.group}</SectionLabel>
+              {g.items.map(function (r) {
+                return <ListRow key={r.title} icon="route" tone={r.tone} title={r.title} subtitle={r.subtitle} chevron onClick={onPick} />;
+              })}
+            </React.Fragment>
+          );
+        })}
+      </ScreenBody>
+      <div style={{ padding: "0 var(--screen-gutter)" }}><TabBar items={TABS} active={tab} onChange={onTab} /></div>
+      <HomeIndicator />
+    </Screen>
+  );
+}
+
+Object.assign(window, { SavedScreen, ActivityScreen });

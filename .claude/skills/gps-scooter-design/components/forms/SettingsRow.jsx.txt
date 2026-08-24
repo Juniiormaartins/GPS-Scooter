@@ -1,0 +1,27 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+import { Toggle } from "./Toggle.jsx";
+
+/* One row of a settings group: label on the left, and on the right either a
+   toggle, a value string, an action link, or a chevron. */
+export function SettingsRow({ label, icon, iconColor = "var(--accent-primary)", control = "none", checked, value, action, tone = "default", onChange, onClick, style, ...rest }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: "14px", minHeight: "64px", padding: "0 18px",
+        background: "var(--surface-card)", borderRadius: "var(--radius-lg)",
+        border: "var(--border-width) solid var(--border-hairline)",
+        cursor: onClick ? "pointer" : "default", ...style,
+      }}
+      {...rest}
+    >
+      {icon && <Icon name={icon} size={24} color={iconColor} />}
+      <span style={{ flex: 1, fontSize: "17px", fontWeight: "var(--fw-bold)", color: tone === "danger" ? "var(--accent-danger)" : "var(--text-primary)", textAlign: tone === "danger" ? "center" : "left" }}>{label}</span>
+      {control === "toggle" && <Toggle checked={checked} onChange={onChange} label={label} />}
+      {control === "value" && <span style={{ fontSize: "16px", color: "var(--text-secondary)" }}>{value}</span>}
+      {control === "action" && <span style={{ fontSize: "16px", fontWeight: "var(--fw-semibold)", color: "var(--text-accent)" }}>{action}</span>}
+      {control === "chevron" && <Icon name="chevron-right" size={20} color="var(--text-tertiary)" />}
+    </div>
+  );
+}

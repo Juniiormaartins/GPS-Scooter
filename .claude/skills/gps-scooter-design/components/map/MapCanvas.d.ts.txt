@@ -1,0 +1,12 @@
+/**
+ * Stylised dark basemap with optional route lines.
+ * @startingPoint section="Map" subtitle="Dark basemap with route overlays" viewport="700x400"
+ */
+export interface MapRoute { /** SVG path in the 1000x1900 viewBox */ d: string; color?: string; width?: number; dashed?: boolean; glow?: boolean }
+export interface MapCanvasProps {
+  routes?: MapRoute[];
+  grid?: boolean;
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
+export declare function MapCanvas(props: MapCanvasProps): JSX.Element;

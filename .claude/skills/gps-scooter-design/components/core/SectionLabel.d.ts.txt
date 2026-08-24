@@ -1,0 +1,6 @@
+/** Uppercase tracked eyebrow above a group of rows. */
+export interface SectionLabelProps {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
+export declare function SectionLabel(props: SectionLabelProps): JSX.Element;

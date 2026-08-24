@@ -1,0 +1,10 @@
+/** Circular profile image with initials fallback. */
+export interface AvatarProps {
+  src?: string;
+  name?: string;
+  size?: number;
+  /** Soft blue focus ring. */
+  ring?: boolean;
+  style?: React.CSSProperties;
+}
+export declare function Avatar(props: AvatarProps): JSX.Element;

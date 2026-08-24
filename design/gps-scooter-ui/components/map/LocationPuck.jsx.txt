@@ -1,0 +1,19 @@
+import React from "react";
+
+/* The user's position marker. "idle" = filled blue dot in a soft halo,
+   "navigating" = white ring riding the route line. */
+export function LocationPuck({ variant = "idle", size = 22, style, ...rest }) {
+  const halo = size * 2.2;
+  return (
+    <div style={{ width: halo, height: halo, borderRadius: "var(--radius-pill)", background: "var(--puck-halo)", display: "flex", alignItems: "center", justifyContent: "center", ...style }} {...rest}>
+      <span
+        style={{
+          width: size, height: size, borderRadius: "var(--radius-pill)",
+          background: variant === "navigating" ? "transparent" : "var(--puck-fill)",
+          border: variant === "navigating" ? "5px solid var(--white)" : "none",
+          boxShadow: "var(--glow-route)",
+        }}
+      />
+    </div>
+  );
+}

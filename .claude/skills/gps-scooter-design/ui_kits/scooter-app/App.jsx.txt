@@ -1,0 +1,17 @@
+function App() {
+  const [view, setView] = React.useState("explore");
+  const [tab, setTab] = React.useState("explore");
+
+  function goTab(id) { setTab(id); setView(id); }
+
+  if (view === "search") return <SearchScreen onBack={function () { setView("explore"); }} onPick={function () { setView("routes"); }} />;
+  if (view === "routes") return <RouteOptionsScreen onStart={function () { setView("navigating"); }} />;
+  if (view === "navigating") return <NavigationScreen onStop={function () { setView("explore"); }} />;
+  if (view === "trip") return <TripDetailScreen onBack={function () { setView("activity"); }} />;
+  if (view === "profile") return <ProfileScreen onBack={function () { setView("explore"); }} />;
+  if (view === "saved") return <SavedScreen tab={tab} onTab={goTab} onPick={function () { setView("routes"); }} />;
+  if (view === "activity") return <ActivityScreen tab={tab} onTab={goTab} onPick={function () { setView("trip"); }} />;
+  return <ExploreScreen tab={tab} onTab={goTab} onSearch={function () { setView("search"); }} onProfile={function () { setView("profile"); }} />;
+}
+
+ReactDOM.createRoot(document.getElementById("phone")).render(<App />);

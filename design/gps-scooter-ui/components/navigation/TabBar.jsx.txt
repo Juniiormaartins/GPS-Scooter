@@ -1,0 +1,39 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+
+/* Floating pill tab bar, anchored above the home indicator. */
+export function TabBar({ items = [], active, onChange, style, ...rest }) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: "4px", padding: "6px",
+        background: "var(--surface-overlay)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "var(--radius-2xl)", border: "var(--border-width) solid var(--border-subtle)",
+        boxShadow: "var(--shadow-float)", ...style,
+      }}
+      {...rest}
+    >
+      {items.map(function (item) {
+        const on = item.id === active;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={function () { if (onChange) onChange(item.id); }}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+              height: "52px", border: "none", borderRadius: "var(--radius-2xl)", cursor: "pointer",
+              background: on ? "var(--blue-a16)" : "transparent",
+              color: on ? "var(--text-primary)" : "var(--text-tertiary)",
+              fontFamily: "var(--font-core)", fontSize: "16px", fontWeight: "var(--fw-bold)",
+              transition: "background var(--dur-base) var(--ease-standard), color var(--dur-base) var(--ease-standard)",
+            }}
+          >
+            <Icon name={item.icon} size={22} color={on ? "var(--accent-primary)" : "var(--text-tertiary)"} />
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

@@ -1,0 +1,27 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+
+/* Connected-vehicle strip: model, link state, charge and remaining range. */
+export function VehicleStatusBar({ model, connection = "Conectado via Bluetooth", battery, range, style, ...rest }) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: "16px", padding: "14px 18px",
+        background: "var(--surface-overlay)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "var(--radius-2xl)", border: "var(--border-width) solid var(--border-subtle)",
+        boxShadow: "var(--shadow-float)", ...style,
+      }}
+      {...rest}
+    >
+      <Icon name="bike" size={30} color="var(--accent-go)" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "19px", fontWeight: "var(--fw-extrabold)" }}>{model}</div>
+        <div style={{ fontSize: "15px", color: "var(--text-secondary)", marginTop: "2px" }}>{connection}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "10px", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: "22px", fontWeight: "var(--fw-extrabold)", color: "var(--accent-go)" }}>{battery}</span>
+        <span style={{ fontSize: "16px", color: "var(--text-secondary)" }}>{range}</span>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,14 @@
+/**
+ * Selectable route choice.
+ */
+export interface RouteOptionCardProps {
+  kind?: "recommended" | "alternative" | "fast";
+  tagLabel: string;
+  distance: string;
+  description: string;
+  duration: string;
+  selected?: boolean;
+  onClick?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function RouteOptionCard(props: RouteOptionCardProps): JSX.Element;

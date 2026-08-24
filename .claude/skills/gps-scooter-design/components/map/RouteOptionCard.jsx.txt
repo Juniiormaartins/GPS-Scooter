@@ -1,0 +1,31 @@
+import React from "react";
+import { Tag } from "../core/Tag.jsx";
+
+const TAG_TONE = { recommended: "go", alternative: "warn", fast: "danger" };
+
+/* A selectable route choice: classification tag, distance, one-line rationale, and ETA. */
+export function RouteOptionCard({ kind = "recommended", tagLabel, distance, description, duration, selected = false, onClick, style, ...rest }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: "16px", padding: "14px 16px",
+        background: selected ? "var(--surface-card-raised)" : "var(--surface-sunken)",
+        borderRadius: "var(--radius-lg)",
+        border: selected ? "var(--border-width-selected) solid var(--border-selected)" : "var(--border-width) solid var(--border-hairline)",
+        cursor: "pointer", transition: "border-color var(--dur-base) var(--ease-standard), background var(--dur-base) var(--ease-standard)",
+        ...style,
+      }}
+      {...rest}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Tag tone={TAG_TONE[kind]}>{tagLabel}</Tag>
+          <span style={{ fontSize: "15px", color: "var(--text-secondary)", fontWeight: "var(--fw-semibold)" }}>{distance}</span>
+        </div>
+        <div style={{ marginTop: "6px", fontSize: "16px", color: selected ? "var(--text-primary)" : "var(--text-secondary)", textWrap: "pretty" }}>{description}</div>
+      </div>
+      <div style={{ fontSize: "26px", fontWeight: "var(--fw-extrabold)", color: selected ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>{duration}</div>
+    </div>
+  );
+}

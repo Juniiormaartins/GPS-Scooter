@@ -1,0 +1,28 @@
+import React from "react";
+
+const TONES = {
+  card: "var(--surface-card)",
+  raised: "var(--surface-card-raised)",
+  sunken: "var(--surface-sunken)",
+  overlay: "var(--surface-overlay)",
+};
+
+export function Card({ tone = "card", selected = false, padded = true, blur = false, children, style, ...rest }) {
+  return (
+    <div
+      style={{
+        background: TONES[tone],
+        borderRadius: "var(--radius-xl)",
+        padding: padded ? "var(--card-pad-y) var(--card-pad-x)" : 0,
+        border: selected ? "var(--border-width-selected) solid var(--border-selected)" : "var(--border-width) solid var(--border-hairline)",
+        backdropFilter: blur ? "blur(20px)" : "none",
+        WebkitBackdropFilter: blur ? "blur(20px)" : "none",
+        transition: "border-color var(--dur-base) var(--ease-standard), background var(--dur-base) var(--ease-standard)",
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}

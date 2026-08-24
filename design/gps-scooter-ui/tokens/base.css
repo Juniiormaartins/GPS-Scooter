@@ -1,0 +1,7 @@
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;background:var(--bg-app);color:var(--text-primary);font-family:var(--font-core);font-size:var(--type-body-size);line-height:var(--type-body-lh);font-weight:var(--fw-regular)}
+*,*::before,*::after{box-sizing:border-box}
+a{color:var(--text-accent);text-decoration:none}
+a:hover{color:var(--blue-400)}
+button{font-family:inherit}
+::selection{background:var(--blue-a16)}

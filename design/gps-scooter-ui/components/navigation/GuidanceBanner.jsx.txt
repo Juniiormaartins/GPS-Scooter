@@ -1,0 +1,32 @@
+import React from "react";
+import { Icon } from "../core/Icon.jsx";
+
+/* Turn-by-turn instruction banner floating at the top of the navigation screen. */
+export function GuidanceBanner({ maneuver = "arrow-left", instruction, street, distance, onDismiss, style, ...rest }) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: "16px", padding: "12px 14px",
+        background: "var(--surface-overlay)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "var(--radius-2xl)", border: "var(--border-width) solid var(--border-subtle)",
+        boxShadow: "var(--shadow-float)", ...style,
+      }}
+      {...rest}
+    >
+      <div style={{ width: 60, height: 60, borderRadius: "var(--radius-lg)", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>
+        <Icon name={maneuver} size={30} color="var(--text-on-accent)" strokeWidth={2.5} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "21px", fontWeight: "var(--fw-extrabold)", lineHeight: 1.2 }}>{instruction}</div>
+        <div style={{ fontSize: "16px", color: "var(--text-secondary)", marginTop: "2px" }}>
+          {street} <span style={{ color: "var(--text-accent)", fontWeight: "var(--fw-bold)" }}>{distance}</span>
+        </div>
+      </div>
+      {onDismiss && (
+        <button type="button" aria-label="Encerrar navegação" onClick={onDismiss} style={{ background: "var(--surface-tile)", border: "none", borderRadius: "var(--radius-pill)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", cursor: "pointer" }}>
+          <Icon name="x" size={20} />
+        </button>
+      )}
+    </div>
+  );
+}

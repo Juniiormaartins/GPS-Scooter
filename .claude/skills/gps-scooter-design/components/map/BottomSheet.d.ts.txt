@@ -1,0 +1,3 @@
+/** Bottom sheet with grabber handle. */
+export interface BottomSheetProps { children?: React.ReactNode; style?: React.CSSProperties }
+export declare function BottomSheet(props: BottomSheetProps): JSX.Element;

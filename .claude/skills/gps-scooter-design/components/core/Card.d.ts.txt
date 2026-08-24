@@ -1,0 +1,12 @@
+/** Rounded surface container. */
+export interface CardProps {
+  tone?: "card" | "raised" | "sunken" | "overlay";
+  /** Draws the 2px blue selection border. */
+  selected?: boolean;
+  padded?: boolean;
+  /** Backdrop blur — only for surfaces floating over the map. */
+  blur?: boolean;
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
+export declare function Card(props: CardProps): JSX.Element;

@@ -1,0 +1,19 @@
+/**
+ * Icon-tile list row used for places, results and ride history.
+ */
+export interface ListRowProps {
+  /** Lucide icon name for the leading tile. */
+  icon?: string;
+  iconShape?: "square" | "circle";
+  tone?: "neutral" | "accent" | "warn" | "go";
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  /** Right-aligned value, e.g. "1.2 km". */
+  trailing?: React.ReactNode;
+  chevron?: boolean;
+  /** Transparent row with a bottom hairline instead of a card fill (search results). */
+  divider?: boolean;
+  onClick?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function ListRow(props: ListRowProps): JSX.Element;

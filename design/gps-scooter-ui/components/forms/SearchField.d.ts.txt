@@ -1,0 +1,12 @@
+/** Single-line destination input with origin dot, clear button and optional back. */
+export interface SearchFieldProps {
+  value?: string;
+  placeholder?: string;
+  /** Draws the 2px blue focus border. */
+  focused?: boolean;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClear?: () => void;
+  onBack?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function SearchField(props: SearchFieldProps): JSX.Element;

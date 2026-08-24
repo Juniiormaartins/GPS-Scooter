@@ -1,0 +1,10 @@
+/** Screen header — big title, or compact back bar. */
+export interface NavHeaderProps {
+  title: string;
+  variant?: "title" | "back";
+  /** Trailing element for the title variant (usually a quiet Button). */
+  action?: React.ReactNode;
+  onBack?: () => void;
+  style?: React.CSSProperties;
+}
+export declare function NavHeader(props: NavHeaderProps): JSX.Element;
