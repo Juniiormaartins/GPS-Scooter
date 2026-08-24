@@ -444,18 +444,6 @@ export default function App() {
         />
       </div>
 
-      {/*
-        Botão de recentralizar só na tela de exploração. Com a ficha do local
-        ou o bottom sheet de rotas abertos ele ficaria por cima deles no
-        celular — e nesses momentos o usuário está escolhendo destino/rota,
-        não explorando o mapa. Durante a navegação ele existe, mas dentro do
-        NavigationPanel (faixa inferior), nunca solto sobre a tela.
-      */}
-      {!selectedPoi && !activeScoredRoute && (
-        <div className="pointer-events-none absolute bottom-[184px] right-5">
-          <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
-        </div>
-      )}
 
       {selectedPoi && !activeScoredRoute && (
         <PoiCard
@@ -493,7 +481,20 @@ export default function App() {
         </BottomSheet>
       ) : (
         !selectedPoi && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {/*
+              O botão de recentralizar faz parte desta MESMA pilha, alinhado à
+              direita. Antes ele flutuava com um `bottom` em pixels fixos, que
+              não conhecia a altura real dos cards nem a safe area do iPhone —
+              por isso encostava no bloco do veículo. Como irmão no flex, o
+              espaçamento passa a ser garantido pelo `gap` em qualquer tela.
+            */}
+            {/* `mb-3` além do gap da pilha: o botão é um controle do MAPA, não
+                parte do bloco de informações — o respiro extra deixa essa
+                separação explícita em vez de parecer um card colado no outro. */}
+            <div className="mb-3 flex justify-end">
+              <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
+            </div>
             <VehicleStatusBar bluetooth={vehicleBluetooth} />
             <BottomNavBar
               active={activePanel ?? 'explore'}

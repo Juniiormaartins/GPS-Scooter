@@ -2,17 +2,24 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
-    // Evita que o Vite resolva o junction "GPSScooter" (sem espaço, usado por
-    // .claude/launch.json para contornar limitações de parsing de comando)
-    // de volta ao caminho real "GPS Scooter" (com espaço), o que quebrava a
-    // checagem de allowlist do dev server.
-    preserveSymlinks: true,
+    /**
+     * Só em desenvolvimento local. Existe para o Vite não resolver o junction
+     * "GPSScooter" (sem espaço, usado por .claude/launch.json) de volta ao
+     * caminho real "GPS Scooter" (com espaço), o que quebrava a allowlist do
+     * dev server.
+     *
+     * Fora do dev isso é desligado de propósito: em build de CI (Vercel), com
+     * gerenciadores que usam symlink em node_modules (pnpm/yarn), manter
+     * `preserveSymlinks` pode quebrar a resolução de dependências. O problema
+     * que ele resolve é exclusivamente local.
+     */
+    preserveSymlinks: command === 'serve',
   },
   server: {
     host: true,
@@ -27,4 +34,4 @@ export default defineConfig({
     host: true,
     allowedHosts: ['.loca.lt', '.trycloudflare.com'],
   },
-})
+}))
