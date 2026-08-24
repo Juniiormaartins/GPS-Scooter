@@ -1,4 +1,6 @@
 import type { LngLat } from '@/config/region'
+import type { AvoidanceHit } from '@/services/routing/avoidances'
+import type { RouteElevationProfile } from '@/services/routing/elevation'
 
 /**
  * Classificação estrutural de vias, alinhada à hierarquia usada por
@@ -117,6 +119,17 @@ export interface ScoredRoute {
   route: CandidateRoute
   /** 0 (inadequada) a 100 (ideal para o perfil autopropelido) — QUALIDADE, não permissão. */
   suitabilityScore: number
+  /**
+   * suitabilityScore já descontado das preferências do usuário (Perfil →
+   * Preferências de rota). É este valor que ordena as alternativas; o
+   * suitabilityScore puro continua exposto porque ele descreve a via em si,
+   * independentemente de quem está pilotando.
+   */
+  preferenceScore: number
+  /** Trechos que casam com alguma condição que o usuário pediu para evitar — base do destaque no mapa. */
+  avoidanceHits: AvoidanceHit[]
+  /** Perfil de elevação estimado, quando a consulta funcionou. null = indisponível (nunca estimado por outro meio). */
+  elevation: RouteElevationProfile | null
   /** Permissão/elegibilidade da rota como um todo — o pior valor entre os segmentos (ver Eligibility). Eixo separado de suitabilityScore. */
   eligibility: Eligibility
   issues: RouteSuitabilityIssue[]

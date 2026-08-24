@@ -2,6 +2,8 @@ import { calculateEtaMinutes } from '@/services/routing/eta'
 import { getRoutingProvider } from '@/services/routing/provider'
 import { enrichRouteSegments } from '@/services/routing/segmentEnrichment'
 import { evaluateRoute } from '@/services/routing/ruleEngine'
+import { describeAvoidanceHit, evaluateAvoidances } from '@/services/routing/avoidances'
+import { fetchRouteElevationProfile } from '@/services/routing/elevation'
 import { getUserPreferences, ROUTE_PREFERENCE_TOLERANCE } from '@/config/userPreferences'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
@@ -32,6 +34,13 @@ import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
  */
 const ENRICHMENT_DEADLINE_MS = 8000
 
+/**
+ * Prazo do perfil de elevação. Assim como o enriquecimento, é OPCIONAL: sem
+ * ele a rota existe e é exibida, apenas sem a dimensão de inclinação. Nunca
+ * pode segurar a tela de "Calculando rota…".
+ */
+const ELEVATION_DEADLINE_MS = 6000
+
 function withDeadline<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(fallback), ms)
@@ -55,16 +64,35 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
     throw new Error('Nenhuma rota candidata foi encontrada entre a origem e o destino informados.')
   }
 
+  const preferences = getUserPreferences()
+
   const scored: ScoredRoute[] = await Promise.all(
     candidates.map(async (route) => {
-      const enrichedSegments = await withDeadline(enrichRouteSegments(route), ENRICHMENT_DEADLINE_MS, route.segments)
+      // Enriquecimento e elevação são independentes entre si: buscar em
+      // paralelo evita somar os dois prazos no tempo de cálculo da rota.
+      const [enrichedSegments, elevation] = await Promise.all([
+        withDeadline(enrichRouteSegments(route), ENRICHMENT_DEADLINE_MS, route.segments),
+        withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null),
+      ])
       const enrichedRoute = { ...route, segments: enrichedSegments }
       const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute)
+
+      // As preferências entram DEPOIS da avaliação obrigatória e só subtraem
+      // pontos — não podem promover a elegibilidade de uma via inadequada.
+      const avoidance = evaluateAvoidances(enrichedRoute, preferences, elevation)
+
       return {
         route: enrichedRoute,
-        issues,
+        issues: [
+          ...issues,
+          ...avoidance.hits.map((hit) => ({ severity: 'warning' as const, reason: describeAvoidanceHit(hit) })),
+        ],
         breakdown,
         suitabilityScore,
+        /** Score já descontado das preferências — é ele que ordena o ranking. */
+        preferenceScore: Math.max(0, suitabilityScore - avoidance.penaltyPoints),
+        avoidanceHits: avoidance.hits,
+        elevation,
         eligibility,
         etaMinutes: calculateEtaMinutes(route.totalDistanceMeters),
         highlights: [],
@@ -99,14 +127,17 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
  */
 function rankRoutes(scored: ScoredRoute[]): { ranked: ScoredRoute[]; recommendedId: string } {
   const tolerance = ROUTE_PREFERENCE_TOLERANCE[getUserPreferences().routePreference]
-  const maxScore = Math.max(...scored.map((entry) => entry.suitabilityScore))
-  const contenders = scored.filter((entry) => entry.suitabilityScore >= maxScore - tolerance)
+  // Ranqueia pelo score JÁ descontado das preferências do usuário. Como o
+  // desconto é limitado (ver MAX_PENALTY_PER_AVOIDANCE), uma condição
+  // inevitável não elimina a rota: ela apenas perde posição e ganha aviso.
+  const maxScore = Math.max(...scored.map((entry) => entry.preferenceScore))
+  const contenders = scored.filter((entry) => entry.preferenceScore >= maxScore - tolerance)
   const recommended = [...contenders].sort((a, b) => a.route.totalDistanceMeters - b.route.totalDistanceMeters)[0]
 
   const fastest = [...scored].sort((a, b) => a.etaMinutes - b.etaMinutes)[0]
   const safest = [...scored].sort((a, b) => b.suitabilityScore - a.suitabilityScore)[0]
 
-  const ranked = [...scored].sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+  const ranked = [...scored].sort((a, b) => b.preferenceScore - a.preferenceScore)
 
   for (const entry of ranked) {
     entry.label = undefined

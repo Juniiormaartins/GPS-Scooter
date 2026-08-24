@@ -160,13 +160,18 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
           <>
             {/* O eyebrow também comunica o estado: "BUSCANDO LUGARES…" enquanto
                 a consulta corre, "RESULTADOS" quando ela termina. */}
-            <SectionLabel className="mb-1">
-              {isLoading ? (
-                <span className="text-brand-500">Buscando lugares…</span>
-              ) : (
-                'Resultados'
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <SectionLabel>
+                {isLoading ? <span className="text-brand-500">Buscando lugares…</span> : 'Resultados'}
+              </SectionLabel>
+              {/* A distância de cada linha é EM LINHA RETA (Haversine), não pela
+                  rota — medido: um destino a 14,5 km em linha reta dá ~16,9 km
+                  de rota real (fator ~1,17). Dizer isso uma vez, no cabeçalho,
+                  evita a sensação de que o número "mudou" depois do cálculo. */}
+              {userPoint && suggestions.length > 0 && (
+                <span className="shrink-0 text-caption text-content-tertiary">em linha reta</span>
               )}
-            </SectionLabel>
+            </div>
 
             {error && <p className="py-3 text-body text-warning-500">{error}</p>}
 
@@ -184,7 +189,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 icon={result.fromHistory ? <ClockIcon /> : <PinIcon />}
                 title={result.label}
                 subtitle={result.secondaryLabel}
-                trailing={userPoint ? formatDistance(haversineDistanceMeters(userPoint, result.point)) : undefined}
+                trailing={userPoint ? `≈${formatDistance(haversineDistanceMeters(userPoint, result.point))}` : undefined}
                 onClick={() => onPick(result)}
               />
             ))}

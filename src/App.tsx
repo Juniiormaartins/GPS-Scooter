@@ -339,16 +339,32 @@ export default function App() {
    * e alimentava só a pontuação — aqui ela também vira geometria, permitindo
    * ver ONDE está o pedaço ruim de uma rota que no geral é recomendada.
    */
-  const routeWarnings = (activeScoredRoute?.route.segments ?? [])
-    .map((segment) => ({ segment, tier: classifySegment(segment) }))
-    .filter(({ tier }) => tier === 'caution' || tier === 'unsuitable' || tier === 'prohibited')
-    .map(({ segment, tier }) => ({
-      path: segment.path,
-      severity: (tier === 'caution' ? 'caution' : 'unsuitable') as 'caution' | 'unsuitable',
-    }))
+  const routeWarnings = (() => {
+    const segments = activeScoredRoute?.route.segments ?? []
+
+    const byClassification = segments
+      .map((segment) => ({ segment, tier: classifySegment(segment) }))
+      .filter(({ tier }) => tier === 'caution' || tier === 'unsuitable' || tier === 'prohibited')
+      .map(({ segment, tier }) => ({
+        path: segment.path,
+        severity: (tier === 'caution' ? 'caution' : 'unsuitable') as 'caution' | 'unsuitable',
+      }))
+
+    // Trechos que o USUÁRIO pediu para evitar e que mesmo assim entraram na
+    // rota (porque eram inevitáveis, ou porque desviar sairia caro demais).
+    // Aparecem com severidade 'caution': a via é utilizável — é uma
+    // preferência contrariada, não uma via inadequada.
+    const indexesToAvoid = new Set((activeScoredRoute?.avoidanceHits ?? []).flatMap((hit) => hit.segmentIndexes))
+    const byPreference = [...indexesToAvoid]
+      .map((index) => segments[index])
+      .filter((segment): segment is NonNullable<typeof segment> => segment != null)
+      .map((segment) => ({ path: segment.path, severity: 'caution' as const }))
+
+    return [...byClassification, ...byPreference]
+  })()
 
   const navigationSession = useNavigationSession(activeScoredRoute?.route ?? null, isNavigating)
-  useVoiceGuidance(navigationSession.progress, voiceEnabled, isNavigating)
+  useVoiceGuidance(navigationSession.progress, voiceEnabled, isNavigating, activeScoredRoute?.route ?? null)
 
   // Desvio de rota sustentado (não ruído pontual do GPS) → recalcula a partir
   // da posição atual, mantendo o mesmo destino e perfil de veículo. As regras
@@ -400,6 +416,7 @@ export default function App() {
           scoredRoute={activeScoredRoute}
           progress={navigationSession.progress}
           gpsSample={navigationSession.gpsSample}
+          currentSpeedKmh={navigationSession.currentSpeedKmh}
           locationError={navigationSession.locationError}
           routeDeviated={navigationSession.routeDeviated}
           isRecalculating={isRecalculating}

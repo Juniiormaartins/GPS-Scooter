@@ -47,8 +47,10 @@ export function PoiCard({ poi, onTraceRoute, onSave, onDismiss, isSaved, userPoi
       {(poi.secondaryLabel || distanceMeters != null) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
           {poi.secondaryLabel && <Tag tone="neutral">{poi.secondaryLabel}</Tag>}
+          {/* Explicitamente "em linha reta": a distância da rota calculada é
+              maior (desvio das ruas) e aparece depois, no card da rota. */}
           {distanceMeters != null && (
-            <span className="text-body text-content-secondary">{formatDistance(distanceMeters)} de distância</span>
+            <span className="text-body text-content-secondary">≈{formatDistance(distanceMeters)} em linha reta</span>
           )}
         </div>
       )}

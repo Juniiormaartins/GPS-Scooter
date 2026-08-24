@@ -8,6 +8,8 @@ interface NavigationPanelProps {
   scoredRoute: ScoredRoute
   progress: NavigationProgress | null
   gpsSample: GeolocationSample | null
+  /** Velocidade real de deslocamento já filtrada (ver services/navigation/speedTracker.ts). null = sem leitura confiável. */
+  currentSpeedKmh: number | null
   locationError: string | null
   routeDeviated: boolean
   isRecalculating: boolean
@@ -38,6 +40,7 @@ export function NavigationPanel({
   scoredRoute,
   progress,
   gpsSample,
+  currentSpeedKmh,
   locationError,
   routeDeviated,
   isRecalculating,
@@ -51,7 +54,6 @@ export function NavigationPanel({
 
   const remainingDistanceMeters = progress?.remainingDistanceMeters ?? route.totalDistanceMeters
   const remainingDurationMinutes = progress?.remainingDurationMinutes ?? etaMinutes
-  const currentSpeedKmh = gpsSample?.speedMps != null ? Math.round(gpsSample.speedMps * 3.6) : null
   const lowAccuracy = gpsSample ? gpsSample.accuracyMeters > LOW_ACCURACY_THRESHOLD_METERS : false
 
   return (

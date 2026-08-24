@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
 import { SectionLabel } from '@/components/ui/primitives'
 import { SettingsRow } from '@/components/ui/SettingsRow'
 import {
+  AVOIDANCE_OPTIONS,
   VEHICLE_PRESETS,
+  type AvoidanceId,
   type RoutePreference,
   type UserPreferences,
   type VehicleModelId,
 } from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
+import { isSpeechSupported, listPortugueseVoices, onVoicesChanged } from '@/services/navigation/voiceGuidance'
 
 interface ProfilePanelProps {
   onClose: () => void
@@ -40,6 +43,13 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
 
   const currentVehicle = VEHICLE_PRESETS.find((preset) => preset.id === preferences.vehicleModelId)
   const vehicleLabel = currentVehicle?.label ?? 'Personalizado'
+
+  function toggleAvoidance(id: AvoidanceId, next: boolean) {
+    const current = preferences.avoidances
+    onUpdatePreferences({
+      avoidances: next ? [...current, id] : current.filter((entry) => entry !== id),
+    })
+  }
 
   /** Trocar de veículo traz junto velocidade e autonomia do preset — é o que torna a escolha significativa. */
   function selectVehicle(id: VehicleModelId) {
@@ -121,6 +131,9 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
       </p>
 
       <SectionLabel className="mb-stack mt-group">Preferências de rota</SectionLabel>
+      <p className="mb-stack text-caption text-content-tertiary">
+        Priorize trajetos mais adequados ao seu veículo e às suas preferências.
+      </p>
       <div className="flex flex-col gap-stack">
         {ROUTE_PREFERENCE_OPTIONS.map((option) => (
           <SettingsRow
@@ -133,6 +146,35 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         ))}
       </div>
 
+      <SectionLabel className="mb-stack mt-group">Evitar quando possível</SectionLabel>
+      <div className="flex flex-col gap-stack">
+        {AVOIDANCE_OPTIONS.map((option) => (
+          <div key={option.id}>
+            <SettingsRow
+              label={option.label}
+              control="toggle"
+              checked={preferences.avoidances.includes(option.id)}
+              onChange={(next) => toggleAvoidance(option.id, next)}
+            />
+            {/* A fonte do dado fica visível na própria opção: é o que separa
+                uma preferência sustentada por dado real de um botão bonito. */}
+            <p className="mt-1 px-card text-caption text-content-tertiary">{option.description}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-caption text-content-tertiary">
+        Estas são preferências, não proibições: o app procura alternativas e só usa um trecho evitado quando ele é
+        inevitável ou quando contorná-lo resultaria numa rota desproporcionalmente pior — nesse caso, o trecho aparece
+        destacado na rota. As regras obrigatórias do veículo continuam valendo independentemente do que estiver marcado
+        aqui.
+      </p>
+
+      <SectionLabel className="mb-stack mt-group">Voz das instruções</SectionLabel>
+      <VoiceSelector
+        selectedUri={preferences.voiceUri}
+        onSelect={(voiceUri) => onUpdatePreferences({ voiceUri })}
+      />
+
       <SectionLabel className="mb-stack mt-group">Aparência & unidades</SectionLabel>
       <div className="flex flex-col gap-stack">
         <SettingsRow
@@ -144,6 +186,72 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         <SettingsRow label="Unidades métricas" control="value" value="Kilômetros (km)" />
       </div>
     </Panel>
+  )
+}
+
+/**
+ * Escolha da voz. Lista SOMENTE o que `speechSynthesis.getVoices()` reporta
+ * neste aparelho — nenhum nome de voz é inventado, e o conjunto muda mesmo
+ * entre um iPhone e um Android. Três estados possíveis, todos reais:
+ *
+ * - navegador sem Web Speech API: diz isso e não oferece controle;
+ * - vozes em português carregadas: lista com opção "Automática" no topo;
+ * - nenhuma voz em português: informa que o aparelho não tem, em vez de
+ *   listar vozes de outro idioma que leriam a instrução errado.
+ *
+ * A lista chega de forma assíncrona no Chrome/Safari, por isso o
+ * `voiceschanged`: sem ele, o primeiro render pega o array vazio e o usuário
+ * veria "nenhuma voz" num aparelho que tem várias.
+ */
+function VoiceSelector({
+  selectedUri,
+  onSelect,
+}: {
+  selectedUri: string | null
+  onSelect: (voiceUri: string | null) => void
+}) {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => listPortugueseVoices())
+
+  useEffect(() => {
+    if (!isSpeechSupported) return
+    setVoices(listPortugueseVoices())
+    return onVoicesChanged(() => setVoices(listPortugueseVoices()))
+  }, [])
+
+  if (!isSpeechSupported) {
+    return <SettingsRow label="Voz" control="value" value="Indisponível neste navegador" />
+  }
+
+  if (voices.length === 0) {
+    return (
+      <>
+        <SettingsRow label="Voz" control="value" value="Nenhuma voz em português" />
+        <p className="mt-1 px-card text-caption text-content-tertiary">
+          Este aparelho não tem voz em português instalada. As instruções continuam aparecendo na tela.
+        </p>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <OptionList
+        options={[
+          { key: '', label: 'Automática', hint: 'Deixa o app escolher a melhor voz em português', selected: selectedUri == null },
+          ...voices.map((voice) => ({
+            key: voice.voiceURI,
+            label: voice.name,
+            hint: voice.lang + (voice.localService ? ' · no aparelho' : ' · online'),
+            selected: voice.voiceURI === selectedUri,
+          })),
+        ]}
+        onSelect={(key) => onSelect(key === '' ? null : key)}
+      />
+      <p className="mt-2 text-caption text-content-tertiary">
+        As vozes acima são as que este aparelho tem instaladas. Para ter outras opções, instale vozes em português nas
+        configurações do sistema.
+      </p>
+    </>
   )
 }
 

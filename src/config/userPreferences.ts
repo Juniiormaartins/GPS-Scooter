@@ -8,6 +8,17 @@
  */
 
 export type RoutePreference = 'tranquil' | 'balanced' | 'fast'
+
+/**
+ * Condições que o usuário pode pedir para evitar. São PREFERÊNCIAS, não
+ * regras: penalizam a rota no ranking, nunca a eliminam nem liberam uma via
+ * que as regras obrigatórias consideram inadequada (ver
+ * services/routing/avoidances.ts).
+ *
+ * Só entram nesta lista condições que temos como detectar com dado real. Cada
+ * uma tem sua fonte documentada em AVOIDANCE_OPTIONS abaixo.
+ */
+export type AvoidanceId = 'express-roads' | 'unpaved' | 'steep-climbs' | 'steep-descents'
 export type ThemeMode = 'dark' | 'light'
 
 /** Modelos oferecidos na seleção de veículo. `custom` guarda o que o usuário ajustar manualmente. */
@@ -31,8 +42,75 @@ export const VEHICLE_PRESETS: VehicleModelPreset[] = [
   { id: 'ebike-25', label: 'Bicicleta elétrica', topSpeedKmh: 25, rangeKm: 60 },
 ]
 
+export interface AvoidanceOption {
+  id: AvoidanceId
+  label: string
+  /** Explica na própria UI de onde vem o dado — inclusive quando ele é estimado. */
+  description: string
+}
+
+/**
+ * As quatro opções oferecidas. Deliberadamente curtas: cada uma corresponde a
+ * um dado que o pipeline realmente obtém.
+ *
+ * O que foi avaliado e NÃO virou opção, para não criar botão decorativo:
+ * - "preferir vias urbanas mais tranquilas" já é o que o controle "Estilo de
+ *   rota" (tranquil/balanced/fast) faz. Duplicar viraria dois controles
+ *   disputando o mesmo ranking.
+ * - "evitar trânsito pesado" exigiria dados de tráfego em tempo real, que
+ *   nenhum provedor gratuito do projeto fornece.
+ * - "preferir ciclovias" depende de `bicycle=designated`, cuja cobertura em
+ *   Goiânia é baixa demais para sustentar a promessa; hoje essa tag já conta
+ *   positivamente na classificação, sem virar promessa na interface.
+ */
+export const AVOIDANCE_OPTIONS: AvoidanceOption[] = [
+  {
+    id: 'express-roads',
+    label: 'Evitar vias expressas e rodovias',
+    description: 'Usa as tags reais do OSM (ref BR-, motorroad, maxspeed) já aplicadas na classificação.',
+  },
+  {
+    id: 'unpaved',
+    label: 'Evitar vias não pavimentadas',
+    description: 'Detecta pela tag surface do OSM. Só marca o que está declarado — via sem a tag não é sinalizada.',
+  },
+  {
+    id: 'steep-climbs',
+    label: 'Evitar subidas íngremes',
+    description: 'Inclinação acima de 6%, estimada por modelo de elevação (~90 m). Rampas curtas podem passar.',
+  },
+  {
+    id: 'steep-descents',
+    label: 'Evitar descidas íngremes',
+    description: 'Mesma fonte das subidas, para quem prefere não depender de frenagem longa.',
+  },
+]
+
+/**
+ * Peso da preferência por veículo. A condição detectada é a mesma; o quanto
+ * ela incomoda não é.
+ *
+ * Racional: uma subida de 6% derruba a velocidade de um patinete de roda
+ * pequena muito mais do que a de uma bicicleta elétrica com assistência de
+ * pedal — e piso solto é bem mais crítico para roda pequena do que para aro
+ * de bicicleta. Os números são pesos relativos de produto, não medições.
+ */
+export const AVOIDANCE_WEIGHT_BY_VEHICLE: Record<VehicleModelId, Record<AvoidanceId, number>> = {
+  'scooter-32': { 'express-roads': 1, unpaved: 1, 'steep-climbs': 1, 'steep-descents': 1 },
+  'scooter-25': { 'express-roads': 1, unpaved: 1.3, 'steep-climbs': 1.2, 'steep-descents': 1.2 },
+  'ebike-25': { 'express-roads': 1, unpaved: 0.7, 'steep-climbs': 0.6, 'steep-descents': 0.8 },
+  custom: { 'express-roads': 1, unpaved: 1, 'steep-climbs': 1, 'steep-descents': 1 },
+}
+
 export interface UserPreferences {
   routePreference: RoutePreference
+  /** Condições que o usuário pediu para evitar quando houver alternativa razoável. */
+  avoidances: AvoidanceId[]
+  /**
+   * Voz escolhida para as instruções, pelo `voiceURI` do dispositivo. null =
+   * deixar o app escolher. Nunca listamos vozes que o aparelho não tenha.
+   */
+  voiceUri: string | null
   theme: ThemeMode
   vehicleModelId: VehicleModelId
   /** Velocidade de referência efetiva (km/h) — usada no cálculo de ETA. */
@@ -45,6 +123,8 @@ const STORAGE_KEY = 'gps-scooter:preferences'
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   routePreference: 'balanced',
+  avoidances: ['express-roads'],
+  voiceUri: null,
   theme: 'dark',
   vehicleModelId: 'scooter-32',
   referenceSpeedKmh: 32,

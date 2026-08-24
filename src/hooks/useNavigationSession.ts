@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGeolocation } from '@/hooks/useGeolocation'
 import { computeNavigationProgress, type NavigationProgress } from '@/services/navigation/progress'
+import { INITIAL_SPEED_STATE, speedKmhForDisplay, trackSpeed } from '@/services/navigation/speedTracker'
 import { getUserPreferences } from '@/config/userPreferences'
 import { computeBearingDegrees, haversineDistanceMeters } from '@/utils/geo'
 import type { CandidateRoute } from '@/types/routing'
@@ -40,6 +41,12 @@ export function useNavigationSession(route: CandidateRoute | null, active: boole
    */
   const [headingDeg, setHeadingDeg] = useState<number | null>(null)
   const lastPositionRef = useRef<{ lng: number; lat: number } | null>(null)
+  /**
+   * Velocidade tratada (ver speedTracker.ts). Guardada em ref porque o estado
+   * do filtro é acumulativo entre amostras; só o número exibido vira state.
+   */
+  const speedStateRef = useRef(INITIAL_SPEED_STATE)
+  const [currentSpeedKmh, setCurrentSpeedKmh] = useState<number | null>(null)
 
   useEffect(() => {
     if (!active) return
@@ -54,10 +61,15 @@ export function useNavigationSession(route: CandidateRoute | null, active: boole
       setProgress(null)
       setHeadingDeg(null)
       lastPositionRef.current = null
+      speedStateRef.current = INITIAL_SPEED_STATE
+      setCurrentSpeedKmh(null)
       return
     }
 
     if (!route || !sample) return
+
+    speedStateRef.current = trackSpeed(speedStateRef.current, sample)
+    setCurrentSpeedKmh(speedKmhForDisplay(speedStateRef.current))
 
     if (sample.headingDeg != null && !Number.isNaN(sample.headingDeg)) {
       setHeadingDeg(sample.headingDeg)
@@ -91,6 +103,8 @@ export function useNavigationSession(route: CandidateRoute | null, active: boole
   return {
     progress,
     gpsSample: sample,
+    /** Velocidade real de deslocamento, já filtrada — null quando não há leitura confiável. */
+    currentSpeedKmh,
     headingDeg,
     isLocating,
     locationError: error,
