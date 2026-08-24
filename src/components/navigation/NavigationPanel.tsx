@@ -1,8 +1,6 @@
+import type { ReactNode } from 'react'
 import { LOW_ACCURACY_THRESHOLD_METERS, type GeolocationSample } from '@/hooks/useGeolocation'
 import type { NavigationProgress } from '@/services/navigation/progress'
-import { estimateRemainingBatteryPercent } from '@/services/vehicle/batteryEstimate'
-import { MOCK_VEHICLE_STATUS } from '@/config/vehicleStatusMock'
-import { VEHICLE_PROFILE } from '@/config/vehicle'
 import type { ManeuverType, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
 
@@ -13,8 +11,15 @@ interface NavigationPanelProps {
   locationError: string | null
   routeDeviated: boolean
   isRecalculating: boolean
-  /** Percentual REAL lido via Bluetooth, quando conectado e o dispositivo expõe a telemetria — null caso contrário. */
+  /**
+   * Percentual REAL lido via Bluetooth, quando conectado e o dispositivo expõe
+   * a telemetria — null caso contrário. Hoje nada é exibido a partir disso: a
+   * pílula de bateria saiu da tela por não ter leitura real na maioria dos
+   * casos. A prop permanece para quando a integração com o veículo existir.
+   */
   vehicleBattery: number | null
+  /** Botão de recentralizar, injetado por App.tsx para ficar na faixa inferior sem sobrepor os painéis. */
+  recenterControl?: ReactNode
   onStop: () => void
 }
 
@@ -34,6 +39,7 @@ export function NavigationPanel({
   routeDeviated,
   isRecalculating,
   vehicleBattery,
+  recenterControl,
   onStop,
 }: NavigationPanelProps) {
   const { route, etaMinutes } = scoredRoute
@@ -42,14 +48,6 @@ export function NavigationPanel({
   const remainingDurationMinutes = progress?.remainingDurationMinutes ?? etaMinutes
   const currentSpeedKmh = gpsSample?.speedMps != null ? Math.round(gpsSample.speedMps * 3.6) : null
   const lowAccuracy = gpsSample ? gpsSample.accuracyMeters > LOW_ACCURACY_THRESHOLD_METERS : false
-
-  // Leitura real do veículo tem prioridade; a estimativa por fórmula só entra
-  // quando não há telemetria, e é rotulada como estimativa (prefixo ≈).
-  const batteryEstimate = estimateRemainingBatteryPercent(
-    MOCK_VEHICLE_STATUS.batteryPercent,
-    progress?.distanceTraveledMeters ?? 0,
-  )
-  const batteryValue = vehicleBattery != null ? `${vehicleBattery}%` : `≈${batteryEstimate.percent}%`
 
   return (
     <>
@@ -99,18 +97,20 @@ export function NavigationPanel({
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        {/*
+          Faixa inferior: velocidade real do GPS à esquerda e o botão de
+          recentralizar à direita — este é o único lugar da navegação onde ele
+          aparece, alinhado à mesma linha de base, sem sobrepor nada.
+
+          A pílula de BATERIA foi removida: sem veículo conectado por Bluetooth,
+          o valor vinha de uma estimativa sobre um percentual inicial fixo
+          (config/vehicleStatusMock.ts) — ou seja, um número sem leitura real
+          por trás. Quando houver telemetria de verdade, ela volta como
+          `vehicleBattery` (a prop e o encanamento continuam existindo).
+        */}
         <div className="flex items-end justify-between">
           <StatPill label="Velocidade" value={currentSpeedKmh != null ? `${currentSpeedKmh} km/h` : '—'} />
-          <StatPill
-            label="Bateria"
-            value={batteryValue}
-            tone={vehicleBattery != null ? 'go' : 'default'}
-            title={
-              vehicleBattery != null
-                ? 'Leitura real do veículo conectado via Bluetooth'
-                : `Estimativa a partir da distância percorrida — sem telemetria real do veículo`
-            }
-          />
+          {recenterControl}
         </div>
 
         <div className="pointer-events-auto grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-surface-card/[.86] px-3 py-card shadow-float backdrop-blur-xl">
@@ -123,7 +123,7 @@ export function NavigationPanel({
   )
 }
 
-/** Leitura flutuante pequena sobre o mapa (velocidade, bateria). */
+/** Leitura flutuante pequena sobre o mapa (hoje só a velocidade real do GPS). */
 function StatPill({
   label,
   value,

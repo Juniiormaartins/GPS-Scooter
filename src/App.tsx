@@ -360,14 +360,18 @@ export default function App() {
           routeDeviated={navigationSession.routeDeviated}
           isRecalculating={isRecalculating}
           vehicleBattery={vehicleBluetooth.status === 'connected' ? vehicleBluetooth.batteryPercent : null}
+          recenterControl={
+            <MapControls
+              onCenterOnUser={handleCenterOnUser}
+              isLocating={navigationSession.isLocating}
+              isFollowing={isFollowingUser}
+            />
+          }
           onStop={() => {
             setIsNavigating(false)
             setIsFollowingUser(true)
           }}
         />
-        <div className="pointer-events-none absolute bottom-40 right-3">
-          <MapControls onCenterOnUser={handleCenterOnUser} isLocating={navigationSession.isLocating} isFollowing={isFollowingUser} />
-        </div>
       </div>
     )
   }
@@ -386,7 +390,7 @@ export default function App() {
         destinationPoint={destinationPoint}
         userPoint={userPosition}
         routeGeometry={activeScoredRoute?.route.geometry ?? null}
-        routeOptions={routeOptions.length > 1 ? routeOptions : []}
+        routeOptions={routeOptions}
         centerRequestId={centerToken}
       />
 
@@ -404,9 +408,18 @@ export default function App() {
         />
       </div>
 
-      <div className="pointer-events-none absolute bottom-36 right-3">
-        <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
-      </div>
+      {/*
+        Botão de recentralizar só na tela de exploração. Com a ficha do local
+        ou o bottom sheet de rotas abertos ele ficaria por cima deles no
+        celular — e nesses momentos o usuário está escolhendo destino/rota,
+        não explorando o mapa. Durante a navegação ele existe, mas dentro do
+        NavigationPanel (faixa inferior), nunca solto sobre a tela.
+      */}
+      {!selectedPoi && !activeScoredRoute && (
+        <div className="pointer-events-none absolute bottom-[184px] right-5">
+          <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
+        </div>
+      )}
 
       {selectedPoi && !activeScoredRoute && (
         <PoiCard

@@ -52,8 +52,10 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
   if (!activeRoute) return null
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center justify-between">
+    // Altura total do sheet: só a LISTA rola; o CTA fica ancorado embaixo,
+    // sempre visível, sem depender de o usuário rolar até o fim.
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between">
         <SectionLabel>{routes.length > 1 ? 'Opções de rota' : 'Rota'}</SectionLabel>
         <button
           type="button"
@@ -67,7 +69,7 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
         </button>
       </div>
 
-      <div className="mt-stack flex flex-col gap-stack">
+      <div className="-mx-1 mt-stack flex min-h-0 flex-1 flex-col gap-stack overflow-y-auto px-1 pb-2">
         {routes.map((entry) => (
           <RouteOptionCard
             key={entry.route.id}
@@ -82,7 +84,7 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
         variant="go"
         size="lg"
         onClick={onStartNavigation}
-        className="mt-gutter"
+        className="mt-stack shrink-0"
         icon={
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
             <path d="M3 11l18-8-8 18-2-8-8-2z" />

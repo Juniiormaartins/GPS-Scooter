@@ -39,6 +39,7 @@ const ROUTE_CASING_LAYER_ID = 'gps-scooter-route-casing'
 const ROUTE_LAYER_ID = 'gps-scooter-route-line'
 const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
 const ROUTE_OPTIONS_LAYER_ID = 'gps-scooter-route-options-line'
+const ROUTE_OPTIONS_DASHED_LAYER_ID = 'gps-scooter-route-options-line-dashed'
 
 // Zoom "de rua" usado durante a navegação ativa — próximo o bastante para ler
 // nomes de rua e a próxima manobra, mas sem escapar do enquadramento útil.
@@ -122,28 +123,44 @@ export function MapView({
         paint: { 'line-color': MAP_COLORS.routeLine, 'line-width': 5, 'line-opacity': 0.95 },
       })
 
-      // Múltiplas candidatas simultâneas (tela de seleção) — uma FeatureCollection com uma
-      // linha por rota, cor por `eligibility` e destaque (largura/opacidade) por `active`.
+      // Múltiplas candidatas simultâneas (tela de seleção). Precisa de DUAS camadas
+      // sobre a mesma fonte porque `line-dasharray` NÃO aceita expressão de dados no
+      // MapLibre — tentar variar o tracejado por feature faz a camada inteira falhar
+      // ao ser criada e NENHUMA rota é desenhada (bug real, confirmado no console).
+      // Então o traço é decidido por filtro: adequada = linha sólida, com ressalva /
+      // não recomendada = tracejada, como especifica a cartografia do handoff.
       map.addSource(ROUTE_OPTIONS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+
+      const optionsPaint = (): maplibregl.LineLayerSpecification['paint'] => ({
+        'line-color': [
+          'match',
+          ['get', 'eligibility'],
+          'allowed',
+          MAP_COLORS.routeByEligibility.allowed,
+          'discouraged',
+          MAP_COLORS.routeByEligibility.discouraged,
+          MAP_COLORS.routeByEligibility['not-allowed'],
+        ],
+        // Largura e opacidade SÃO data-driven — a rota ativa fica mais grossa e opaca.
+        'line-width': ['case', ['get', 'active'], 7, 4],
+        'line-opacity': ['case', ['get', 'active'], 1, 0.55],
+      })
+
       map.addLayer({
         id: ROUTE_OPTIONS_LAYER_ID,
         type: 'line',
         source: ROUTE_OPTIONS_SOURCE_ID,
+        filter: ['==', ['get', 'eligibility'], 'allowed'],
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'eligibility'],
-            'allowed',
-            MAP_COLORS.routeByEligibility.allowed,
-            'discouraged',
-            MAP_COLORS.routeByEligibility.discouraged,
-            MAP_COLORS.routeByEligibility['not-allowed'],
-          ],
-          'line-width': ['case', ['get', 'active'], 5, 3],
-          'line-opacity': ['case', ['get', 'active'], 1, 0.65],
-          'line-dasharray': ['case', ['get', 'active'], ['literal', [1, 0]], ['literal', [2, 1.6]]],
-        },
+        paint: optionsPaint(),
+      })
+      map.addLayer({
+        id: ROUTE_OPTIONS_DASHED_LAYER_ID,
+        type: 'line',
+        source: ROUTE_OPTIONS_SOURCE_ID,
+        filter: ['!=', ['get', 'eligibility'], 'allowed'],
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { ...optionsPaint(), 'line-dasharray': [2, 1.6] },
       })
       onMapReady?.(map)
     })
@@ -162,10 +179,16 @@ export function MapView({
     const map = mapRef.current
     if (!map || !map.getLayer(ROUTE_LAYER_ID)) return
     const showingOptions = routeOptions.length > 0
-    const single = showingOptions ? 'none' : 'visible'
-    map.setLayoutProperty(ROUTE_LAYER_ID, 'visibility', single)
-    map.setLayoutProperty(ROUTE_CASING_LAYER_ID, 'visibility', single)
-    map.setLayoutProperty(ROUTE_OPTIONS_LAYER_ID, 'visibility', showingOptions ? 'visible' : 'none')
+    const setVisibility = (layerId: string, visible: boolean) => {
+      // Uma camada ausente (falha ao criar, estilo recarregado) não pode derrubar
+      // o efeito e levar junto a visibilidade das outras.
+      if (!map.getLayer(layerId)) return
+      map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+    }
+    setVisibility(ROUTE_LAYER_ID, !showingOptions)
+    setVisibility(ROUTE_CASING_LAYER_ID, !showingOptions)
+    setVisibility(ROUTE_OPTIONS_LAYER_ID, showingOptions)
+    setVisibility(ROUTE_OPTIONS_DASHED_LAYER_ID, showingOptions)
   }, [routeOptions.length])
 
   useEffect(() => {
