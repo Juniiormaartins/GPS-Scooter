@@ -3,7 +3,7 @@ import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
-import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
+import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
 import {
@@ -136,7 +136,25 @@ const ROUTE_SEGMENTS_SOURCE_ID = 'gps-scooter-route-segments'
 const ROUTE_GLOW_OUTER_LAYER_ID = 'gps-scooter-route-glow-outer'
 const ROUTE_GLOW_INNER_LAYER_ID = 'gps-scooter-route-glow-inner'
 const ROUTE_CASING_LAYER_ID = 'gps-scooter-route-casing'
+/**
+ * Contorno interno da fita, POR TRECHO.
+ *
+ * Fica entre o vinco externo (casing) e o miolo. É esta camada que dá a
+ * impressão de espessura da referência. Vem da fonte SEGMENTADA, e não da
+ * contínua, justamente para escurecer na cor de cada severidade — um trecho
+ * vermelho com contorno azul-marinho pareceria dois elementos sobrepostos.
+ */
+const ROUTE_RIM_LAYER_ID = 'gps-scooter-route-rim'
 const ROUTE_LAYER_ID = 'gps-scooter-route-line'
+/**
+ * Brilho central: linha estreita e translúcida sobre o eixo do miolo.
+ *
+ * É o truque mais barato para sugerir volume sem gradiente de verdade — o
+ * olho lê centro claro + bordas escuras como uma superfície curva. Estreita de
+ * propósito (~30% do miolo): mais larga que isso e a fita fica lavada em vez
+ * de brilhante.
+ */
+const ROUTE_SHEEN_LAYER_ID = 'gps-scooter-route-sheen'
 const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
 const ROUTE_OPTIONS_LAYER_ID = 'gps-scooter-route-options-line'
 const ROUTE_OPTIONS_DASHED_LAYER_ID = 'gps-scooter-route-options-line-dashed'
@@ -265,13 +283,24 @@ type RouteLineWeight = 'navigating' | 'confirmed' | 'preview'
 
 const ROUTE_WIDTH_BY_WEIGHT: Record<RouteLineWeight, [number, number, number]> = {
   // [z14, z17, z20]
-  navigating: [6, 11, 18],
-  confirmed: [5, 8, 13],
-  preview: [4, 6.5, 10],
+  //
+  // Subidas em relação à versão anterior ([6,11,18] / [5,8,13] / [4,6.5,10]).
+  // O pedido era que a rota deixasse de parecer "encaixada" na largura da rua
+  // e passasse a ser claramente mais larga que ela, como na referência. No
+  // zoom 17 da navegação uma via local do MapTiler tem ~6px: com 15px o miolo
+  // sozinho já é 2,5x a rua, e somando contorno e vinco a fita ocupa ~24px —
+  // a proporção da imagem de referência.
+  navigating: [8, 15, 24],
+  confirmed: [7, 12, 19],
+  preview: [5, 8.5, 13],
 }
 
-/** Contorno: sempre mais largo que a linha, é ele que separa a rota do asfalto embaixo. */
-const ROUTE_CASING_EXTRA_PX = 4.5
+/** Vinco externo — separa a fita do mapa. */
+const ROUTE_CASING_EXTRA_PX = 9
+/** Contorno de profundidade — 2,5px de cada lado do miolo. */
+const ROUTE_RIM_EXTRA_PX = 5
+/** Brilho central, como fração do miolo. */
+const ROUTE_SHEEN_FACTOR = 0.3
 
 const ZERO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 }
 
@@ -346,10 +375,14 @@ function routeGlowWidth(weight: RouteLineWeight, factor: number): maplibregl.Exp
   return ['interpolate', ['linear'], ['zoom'], 14, z14 * factor, 17, z17 * factor, 20, z20 * factor]
 }
 
-function routeWidthExpression(weight: RouteLineWeight, casing = false): maplibregl.ExpressionSpecification {
+function routeWidthExpression(weight: RouteLineWeight, extra = 0): maplibregl.ExpressionSpecification {
   const [z14, z17, z20] = ROUTE_WIDTH_BY_WEIGHT[weight]
-  const extra = casing ? ROUTE_CASING_EXTRA_PX : 0
   return ['interpolate', ['linear'], ['zoom'], 14, z14 + extra, 17, z17 + extra, 20, z20 + extra]
+}
+
+/** Paleta da fita no tema atual. */
+function ribbon(theme: 'dark' | 'light') {
+  return theme === 'light' ? ROUTE_RIBBON.light : ROUTE_RIBBON.dark
 }
 
 /**
@@ -373,7 +406,27 @@ function severityColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecificat
     palette.routeByEligibility['not-allowed'],
     'attention',
     palette.routeByEligibility.discouraged,
-    palette.routeSelected,
+    // Trecho adequado: azul da FITA, não `routeSelected`. Mesma família, mais
+    // saturado — ver ROUTE_RIBBON em config/theme.ts.
+    ribbon(theme).core,
+  ]
+}
+
+/**
+ * Cor do contorno de profundidade, por severidade.
+ *
+ * Espelha `severityColor`: cada trecho recebe a versão escurecida da SUA cor,
+ * então o acabamento novo se soma à sinalização em vez de disputar com ela.
+ */
+function severityRimColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecification {
+  return [
+    'match',
+    ['get', 'severity'],
+    'critical',
+    SEVERITY_RIM.critical,
+    'attention',
+    SEVERITY_RIM.attention,
+    ribbon(theme).rim,
   ]
 }
 
@@ -435,6 +488,8 @@ export function MapView({
   const userMarkerRef = useRef<Marker | null>(null)
   /** Zoom de navegação em vigor — entrada da histerese entre faixas de velocidade. */
   const navigationZoomRef = useRef<number | null>(null)
+  /** Há candidatas na tela? Decide visibilidade das camadas e intensidade do halo. */
+  const showingOptions = routeOptions.length > 0
 
   /**
    * Descobre UMA vez se os sprites de alta fidelidade foram entregues.
@@ -528,10 +583,10 @@ export function MapView({
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': MAP_COLORS.routeSelected,
-          'line-width': routeGlowWidth('confirmed', 3.1),
-          'line-opacity': 0.16,
-          'line-blur': 8,
+          'line-color': ribbon(themeRef.current).glow,
+          'line-width': routeGlowWidth('confirmed', 2.8),
+          'line-opacity': 0.18,
+          'line-blur': 10,
         },
       })
       map.addLayer({
@@ -540,10 +595,10 @@ export function MapView({
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': MAP_COLORS.routeSelected,
-          'line-width': routeGlowWidth('confirmed', 1.9),
-          'line-opacity': 0.26,
-          'line-blur': 4,
+          'line-color': ribbon(themeRef.current).glow,
+          'line-width': routeGlowWidth('confirmed', 1.75),
+          'line-opacity': 0.28,
+          'line-blur': 5,
         },
       })
 
@@ -553,9 +608,21 @@ export function MapView({
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': routePalette(themeRef.current).routeCasing,
-          'line-width': routeWidthExpression('confirmed', true),
-          'line-opacity': 0.9,
+          'line-color': ribbon(themeRef.current).separator,
+          'line-width': routeWidthExpression('confirmed', ROUTE_CASING_EXTRA_PX),
+          'line-opacity': 0.85,
+        },
+      })
+      // Contorno de profundidade, POR TRECHO. Entra entre o vinco e o miolo.
+      map.addLayer({
+        id: ROUTE_RIM_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SEGMENTS_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': severityRimColor(themeRef.current),
+          'line-width': routeWidthExpression('confirmed', ROUTE_RIM_EXTRA_PX),
+          'line-opacity': 1,
         },
       })
       map.addLayer({
@@ -566,7 +633,23 @@ export function MapView({
         paint: {
           'line-color': severityColor(themeRef.current),
           'line-width': routeWidthExpression('confirmed'),
-          'line-opacity': 0.95,
+          // Opaco de verdade: a translucidez antiga deixava o asfalto vazar
+          // por dentro do traçado, que é exatamente o efeito de "rota
+          // integrada à rua" que o refinamento tinha que eliminar.
+          'line-opacity': 1,
+        },
+      })
+      // Brilho central.
+      map.addLayer({
+        id: ROUTE_SHEEN_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SEGMENTS_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ribbon(themeRef.current).sheen,
+          'line-width': routeGlowWidth('confirmed', ROUTE_SHEEN_FACTOR),
+          'line-opacity': 0.34,
+          'line-blur': 1.5,
         },
       })
 
@@ -742,13 +825,15 @@ export function MapView({
 
       // As camadas de rota do app também trocam de paleta: os tons do tema
       // escuro (ciano/verde vivos) perdem contraste sobre um mapa claro.
-      const palette = routePalette(theme)
       const repaint = (layerId: string, color: unknown) => {
         if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-color', color)
       }
-      repaint(ROUTE_GLOW_OUTER_LAYER_ID, palette.routeSelected)
-    repaint(ROUTE_GLOW_INNER_LAYER_ID, palette.routeSelected)
-    repaint(ROUTE_CASING_LAYER_ID, palette.routeCasing)
+      const skin = ribbon(theme)
+      repaint(ROUTE_GLOW_OUTER_LAYER_ID, skin.glow)
+      repaint(ROUTE_GLOW_INNER_LAYER_ID, skin.glow)
+      repaint(ROUTE_CASING_LAYER_ID, skin.separator)
+      repaint(ROUTE_RIM_LAYER_ID, severityRimColor(theme))
+      repaint(ROUTE_SHEEN_LAYER_ID, skin.sheen)
       repaint(ROUTE_LAYER_ID, severityColor(theme))
       repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
       repaint(ROUTE_OPTIONS_DASHED_LAYER_ID, routeOptionsColor(theme))
@@ -799,23 +884,43 @@ export function MapView({
 
     const weight: RouteLineWeight = isNavigating ? 'navigating' : isRoutePreview ? 'preview' : 'confirmed'
 
-    // O halo só aparece na NAVEGAÇÃO. Fora dela existem alternativas na tela e
-    // um brilho em volta de cada uma viraria borrão; ali o traçado precisa de
-    // borda nítida para o toque acertar a rota certa.
+    const skin = ribbon(themeRef.current)
+
+    /**
+     * Intensidade do halo por estado.
+     *
+     * O halo era ZERO fora da navegação, para as candidatas não virarem um
+     * borrão único na tela de seleção. Continua valendo — mas o caso do meio
+     * (rota já confirmada, nenhuma candidata na tela) não tinha por que ficar
+     * sem brilho nenhum: ali existe UM traçado, e o halo é justamente o que
+     * separa a fita do mapa. Então o brilho é cheio na navegação, pela metade
+     * na rota confirmada sozinha, e desligado enquanto houver alternativas ou
+     * preview.
+     */
+    const glowScale = isNavigating ? 1 : showingOptions || isRoutePreview ? 0 : 0.5
+
     for (const [id, factor, opacity] of [
-      [ROUTE_GLOW_OUTER_LAYER_ID, 3.1, 0.16],
-      [ROUTE_GLOW_INNER_LAYER_ID, 1.9, 0.26],
+      [ROUTE_GLOW_OUTER_LAYER_ID, 2.8, 0.18],
+      [ROUTE_GLOW_INNER_LAYER_ID, 1.75, 0.28],
     ] as const) {
       if (!map.getLayer(id)) continue
       map.setPaintProperty(id, 'line-width', routeGlowWidth(weight, factor))
-      map.setPaintProperty(id, 'line-opacity', isNavigating ? opacity : 0)
-      map.setPaintProperty(id, 'line-color', routePalette(themeRef.current).routeSelected)
+      map.setPaintProperty(id, 'line-opacity', opacity * glowScale)
+      map.setPaintProperty(id, 'line-color', skin.glow)
     }
 
     map.setPaintProperty(ROUTE_LAYER_ID, 'line-width', routeWidthExpression(weight))
-    map.setPaintProperty(ROUTE_LAYER_ID, 'line-opacity', weight === 'preview' ? 0.75 : 0.95)
+    map.setPaintProperty(ROUTE_LAYER_ID, 'line-opacity', 1)
+    if (map.getLayer(ROUTE_RIM_LAYER_ID)) {
+      map.setPaintProperty(ROUTE_RIM_LAYER_ID, 'line-width', routeWidthExpression(weight, ROUTE_RIM_EXTRA_PX))
+    }
+    if (map.getLayer(ROUTE_SHEEN_LAYER_ID)) {
+      map.setPaintProperty(ROUTE_SHEEN_LAYER_ID, 'line-width', routeGlowWidth(weight, ROUTE_SHEEN_FACTOR))
+      // No preview a fita é mais fina; o brilho central ali só suja o traço.
+      map.setPaintProperty(ROUTE_SHEEN_LAYER_ID, 'line-opacity', weight === 'preview' ? 0.2 : 0.34)
+    }
     if (map.getLayer(ROUTE_CASING_LAYER_ID)) {
-      map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-width', routeWidthExpression(weight, true))
+      map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-width', routeWidthExpression(weight, ROUTE_CASING_EXTRA_PX))
     }
     // O destaque dos trechos evitados acompanha a rota: fixo, ele sumiria
     // dentro da linha grossa da navegação.
@@ -832,14 +937,13 @@ export function MapView({
         weight === 'navigating' ? 12 : 8,
       ] as maplibregl.ExpressionSpecification)
     }
-  }, [isRoutePreview, isNavigating])
+  }, [isRoutePreview, isNavigating, showingOptions])
 
   // Alterna visibilidade entre a camada de rota única (navegação) e a de
   // múltiplas candidatas (seleção) — nunca as duas ao mesmo tempo.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.getLayer(ROUTE_LAYER_ID)) return
-    const showingOptions = routeOptions.length > 0
     const setVisibility = (layerId: string, visible: boolean) => {
       // Uma camada ausente (falha ao criar, estilo recarregado) não pode derrubar
       // o efeito e levar junto a visibilidade das outras.
@@ -851,10 +955,12 @@ export function MapView({
     // baixo e sem incluir a ativa (ver routeOptions em App.tsx).
     setVisibility(ROUTE_LAYER_ID, true)
     setVisibility(ROUTE_CASING_LAYER_ID, true)
+    setVisibility(ROUTE_RIM_LAYER_ID, true)
+    setVisibility(ROUTE_SHEEN_LAYER_ID, true)
     setVisibility(ROUTE_OPTIONS_LAYER_ID, showingOptions)
     setVisibility(ROUTE_OPTIONS_DASHED_LAYER_ID, showingOptions)
     setVisibility(ROUTE_OPTIONS_HIT_LAYER_ID, showingOptions)
-  }, [routeOptions.length])
+  }, [showingOptions])
 
   useEffect(() => {
     const map = mapRef.current

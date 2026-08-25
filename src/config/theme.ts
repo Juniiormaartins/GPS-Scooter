@@ -31,6 +31,72 @@ export const ACCENT = {
  * claros criam hierarquia), e as principais ganham um cinza levemente mais
  * quente para se destacarem das secundárias.
  */
+/**
+ * FITA DA ROTA — a composição em camadas do traçado principal.
+ *
+ * A referência não é "uma linha azul". Olhando de perto, o traçado dela tem
+ * quatro coisas empilhadas, e é o conjunto que dá o acabamento:
+ *
+ *   1. um halo difuso em volta, que descola a rota do mapa;
+ *   2. um CONTORNO azul-marinho escuro, que é o que dá profundidade — não é
+ *      branco nem a cor do fundo, é azul escuro, e por isso a fita parece ter
+ *      espessura em vez de parecer adesivada;
+ *   3. um miolo azul vivo e saturado, bem mais forte que o ciano claro que
+ *      usávamos;
+ *   4. um brilho central mais claro, estreito, que sugere a luz batendo em
+ *      cima da fita.
+ *
+ * POR QUE TOKENS PRÓPRIOS E NÃO `routeSelected`: `routeSelected` é o azul da
+ * MARCA (`ACCENT.primary`), e ele governa botão ativo, aba, marcador e seleção
+ * na interface inteira. Saturar aquele token para agradar ao traçado mudaria o
+ * app todo. A fita passa a ter paleta própria, derivada do mesmo azul mas
+ * livre para ser mais viva — o parentesco continua óbvio no olho.
+ *
+ * O MapLibre não faz pós-processamento: não há bloom nem degradê real de
+ * volume. `line-gradient` existiria, mas exige `lineMetrics` e é EXCLUSIVO com
+ * cor orientada a dados — usá-lo apagaria as cores por trecho (âmbar e
+ * vermelho), que são informação e não podem ser sacrificadas por estética.
+ * Daí a escolha por empilhamento de camadas, que convive com o `match` de
+ * severidade.
+ */
+export const ROUTE_RIBBON = {
+  dark: {
+    /** Halo. Mais claro que o miolo, senão o brilho lê como borrão sujo. */
+    glow: '#3AA0FF',
+    /** Contorno de profundidade. Azul-marinho: escuro o bastante para virar borda, azul o bastante para não virar sombra preta. */
+    rim: '#0B3F97',
+    /** Miolo. Azul vivo, bem mais saturado que o ciano #35B7F7 anterior. */
+    core: '#2A8DFF',
+    /** Brilho central. */
+    sheen: '#AEDDFF',
+    /** Vinco externo que separa a fita do mapa. No escuro é quase o fundo. */
+    separator: '#050A14',
+  },
+  light: {
+    glow: '#2E93FF',
+    /** No tema claro o contorno precisa ser MAIS escuro: ele compete com ruas brancas, não com fundo escuro. */
+    rim: '#083A8F',
+    core: '#0F6FE0',
+    sheen: '#8CC8FF',
+    /** No claro o vinco é branco — é o que descola a fita do fundo cinza-azulado. */
+    separator: '#FFFFFF',
+  },
+} as const
+
+/**
+ * Contornos dos trechos NÃO recomendados.
+ *
+ * O acabamento novo vale para a fita inteira, não só para o azul: um trecho
+ * âmbar ou vermelho com contorno azul-marinho ficaria descolado do próprio
+ * miolo. Cada severidade ganha a versão escurecida da sua cor, então o trecho
+ * continua sendo lido como âmbar/vermelho — a regra de sinalização não muda,
+ * só o acabamento acompanha.
+ */
+export const SEVERITY_RIM = {
+  attention: '#7A4B05',
+  critical: '#7C1414',
+} as const
+
 export const MAP_COLORS_LIGHT = {
   /**
    * MEDIDO, não escolhido no olho. A versão anterior usava fundo #EEF1F7 com
