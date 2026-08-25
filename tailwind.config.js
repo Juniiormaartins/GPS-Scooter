@@ -34,6 +34,8 @@ export default {
           raised: 'var(--surface-raised)', // chips, card selecionado, botão secundário
           tile: 'var(--surface-tile)', // tile de ícone
           'tile-accent': 'var(--surface-tile-accent)', // tile de ícone com acento
+          selected: 'var(--surface-selected)', // fundo do card/opção selecionada
+          handle: 'var(--handle)', // pega da bottom sheet
         },
         brand: {
           300: 'var(--brand-300)',

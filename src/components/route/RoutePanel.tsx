@@ -126,7 +126,7 @@ function RouteOptionCard({
       type="button"
       onClick={onSelect}
       className={`flex w-full items-center gap-3.5 rounded-xl px-3.5 py-3 text-left transition-all duration-base ease-standard active:scale-[.97] ${
-        isSelected ? 'border-2 border-brand-500 bg-[#F7FBFE]' : 'border border-hairline/[.08] bg-surface-card'
+        isSelected ? 'border-2 border-brand-500 bg-surface-selected' : 'border border-hairline/[.08] bg-surface-card'
       }`}
     >
       <div className="min-w-0 flex-1">

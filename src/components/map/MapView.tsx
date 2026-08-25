@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
+import { hasRiderSprites, probeRiderSprites, riderSpriteUrl } from '@/components/map/riderMarker'
 import type { Eligibility } from '@/types/routing'
 
 export interface RouteOptionGeometry {
@@ -410,6 +411,24 @@ export function MapView({
   const userMarkerRef = useRef<Marker | null>(null)
   /** Zoom de navegação em vigor — entrada da histerese entre faixas de velocidade. */
   const navigationZoomRef = useRef<number | null>(null)
+
+  /**
+   * Descobre UMA vez se os sprites de alta fidelidade foram entregues.
+   *
+   * Sem eles o marcador continua sendo o SVG — o app funciona igual, e
+   * adicionar os PNGs depois não exige tocar em código. `spriteTick` só serve
+   * para forçar um redesenho do marcador quando a resposta chega.
+   */
+  const [spriteTick, setSpriteTick] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    probeRiderSprites('scooter').then((found: boolean) => {
+      if (found && !cancelled) setSpriteTick((value) => value + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const routeGeometryRef = useRef(routeGeometry)
   routeGeometryRef.current = routeGeometry
   const onUserInteractionRef = useRef(onUserInteraction)
@@ -943,7 +962,8 @@ export function MapView({
         essential: true,
       })
     }
-  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh, spriteTick])
 
   useEffect(() => {
     const map = mapRef.current
@@ -1078,14 +1098,18 @@ function updateUserMarker(
     return
   }
 
-  const variant = asVehicle ? 'vehicle' : 'dot'
+  // O sprite é o caminho de maior fidelidade: o marcador passa a SER a imagem
+  // de referência em vez de uma aproximação vetorial. Só entra quando os
+  // arquivos existem de fato (ver riderMarker.ts).
+  const useSprite = asVehicle && headingDeg != null && hasRiderSprites('scooter')
+  const variant = useSprite ? 'sprite' : asVehicle ? 'vehicle' : 'dot'
   if (ref.current && ref.current.getElement().dataset.variant !== variant) {
     ref.current.remove()
     ref.current = null
   }
 
   if (!ref.current) {
-    const el = asVehicle ? createUserVehicleElement() : createUserDotElement()
+    const el = useSprite ? createUserSpriteElement() : asVehicle ? createUserVehicleElement() : createUserDotElement()
     el.dataset.variant = variant
     ref.current = new maplibregl.Marker({
       element: el,
@@ -1097,12 +1121,18 @@ function updateUserMarker(
 
   ref.current.setLngLat([point.lng, point.lat]).addTo(map)
 
-  if (asVehicle) {
+  if (useSprite) {
+    // O sprite JÁ é a vista daquele ângulo, então ele não gira: trocar de
+    // imagem é o que muda a direção. Girar a imagem produziria a mesma vista
+    // tombando, não outro ângulo.
+    const image = ref.current.getElement().querySelector('img')
+    if (image) image.setAttribute('src', riderSpriteUrl('scooter', headingDeg ?? 0))
+  } else if (asVehicle) {
     setVehicleHeadingVisibility(ref.current.getElement(), headingDeg != null)
   }
   // O disco de fallback é simétrico: rotacioná-lo não muda nada visualmente,
   // mas zerar evita herdar um ângulo do marcador anterior.
-  ref.current.setRotation(asVehicle ? (headingDeg ?? 0) : 0)
+  ref.current.setRotation(!useSprite && asVehicle ? (headingDeg ?? 0) : 0)
 }
 
 /**
@@ -1463,6 +1493,14 @@ function markerClassName(kind: 'origin' | 'destination'): string {
  * o topo da tela; e se o usuário girar o mapa com o dedo, ela continua
  * apontando para a direção geográfica correta em vez de seguir o gesto.
  */
+/** Marcador por SPRITE — usado só quando os PNGs de referência existem. */
+function createUserSpriteElement(): HTMLElement {
+  const el = document.createElement('div')
+  el.className = 'relative flex h-[76px] w-[76px] items-center justify-center'
+  el.innerHTML = `<img alt="" class="h-full w-full select-none object-contain" draggable="false" />`
+  return el
+}
+
 function createUserVehicleElement(): HTMLElement {
   const el = document.createElement('div')
   el.className = 'relative flex h-[76px] w-[76px] items-center justify-center'

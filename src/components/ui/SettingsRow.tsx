@@ -85,7 +85,11 @@ export function Toggle({
         checked ? 'justify-end bg-success-500' : 'justify-start bg-ink-500'
       }`}
     >
-      <span className={`h-7 w-7 rounded-pill shadow-tile transition-all duration-base ${checked ? 'bg-white' : 'bg-[#B6C4D6]'}`} />
+      {/* Botão do toggle sempre branco: ele é o elemento que se move sobre o
+          trilho, e a leitura de estado vem da COR DO TRILHO, não da bolinha.
+          Antes o estado desligado usava um cinza-claro fixo, que no tema
+          escuro brigava com o trilho e no claro sumia nele. */}
+      <span className="h-7 w-7 rounded-pill bg-white shadow-tile transition-all duration-base" />
     </button>
   )
 }

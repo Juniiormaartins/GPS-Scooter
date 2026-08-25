@@ -64,7 +64,7 @@ export function AlternativeSheet({
       </div>
 
       <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet">
-        <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-[#DCE4EF]" />
+        <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-surface-handle" />
 
         <h2 className="text-sheet-title-sm text-content-primary">Rota alternativa encontrada</h2>
 
@@ -159,7 +159,7 @@ function RouteCompareCard({
       type="button"
       onClick={onSelect}
       className={`flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-left transition-all duration-base ease-standard active:scale-[.97] ${
-        selected ? 'border-2 border-brand-500 bg-[#F7FBFE]' : 'border border-hairline/[.08] bg-surface-card'
+        selected ? 'border-2 border-brand-500 bg-surface-selected' : 'border border-hairline/[.08] bg-surface-card'
       }`}
     >
       <div className="min-w-0 flex-1">

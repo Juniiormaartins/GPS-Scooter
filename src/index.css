@@ -52,6 +52,34 @@
   --content-tertiary: #64748b;
   --content-on-accent: #05080f;
 
+  /*
+   * Tokens do redesenho, na versão ESCURA.
+   *
+   * Eles nasceram só no bloco claro e ficaram indefinidos aqui — e uma
+   * variável CSS indefinida não cai para o valor do outro tema, cai para o
+   * padrão do navegador. Na prática o texto virava PRETO sobre card escuro:
+   * os rótulos dos tiles (DISTÂNCIA, ESTIMADO, ADEQUAÇÃO) ficaram ilegíveis.
+   *
+   * Os valores NÃO são cópia do claro: no escuro as superfícies sobem em
+   * luminosidade e os textos descem, então cada token tem o equivalente
+   * invertido, não o mesmo hex.
+   */
+  --surface-tile-accent: #1c3145;
+  --content-quaternary: #5f6f88;
+  /* Card SELECIONADO: no escuro sobe de luminosidade, no claro desce um passo. */
+  --surface-selected: #16273a;
+  /* Handle da bottom sheet. */
+  --handle: #2b3a56;
+
+  --warning-text: #f5a623;
+  --danger-text: #ff6b6b;
+
+  /* Fundos de estado: no escuro são tingimentos do próprio acento, não pastéis. */
+  --state-go: #12301f;
+  --state-warn: #33260f;
+  --state-danger: #34191b;
+  --state-info: #12293b;
+
   /* Bordas/realces: claros sobre fundo escuro. */
   --hairline: 255 255 255;
 }
@@ -77,6 +105,8 @@
   --surface-tile: #f1f5fa;
   /* Tile de ícone com acento — distinto do tile neutro. */
   --surface-tile-accent: #eaf4fb;
+  --surface-selected: #f7fbfe;
+  --handle: #dce4ef;
 
   --brand-300: #8edafc;
   --brand-400: #35b7f7;

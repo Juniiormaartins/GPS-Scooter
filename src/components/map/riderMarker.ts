@@ -59,12 +59,20 @@ export function hasRiderSprites(kind: RiderVehicleKind): boolean {
  * inteiro. Testar os oito custaria oito requisições para responder uma
  * pergunta binária, e um conjunto incompleto é erro de deploy, não um estado
  * que valha a pena tratar.
+ *
+ * VERIFICAR `response.ok` NÃO BASTA, e isso foi observado na prática: este app
+ * é uma SPA, e tanto o servidor de desenvolvimento quanto a Vercel reescrevem
+ * qualquer caminho desconhecido para o `index.html` — com status 200. O probe
+ * dava "sprites presentes" sem existir PNG nenhum, e o marcador viraria um
+ * `<img>` apontando para HTML, ou seja, sumiria do mapa. Por isso a checagem
+ * é pelo CONTENT-TYPE: só uma imagem de verdade conta como sprite.
  */
 export async function probeRiderSprites(kind: RiderVehicleKind): Promise<boolean> {
   if (availableSprites.has(kind)) return true
   try {
     const response = await fetch(riderSpriteUrl(kind, 0), { method: 'HEAD' })
     if (!response.ok) return false
+    if (!(response.headers.get('content-type') ?? '').startsWith('image/')) return false
     availableSprites.add(kind)
     return true
   } catch {
