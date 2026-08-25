@@ -154,12 +154,23 @@ export function useNavigationSession(route: CandidateRoute | null, active: boole
     setRouteDeviated(false)
   }
 
+  /**
+   * Rumo efetivo: o do GPS quando confiável, senão o da ROTA à frente.
+   *
+   * Sem o fallback, todo início de navegação e toda parada em semáforo
+   * deixavam o marcador sem direção — e ele degradava para o disco genérico
+   * justamente nos momentos em que o usuário mais olha a tela. A direção do
+   * trajeto é dado real; o que não temos parado é a orientação do APARELHO,
+   * e essa continuamos sem afirmar.
+   */
+  const effectiveHeadingDeg = headingDeg ?? progress?.routeBearingDeg ?? null
+
   return {
     progress,
     gpsSample: sample,
     /** Velocidade real de deslocamento, já filtrada — null quando não há leitura confiável. */
     currentSpeedKmh,
-    headingDeg,
+    headingDeg: effectiveHeadingDeg,
     isLocating,
     locationError: error,
     permission,

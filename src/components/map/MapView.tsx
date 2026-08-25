@@ -199,7 +199,16 @@ function navigationZoomForSpeed(speedKmh: number | null, currentZoom: number | n
 // Reserva espaço no TOPO do mapa (onde fica o cartão de instrução) — isso
 // empurra o ponto centralizado (o usuário) para a parte inferior da tela,
 // deixando a rota à frente visível acima dele, como num app de navegação real.
-const NAVIGATION_PADDING = { top: 300, bottom: 32, left: 0, right: 0 }
+/**
+ * Área RESERVADA da tela durante a navegação. O ponto centralizado é o centro
+ * do que sobra, então este padding é o que decide onde o marcador aparece.
+ *
+ * `bottom` era 32px, o que ignorava a faixa inferior inteira — banner de
+ * velocidade, etiqueta da via atual e o painel de ETA. O marcador caía atrás
+ * deles. Reservar ~200px empurra o marcador para ~56% da altura: acima do
+ * chrome de baixo, com o caminho à frente ocupando a metade superior.
+ */
+const NAVIGATION_PADDING = { top: 300, bottom: 200, left: 0, right: 0 }
 
 /**
  * Inclinação da câmera na navegação, em graus.
@@ -1512,8 +1521,11 @@ function createUserVehicleElement(): HTMLElement {
   // Camadas, de trás para a frente (a ordem é o que dá profundidade sem
   // sombra real, que o SVG não tem):
   //   1. cone de direção   — para onde se vai
-  //   2. anel no chão      — o "disco" das referências, achatado em elipse
-  //                          para insinuar que está deitado no plano
+  //   2. anel                — o "disco" das referências. É um CÍRCULO, não
+  //                          uma elipse: marcadores DOM são alinhados à tela e
+  //                          não recebem a perspectiva do mapa, então achatar
+  //                          para "deitar no chão" só produzia um círculo
+  //                          espremido que não casava com a inclinação real
   //   3. sombra de contato — elipse escura sob a roda, ancora o veículo
   //   4. veículo           — estrado, roda traseira com lanterna, coluna,
   //                          guidão e o badge de raio
@@ -1547,12 +1559,12 @@ function createUserVehicleElement(): HTMLElement {
         </filter>
       </defs>
 
-      <path data-role="cone" d="M38 6 L58 34 A22 22 0 0 0 18 34 Z" fill="url(#gs-cone)"/>
+      <path data-role="cone" d="M38 4 L58 32 A22 22 0 0 0 18 32 Z" fill="url(#gs-cone)"/>
 
-      <ellipse data-role="ring" cx="38" cy="46" rx="23" ry="14" fill="url(#gs-ring-fill)"/>
-      <ellipse data-role="ring-edge" cx="38" cy="46" rx="23" ry="14" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+      <circle data-role="ring" cx="38" cy="44" r="19" fill="url(#gs-ring-fill)"/>
+      <circle data-role="ring-edge" cx="38" cy="44" r="19" fill="none" stroke="#FFFFFF" stroke-width="3"/>
 
-      <ellipse cx="38" cy="53" rx="11" ry="4" fill="#0F1729" opacity=".28" filter="url(#gs-contact)"/>
+      <ellipse cx="38" cy="52" rx="10" ry="3.5" fill="#0F1729" opacity=".3" filter="url(#gs-contact)"/>
 
       <g data-role="vehicle">
         <rect x="32.6" y="35" width="10.8" height="19" rx="4.4" fill="url(#gs-deck)"/>
@@ -1567,7 +1579,8 @@ function createUserVehicleElement(): HTMLElement {
         <path d="M39.4 16.6 35.6 20.4h2.5l-1.7 3.4 3.8-4.2h-2.4z" fill="#35B7F7"/>
       </g>
 
-      <circle data-role="idle" cx="38" cy="46" r="9" fill="#FFFFFF" opacity="0"/>
+      <circle data-role="idle" cx="38" cy="44" r="10" fill="#FFFFFF" opacity="0"/>
+      <circle data-role="idle-core" cx="38" cy="44" r="6.5" fill="#0E86C6" opacity="0"/>
     </svg>
   `
   return el
@@ -1596,7 +1609,11 @@ function setVehicleHeadingVisibility(element: HTMLElement, hasHeading: boolean) 
   // anel no chão com um núcleo branco: "você está aqui, direção desconhecida".
   set('cone', hasHeading ? '1' : '0')
   set('vehicle', hasHeading ? '1' : '0')
+  // O fallback é um disco azul com aro branco — a mesma linguagem do marcador
+  // fora da navegação. Antes era só um círculo BRANCO dentro do anel branco,
+  // o que lia como gráfico quebrado em vez de "posição conhecida, direção não".
   set('idle', hasHeading ? '0' : '1')
+  set('idle-core', hasHeading ? '0' : '1')
 }
 
 /**
