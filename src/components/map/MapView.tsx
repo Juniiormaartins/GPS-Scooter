@@ -219,15 +219,71 @@ const ROUTE_WIDTH_BY_WEIGHT: Record<RouteLineWeight, [number, number, number]> =
 /** Contorno: sempre mais largo que a linha, é ele que separa a rota do asfalto embaixo. */
 const ROUTE_CASING_EXTRA_PX = 4.5
 
+const ZERO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 }
+
+interface FramePadding {
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
 /**
- * `fitBounds` num mapa que ainda não tem tamanho produz NaN no transform e
- * derruba o componente com "Invalid LngLat object: (NaN, -90)" — observado ao
- * sair da navegação, quando o MapView é remontado e o efeito de enquadramento
- * roda antes de o container ser medido.
+ * Enquadra a câmera num conjunto de coordenadas, sem estourar o transform.
+ *
+ * BUG REAL, reproduzido de forma determinística: o MapLibre SOMA o padding já
+ * gravado no transform ao padding passado para `fitBounds`. O acompanhamento
+ * da navegação deixa `{ top: 300, bottom: 32 }` gravado. Ao sair, o
+ * enquadramento das candidatas pedia `{ top: 220, bottom: 260 }` — somando
+ * 520 em cima e 292 embaixo, exatamente os 812 px de altura do mapa. Altura
+ * útil zero, divisão por zero, `unproject` devolvendo NaN, e o componente
+ * inteiro caindo com "Invalid LngLat object: (NaN, -90)".
+ *
+ * Ficava escondido enquanto App.tsx tinha DOIS MapView em ramos de return
+ * diferentes: sair da navegação remontava o mapa, e o mapa novo nascia sem
+ * padding. Unificar numa instância só — que é o certo, para não rebaixar todos
+ * os tiles a cada navegação — expôs o problema.
+ *
+ * Zerar o padding ANTES de enquadrar é o que trata a causa: não adianta só
+ * limitar o valor pedido, porque o termo somado vem do estado do mapa (e
+ * durante a animação de saída ele é um valor intermediário qualquer). O limite
+ * proporcional continua como segunda defesa, para telas pequenas em que o
+ * padding pedido estoura sozinho.
  */
-function canFrame(map: MapLibreMap): boolean {
+function fitToBounds(
+  map: MapLibreMap,
+  bounds: maplibregl.LngLatBounds,
+  desired: FramePadding,
+  options: { duration: number; maxZoom?: number },
+) {
   const canvas = map.getCanvas()
-  return canvas.width > 0 && canvas.height > 0
+  const ratio = window.devicePixelRatio || 1
+  const width = canvas.width / ratio
+  const height = canvas.height / ratio
+  if (width <= 0 || height <= 0) return
+
+  // Remove o termo aditivo antes de medir e enquadrar.
+  map.setPadding(ZERO_PADDING)
+
+  // Sobra mínima de 25% em cada eixo para a geometria — abaixo disso o
+  // enquadramento deixa de descrever qualquer coisa útil, mesmo sem estourar.
+  const scaleAxis = (a: number, b: number, available: number): [number, number] => {
+    const total = a + b
+    const budget = available * 0.75
+    if (total <= budget) return [a, b]
+    const factor = budget / total
+    return [a * factor, b * factor]
+  }
+
+  const [top, bottom] = scaleAxis(desired.top, desired.bottom, height)
+  const [left, right] = scaleAxis(desired.left, desired.right, width)
+
+  // Enquadrar é sempre uma ação de FORA da navegação (ver as guardas nos
+  // efeitos que chamam isto), e lá o mapa é reto e ao norte. Sem declarar
+  // isso, `fitBounds` preserva o ângulo atual — e o mapa ficava inclinado a
+  // 52° depois de encerrar uma navegação, porque o enquadramento das
+  // candidatas rodava DEPOIS da animação que endireita a câmera.
+  map.fitBounds(bounds, { padding: { top, bottom, left, right }, bearing: 0, pitch: 0, ...options })
 }
 
 function routeWidthExpression(weight: RouteLineWeight, casing = false): maplibregl.ExpressionSpecification {
@@ -521,9 +577,10 @@ export function MapView({
     navigationZoomRef.current = null
     // Fora da navegação, mapa reto e ao norte — é o estado em que dá para
     // comparar alternativas e entender a cidade.
-    if (map.getBearing() !== 0 || map.getPitch() !== 0) {
-      map.easeTo({ bearing: 0, pitch: 0, duration: 400 })
-    }
+    // O padding precisa ser zerado, não só o ângulo: ele fica GRAVADO no
+    // transform pelo acompanhamento e é somado a qualquer `fitBounds`
+    // posterior (ver fitToBounds).
+    map.easeTo({ bearing: 0, pitch: 0, padding: ZERO_PADDING, duration: 400 })
   }, [isNavigating])
 
   // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
@@ -665,15 +722,15 @@ export function MapView({
 
     // Centraliza e enquadra a câmera na rota recém-calculada, com respiro para
     // não ficar escondida atrás do SearchPanel (topo) e do RoutePanel (base).
-    if (coordinates.length >= 2 && canFrame(map)) {
+    // Durante a navegação a câmera pertence ao acompanhamento: enquadrar aqui
+    // arrancaria a vista de cima do usuário no instante em que a rota muda
+    // (aceitar uma alternativa, recalcular por desvio).
+    if (coordinates.length >= 2 && !isNavigating) {
       const bounds = coordinates.reduce(
         (acc, coord) => acc.extend(coord),
         new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
       )
-      map.fitBounds(bounds, {
-        padding: { top: 220, bottom: 220, left: 48, right: 48 },
-        duration: 600,
-      })
+      fitToBounds(map, bounds, { top: 220, bottom: 220, left: 48, right: 48 }, { duration: 600 })
     }
   }, [routeGeometry, routeOptions.length])
 
@@ -693,12 +750,12 @@ export function MapView({
     source.setData({ type: 'FeatureCollection', features })
 
     const allCoordinates = features.flatMap((feature) => feature.geometry.coordinates as [number, number][])
-    if (allCoordinates.length >= 2 && canFrame(map)) {
+    if (allCoordinates.length >= 2 && !isNavigating) {
       const bounds = allCoordinates.reduce(
         (acc, coord) => acc.extend(coord),
         new maplibregl.LngLatBounds(allCoordinates[0], allCoordinates[0]),
       )
-      map.fitBounds(bounds, { padding: { top: 220, bottom: 260, left: 48, right: 48 }, duration: 600 })
+      fitToBounds(map, bounds, { top: 220, bottom: 260, left: 48, right: 48 }, { duration: 600 })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeOptions])
@@ -720,7 +777,7 @@ export function MapView({
     // (mais preciso, segue a geometria) assume — por isso a condição.
     if (!destinationPoint || routeGeometry || routeOptions.length > 0) return
 
-    if (!canFrame(map)) return
+    if (isNavigating) return
 
     const anchor = userPoint ?? originPoint
     if (!anchor) {
@@ -733,7 +790,7 @@ export function MapView({
       [anchor.lng, anchor.lat],
     ).extend([destinationPoint.lng, destinationPoint.lat])
     // `bottom` maior por causa da ficha do local, que ocupa a base da tela.
-    map.fitBounds(bounds, { padding: { top: 180, bottom: 300, left: 56, right: 56 }, duration: 700, maxZoom: 16 })
+    fitToBounds(map, bounds, { top: 180, bottom: 300, left: 56, right: 56 }, { duration: 700, maxZoom: 16 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinationPoint])
 

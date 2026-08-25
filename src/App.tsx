@@ -555,26 +555,56 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigationSession.routeDeviated])
 
-  if (isNavigating && activeScoredRoute) {
-    const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
+  const routeOptions = allRoutes.map((entry) => ({
+    id: entry.route.id,
+    geometry: entry.route.geometry,
+    eligibility: entry.eligibility,
+    isActive: entry.route.id === activeScoredRoute?.route.id,
+  }))
 
-    return (
-      <div className="relative h-screen w-screen overflow-hidden bg-surface">
-        <MapView
-          originPoint={originPoint}
-          destinationPoint={destinationPoint}
-          userPoint={navPosition}
-          routeGeometry={activeScoredRoute.route.geometry}
-          followUser={isFollowingUser}
-          isNavigating
-          speedKmh={navigationSession.currentSpeedKmh}
-          centerRequestId={centerToken}
-          headingDeg={navigationSession.headingDeg}
-          routeSeveritySegments={routeSeveritySegments}
-          routeWarnings={routeWarnings}
-          theme={preferences.theme}
-          onUserInteraction={() => setIsFollowingUser(false)}
-        />
+  /**
+   * Modo navegação — controla APENAS quais painéis aparecem por cima e como o
+   * mapa se comporta, nunca QUAL mapa é renderizado.
+   *
+   * Antes existiam dois `<MapView>` em ramos de return diferentes. Como o
+   * React desmonta a árvore inteira ao trocar de ramo, iniciar ou encerrar uma
+   * navegação DESTRUÍA o mapa WebGL e recriava tudo: estilo, fontes, camadas,
+   * marcadores e todos os tiles baixados de novo. Além do piscar visível, isso
+   * consome cota do provedor de mapa a cada toque em "Iniciar"/"Encerrar" — e
+   * este projeto já bateu no limite de requisições do MapTiler. Agora é uma
+   * instância só, que apenas muda de props.
+   */
+  const isNavigationView = isNavigating && activeScoredRoute != null
+  const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
+
+  return (
+    <div className="relative h-screen w-screen overflow-hidden bg-surface">
+      <MapView
+        originPoint={originPoint}
+        destinationPoint={destinationPoint}
+        userPoint={isNavigationView ? navPosition : userPosition}
+        routeGeometry={activeScoredRoute?.route.geometry ?? preview?.result.selected.route.geometry ?? null}
+        // Na navegação existe UMA rota; as candidatas simultâneas são da tela
+        // de escolha e sumiriam de qualquer forma pela visibilidade das camadas.
+        routeOptions={isNavigationView ? [] : routeOptions}
+        routeSeveritySegments={routeSeveritySegments}
+        // Os trechos que o usuário pediu para evitar passam a aparecer também
+        // na tela de escolha — antes só a navegação recebia esta prop, então a
+        // informação sumia justamente na hora de comparar as alternativas.
+        routeWarnings={routeWarnings}
+        isRoutePreview={!activeScoredRoute && preview != null}
+        isNavigating={isNavigationView}
+        followUser={isNavigationView && isFollowingUser}
+        speedKmh={isNavigationView ? navigationSession.currentSpeedKmh : null}
+        headingDeg={isNavigationView ? navigationSession.headingDeg : null}
+        theme={preferences.theme}
+        onSelectRouteOption={setActiveRouteId}
+        onUserInteraction={() => setIsFollowingUser(false)}
+        centerRequestId={centerToken}
+      />
+
+      {isNavigationView ? (
+        <>
         <NavigationPanel
           scoredRoute={activeScoredRoute}
           progress={navigationSession.progress}
@@ -617,31 +647,9 @@ export default function App() {
             onKeep={() => setAlternative(null)}
           />
         )}
-      </div>
-    )
-  }
-
-  const routeOptions = allRoutes.map((entry) => ({
-    id: entry.route.id,
-    geometry: entry.route.geometry,
-    eligibility: entry.eligibility,
-    isActive: entry.route.id === activeScoredRoute?.route.id,
-  }))
-
-  return (
-    <div className="relative h-screen w-screen overflow-hidden bg-surface">
-      <MapView
-        originPoint={originPoint}
-        destinationPoint={destinationPoint}
-        userPoint={userPosition}
-        routeGeometry={activeScoredRoute?.route.geometry ?? preview?.result.selected.route.geometry ?? null}
-        routeOptions={routeOptions}
-        routeSeveritySegments={routeSeveritySegments}
-        isRoutePreview={!activeScoredRoute && preview != null}
-        theme={preferences.theme}
-        onSelectRouteOption={setActiveRouteId}
-        centerRequestId={centerToken}
-      />
+        </>
+      ) : (
+        <>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <SearchPanel
@@ -741,6 +749,8 @@ export default function App() {
           userPoint={userPosition}
           initialQuery={destinationText}
         />
+      )}
+        </>
       )}
     </div>
   )
