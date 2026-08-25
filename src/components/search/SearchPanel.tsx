@@ -36,7 +36,7 @@ export function SearchPanel({
   warningMessage,
 }: SearchPanelProps) {
   return (
-    <div className="pointer-events-auto rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-card py-3 shadow-float backdrop-blur-xl">
+    <div className="pointer-events-auto rounded-2xl border border-hairline/15 bg-surface-overlay px-card py-3 shadow-float backdrop-blur-xl">
       <div className="flex items-center gap-3.5">
         <button
           type="button"

@@ -507,6 +507,7 @@ export default function App() {
           routeGeometry={activeScoredRoute.route.geometry}
           followUser={isFollowingUser}
           isNavigating
+          speedKmh={navigationSession.currentSpeedKmh}
           centerRequestId={centerToken}
           headingDeg={navigationSession.headingDeg}
           routeSeveritySegments={routeSeveritySegments}

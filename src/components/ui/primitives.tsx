@@ -29,7 +29,7 @@ export function Card({
     card: 'bg-surface-card',
     raised: 'bg-surface-raised',
     sunken: 'bg-surface-sunken',
-    overlay: 'bg-surface-card/[.86] shadow-float',
+    overlay: 'bg-surface-overlay shadow-float',
   }[tone]
 
   return (

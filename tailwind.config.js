@@ -30,6 +30,7 @@ export default {
           map: 'var(--surface-map)',
           sunken: 'var(--surface-sunken)', // faixa de busca, opção de rota não selecionada
           card: 'var(--surface-card)', // cards, linhas de lista, bottom sheet
+          overlay: 'var(--surface-overlay)', // painéis flutuando SOBRE o mapa (não deixam a cartografia tingir)
           raised: 'var(--surface-raised)', // chips, card selecionado, botão secundário
           tile: 'var(--surface-tile)', // tile de ícone
         },

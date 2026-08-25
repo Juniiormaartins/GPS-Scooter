@@ -26,7 +26,7 @@ export function VehicleStatusBar({ bluetooth, preferences }: VehicleStatusBarPro
     : null
 
   return (
-    <div className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-hairline/15 bg-surface-card/[.86] px-[18px] py-3.5 shadow-float backdrop-blur-xl">
+    <div className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-hairline/15 bg-surface-overlay px-[18px] py-3.5 shadow-float backdrop-blur-xl">
       <svg
         viewBox="0 0 24 24"
         className={`h-[30px] w-[30px] shrink-0 ${isConnected ? 'text-success-500' : 'text-content-tertiary'}`}

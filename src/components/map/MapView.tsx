@@ -80,6 +80,11 @@ interface MapViewProps {
    * que impede o mapa de girar para o norte no meio do percurso.
    */
   isNavigating?: boolean
+  /**
+   * Velocidade real já filtrada (km/h). Só alimenta o zoom da navegação — a
+   * posição e a direção continuam vindo do GPS, não daqui.
+   */
+  speedKmh?: number | null
   /** Tema atual — o mapa tem uma paleta própria para cada um (ver config/theme.ts). */
   theme?: 'dark' | 'light'
   onMapReady?: (map: MapLibreMap) => void
@@ -112,11 +117,58 @@ const ROUTE_WARN_LAYER_ID = 'gps-scooter-route-warn-line'
 
 // Zoom "de rua" usado durante a navegação ativa — próximo o bastante para ler
 // nomes de rua e a próxima manobra, mas sem escapar do enquadramento útil.
-const NAVIGATION_ZOOM = 17.5
+/**
+ * Zoom da navegação, por faixa de velocidade.
+ *
+ * Antes era um valor fixo de 17.5, que em tela de celular dá ~0,8 m por pixel
+ * — cerca de 300 m de rua atravessando a tela. Longe demais para ler nome de
+ * rua e antecipar cruzamento sem dar zoom na mão.
+ *
+ * As faixas resolvem a tensão entre "ver a rua" e "ver o caminho à frente":
+ * parado ou devagar o que importa é o entorno imediato (onde é a entrada,
+ * qual é a esquina); em velocidade, o que importa é enxergar mais adiante,
+ * porque a próxima manobra chega antes. Três faixas bastam — mais do que isso
+ * vira zoom mudando o tempo todo, que incomoda mais do que ajuda.
+ */
+const NAVIGATION_ZOOM_BANDS = [
+  { upToKmh: 12, zoom: 18.4 },
+  { upToKmh: 28, zoom: 18.0 },
+  { upToKmh: Number.POSITIVE_INFINITY, zoom: 17.4 },
+] as const
+
+/** Usado enquanto não há leitura de velocidade confiável — a faixa urbana típica destes veículos. */
+const NAVIGATION_ZOOM_DEFAULT = 18.0
+
+/**
+ * Histerese: a faixa só muda quando a velocidade passa do limite com folga.
+ * Sem isso, oscilar entre 27 e 29 km/h faria o mapa respirar para dentro e
+ * para fora sem parar.
+ */
+const ZOOM_BAND_HYSTERESIS_KMH = 3
+
+function navigationZoomForSpeed(speedKmh: number | null, currentZoom: number | null): number {
+  if (speedKmh == null) return currentZoom ?? NAVIGATION_ZOOM_DEFAULT
+
+  for (let i = 0; i < NAVIGATION_ZOOM_BANDS.length; i += 1) {
+    const band = NAVIGATION_ZOOM_BANDS[i]
+    if (speedKmh > band.upToKmh) continue
+
+    // Já estamos na faixa seguinte (mais afastada)? Só volta para esta se a
+    // velocidade cair abaixo do limite MENOS a folga.
+    if (currentZoom != null && currentZoom < band.zoom) {
+      const previous = NAVIGATION_ZOOM_BANDS[i - 1]
+      const floor = previous ? previous.upToKmh : 0
+      if (speedKmh > band.upToKmh - ZOOM_BAND_HYSTERESIS_KMH && speedKmh > floor) return currentZoom
+    }
+    return band.zoom
+  }
+
+  return NAVIGATION_ZOOM_DEFAULT
+}
 // Reserva espaço no TOPO do mapa (onde fica o cartão de instrução) — isso
 // empurra o ponto centralizado (o usuário) para a parte inferior da tela,
 // deixando a rota à frente visível acima dele, como num app de navegação real.
-const NAVIGATION_PADDING = { top: 260, bottom: 40, left: 0, right: 0 }
+const NAVIGATION_PADDING = { top: 300, bottom: 32, left: 0, right: 0 }
 
 /**
  * Cor da linha por severidade do trecho.
@@ -181,6 +233,7 @@ export function MapView({
   routeWarnings = [],
   isRoutePreview = false,
   isNavigating = false,
+  speedKmh = null,
   followUser = false,
   headingDeg = null,
   centerRequestId = 0,
@@ -194,6 +247,8 @@ export function MapView({
   const originMarkerRef = useRef<Marker | null>(null)
   const destinationMarkerRef = useRef<Marker | null>(null)
   const userMarkerRef = useRef<Marker | null>(null)
+  /** Zoom de navegação em vigor — entrada da histerese entre faixas de velocidade. */
+  const navigationZoomRef = useRef<number | null>(null)
   const routeGeometryRef = useRef(routeGeometry)
   routeGeometryRef.current = routeGeometry
   const onUserInteractionRef = useRef(onUserInteraction)
@@ -389,6 +444,7 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map || isNavigating) return
+    navigationZoomRef.current = null
     if (map.getBearing() !== 0) map.easeTo({ bearing: 0, duration: 400 })
   }, [isNavigating])
 
@@ -587,17 +643,20 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    // Depende de estar NAVEGANDO com direção conhecida — não de `followUser`.
-    // Arrastar o mapa para olhar o trajeto à frente suspende o
-    // acompanhamento, mas não apaga a direção em que a pessoa está indo;
-    // trocar a scooter pelo disco nesse momento seria descartar informação
-    // que temos. O disco fica para quando a direção é mesmo desconhecida.
-    updateUserMarker(userMarkerRef, map, userPoint, headingDeg, isNavigating && headingDeg != null)
+    // Marcador personalizado durante TODA a navegação. A condição antes
+    // incluía `headingDeg != null`, e isso o escondia justamente no começo do
+    // percurso: a direção só é liberada acima de 3 km/h e `coords.heading` vem
+    // null com o aparelho parado. Quem ligava a navegação parado via o disco
+    // genérico. A direção agora é tratada dentro do próprio marcador (ver
+    // setVehicleHeadingVisibility), não pela troca do marcador inteiro.
+    updateUserMarker(userMarkerRef, map, userPoint, headingDeg, isNavigating)
 
     if (followUser && userPoint) {
+      const zoom = navigationZoomForSpeed(speedKmh, navigationZoomRef.current)
+      navigationZoomRef.current = zoom
       map.easeTo({
         center: [userPoint.lng, userPoint.lat],
-        zoom: NAVIGATION_ZOOM,
+        zoom,
         padding: NAVIGATION_PADDING,
         // Gira o mapa na direção do deslocamento. Sem heading conhecido,
         // mantém o ângulo atual em vez de forçar o norte — evita que o mapa
@@ -616,7 +675,7 @@ export function MapView({
         essential: true,
       })
     }
-  }, [userPoint, followUser, headingDeg, isNavigating])
+  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh])
 
   // Centralização de disparo único — dispara ao mudar `centerRequestId`, não a
   // cada atualização de `userPoint`, para não competir com o usuário
@@ -632,9 +691,11 @@ export function MapView({
       // a rota à frente visível) e o mapa apontado para a direção real do
       // deslocamento. Sem isso, quem girasse o mapa sem querer teria que
       // reorientar na mão.
+      const zoom = navigationZoomForSpeed(speedKmh, navigationZoomRef.current)
+      navigationZoomRef.current = zoom
       map.easeTo({
         center: [userPoint.lng, userPoint.lat],
-        zoom: NAVIGATION_ZOOM,
+        zoom,
         padding: NAVIGATION_PADDING,
         // Sem heading confiável, preserva o ângulo atual em vez de forçar o
         // norte — girar o mapa para uma direção que não é a do movimento
@@ -714,6 +775,10 @@ function updateUserMarker(
   }
 
   ref.current.setLngLat([point.lng, point.lat]).addTo(map)
+
+  if (asVehicle) {
+    setVehicleHeadingVisibility(ref.current.getElement(), headingDeg != null)
+  }
   // O disco de fallback é simétrico: rotacioná-lo não muda nada visualmente,
   // mas zerar evita herdar um ângulo do marcador anterior.
   ref.current.setRotation(asVehicle ? (headingDeg ?? 0) : 0)
@@ -934,13 +999,13 @@ function markerClassName(kind: 'origin' | 'destination'): string {
  */
 function createUserVehicleElement(): HTMLElement {
   const el = document.createElement('div')
-  el.className = 'relative flex h-[56px] w-[56px] items-center justify-center'
+  el.className = 'relative flex h-[68px] w-[68px] items-center justify-center'
   el.innerHTML = `
-    <svg viewBox="0 0 56 56" class="absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox="0 0 68 68" class="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
         <linearGradient id="gs-cone" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#35B7F7" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".7"/>
+          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".72"/>
         </linearGradient>
         <linearGradient id="gs-disc" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#5FCBFF"/>
@@ -948,18 +1013,41 @@ function createUserVehicleElement(): HTMLElement {
           <stop offset="100%" stop-color="#0F6ABF"/>
         </linearGradient>
         <filter id="gs-shadow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#04121F" flood-opacity=".5"/>
+          <feDropShadow dx="0" dy="2.4" stdDeviation="3" flood-color="#04121F" flood-opacity=".5"/>
         </filter>
       </defs>
-      <path d="M28 3.5 L43.5 24 A18.5 18.5 0 0 0 12.5 24 Z" fill="url(#gs-cone)"/>
-      <circle cx="28" cy="28" r="15.2" fill="url(#gs-disc)" stroke="#FFFFFF" stroke-width="2.8" filter="url(#gs-shadow)"/>
-      <g transform="translate(28 28) scale(1.02) translate(-12 -12)">
+      <path data-role="cone" d="M34 4 L53 29 A23 23 0 0 0 15 29 Z" fill="url(#gs-cone)"/>
+      <circle cx="34" cy="34" r="18.5" fill="url(#gs-disc)" stroke="#FFFFFF" stroke-width="3.2" filter="url(#gs-shadow)"/>
+      <g data-role="arrow" transform="translate(34 34) scale(1.25) translate(-12 -12)">
         <path d="M12 3.6 L18.6 20.4 A0.9 0.9 0 0 1 17.4 21.5 L12 18.9 L6.6 21.5 A0.9 0.9 0 0 1 5.4 20.4 Z" fill="#FFFFFF"/>
         <path d="M12 3.6 L12 18.9 L6.6 21.5 A0.9 0.9 0 0 1 5.4 20.4 Z" fill="#D6EFFF"/>
       </g>
+      <circle data-role="idle" cx="34" cy="34" r="7.5" fill="#FFFFFF" opacity="0"/>
     </svg>
   `
   return el
+}
+
+/**
+ * Liga/desliga a afirmação de DIREÇÃO dentro do marcador.
+ *
+ * O marcador personalizado passa a ser usado durante toda a navegação — antes
+ * ele exigia `headingDeg != null` e, como a direção só é liberada acima de
+ * 3 km/h (e `coords.heading` vem null parado), na prática TODA navegação
+ * começava mostrando o disco genérico. Era o bug relatado: "continuo vendo o
+ * ponto azul".
+ *
+ * O que continua condicionado ao dado é a direção, não o marcador: sem
+ * heading confiável, o cone e a seta somem e fica um núcleo redondo. Assim o
+ * usuário nunca vê uma seta apontando para um lado que não medimos.
+ */
+function setVehicleHeadingVisibility(element: HTMLElement, hasHeading: boolean) {
+  const cone = element.querySelector('[data-role="cone"]') as SVGElement | null
+  const arrow = element.querySelector('[data-role="arrow"]') as SVGElement | null
+  const idle = element.querySelector('[data-role="idle"]') as SVGElement | null
+  if (cone) cone.style.opacity = hasHeading ? '1' : '0'
+  if (arrow) arrow.style.opacity = hasHeading ? '1' : '0'
+  if (idle) idle.style.opacity = hasHeading ? '0' : '1'
 }
 
 /**

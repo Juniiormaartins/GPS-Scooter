@@ -28,7 +28,7 @@ const TABS: { key: BottomNavTab; label: string }[] = [
  */
 export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-hairline/15 bg-surface-card/[.86] p-1.5 shadow-float backdrop-blur-xl">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-hairline/15 bg-surface-overlay p-1.5 shadow-float backdrop-blur-xl">
       {TABS.map((tab) => {
         const isActive = tab.key === active
         return (

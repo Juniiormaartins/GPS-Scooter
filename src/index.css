@@ -21,6 +21,17 @@
   --surface-map: #0e1424;
   --surface-sunken: #131c2e;
   --surface-card: #1a2438;
+  /**
+   * Superfície dos painéis que FLUTUAM SOBRE O MAPA (busca, barra do veículo,
+   * abas, cartões de navegação).
+   *
+   * Existe separada de --surface-card porque esses painéis usavam
+   * `bg-surface-card/[.86]`, deixando 14% do mapa atravessar. Com o mapa
+   * repintado, essa fresta passou a tingir os painéis com a cor da
+   * cartografia — a interface "pegava" o azul-acinzentado do mapa. O
+   * backdrop-blur continua dando a sensação de vidro; a cor deixa de vazar.
+   */
+  --surface-overlay: #1a2438f2;
   --surface-raised: #212d45;
   --surface-tile: #2b3a56;
 
@@ -51,6 +62,7 @@
   --surface-map: #eef1f7;
   --surface-sunken: #e7ebf3;
   --surface-card: #ffffff;
+  --surface-overlay: #fffffff5;
   --surface-raised: #f7f9fd;
   --surface-tile: #dfe5f0;
 
