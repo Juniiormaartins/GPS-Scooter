@@ -991,7 +991,8 @@ function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
         // tom — impossível ver por onde a rua passa.
         setPaint(layer.id, 'fill-color', C.building)
       } else if (id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('landcover')) {
-        setPaint(layer.id, 'fill-color', theme === 'light' ? '#C3DCC3' : '#12251A')
+        // Verde do handoff (§4.1) no claro; no escuro segue a paleta escura.
+        setPaint(layer.id, 'fill-color', theme === 'light' ? MAP_COLORS_LIGHT.park : '#12251A')
       } else setPaint(layer.id, 'fill-color', C.background)
       continue
     }

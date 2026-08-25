@@ -136,7 +136,10 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   routePreference: 'balanced',
   avoidances: ['express-roads'],
   voiceUri: null,
-  theme: 'dark',
+  // O redesenho é um produto de tema CLARO (handoff §1): o chrome escuro
+  // aparece só na navegação ativa, por tokens próprios, não pelo tema. O
+  // seletor de tema continua existindo como preferência do usuário.
+  theme: 'light',
   vehicleModelId: 'scooter-32',
   referenceSpeedKmh: 32,
   rangeKm: 40,

@@ -33,42 +33,43 @@ export const ACCENT = {
  */
 export const MAP_COLORS_LIGHT = {
   /**
-   * MEDIDO, não escolhido no olho. A versão anterior usava fundo #EEF1F7 com
-   * vias #F7F9FD/#FFFFFF, o que dá razão de contraste de 1,07:1 entre rua e
-   * fundo e 1,05:1 entre rua secundária e principal — ou seja, nenhuma
-   * hierarquia e ruas praticamente invisíveis. Somado a isso, os prédios
-   * ficavam MAIS escuros que as ruas, então a massa construída lia como
-   * figura e a malha viária como fundo: exatamente o inverso do que um GPS
-   * precisa. Escurecer o fundo é o que faz a rua branca aparecer.
+   * Cartografia do redesenho (handoff §4.1 → "Mapa"), com UMA adição
+   * deliberada: o contorno das vias.
+   *
+   * O handoff especifica terreno #E4EAF3 com vias #FFFFFF — razão de
+   * contraste de ~1,15:1. Medi essa faixa antes e ela não sustenta hierarquia
+   * sozinha; foi o que gerou a reclamação de "não enxergo o mapa" numa versão
+   * anterior. O handoff simplesmente não fala de contorno, então acrescentar
+   * um não contradiz nada dele e é o que faz a via branca aparecer sobre o
+   * terreno e duas ruas paralelas se separarem. As HUES são as do handoff.
    */
-  background: '#D3DCEA',
-  water: '#A8C6E0',
-  /** Vias brancas: o elemento mais claro do mapa, por decisão. */
+  background: '#E4EAF3',
+  water: '#CBDCEC',
+  /** Via principal/secundária: o elemento mais claro do mapa, por decisão do handoff. */
   roadMajor: '#FFFFFF',
-  roadMinor: '#FFFFFF',
-  /** Expressas/rodovias em âmbar — no nosso caso isso é informação, não enfeite: é o que o app recomenda evitar. */
+  /** Via local, um degrau abaixo — é daqui que vem a hierarquia viária. */
+  roadMinor: '#F1F5FA',
+  /** Expressas/rodovias em âmbar: no nosso caso é informação, não enfeite — é o que o app recomenda evitar. */
   roadHighway: '#F5C87A',
-  /** Contorno das vias. É ele que separa duas ruas paralelas e dá definição ao traçado. */
-  roadCasing: '#A9B9D1',
-  /** Prédios DELIBERADAMENTE discretos — quase o fundo. Eles não são a informação. */
-  building: '#C6D1E2',
-  rail: '#B4C1D4',
+  /** Adição ao handoff: sem isto as vias brancas somem no terreno. */
+  roadCasing: '#C4D0E2',
+  /** Área verde / parque. */
+  park: '#D9E9DB',
+  /** Prédios discretos — quase o terreno. Eles não são a informação. */
+  building: '#DAE1EC',
+  rail: '#C4D0E2',
   /** Trilhas/calçadões em tom quente, para não serem confundidos com rua. */
-  path: '#E0D3B8',
-  poi: '#AFBDD2',
-  label: '#2B3A52',
+  path: '#E3D8C2',
+  poi: '#0E86C6',
+  label: '#93A1B7',
 
-  /**
-   * Rotas no tema claro: tons mais escuros/saturados que os do tema escuro.
-   * O ciano #35B7F7 e o verde #2FD16A brilham sobre fundo escuro, mas perdem
-   * contraste sobre um mapa claro — aqui usam as variantes 600 da paleta.
-   */
+  /** Rota: azul da marca sobre casing branco (§4.8). */
   routeSelected: '#0E86C6',
   routeCasing: '#FFFFFF',
   routeByEligibility: {
-    allowed: '#17A34A',
-    discouraged: '#B3730A',
-    'not-allowed': '#D92626',
+    allowed: '#20B457',
+    discouraged: '#F5A623',
+    'not-allowed': '#F04545',
   },
 } as const
 

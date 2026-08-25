@@ -57,35 +57,69 @@
 }
 
 :root[data-theme='light'] {
-  /* Superfícies sobem para o branco conforme a elevação (inverso do escuro). */
-  --surface: #f4f6fb;
-  --surface-map: #eef1f7;
-  --surface-sunken: #e7ebf3;
+  /*
+   * Paleta do redesenho (handoff "Redesenho GPS Mobilidade Elétrica", §4.1).
+   * Tema CLARO é o tema do produto; o chrome escuro aparece exclusivamente na
+   * navegação ativa, via os tokens --nav-* abaixo, e não pelo tema.
+   *
+   * NOTA SOBRE O HANDOFF: o pacote traz um `tokens/colors.css` que é
+   * byte a byte idêntico aos tokens ESCUROS antigos deste projeto — carry-over
+   * obsoleto, que contradiz o próprio README. As tabelas do README (§4.1) e o
+   * board são a fonte de verdade usada aqui.
+   */
+  --surface: #f6f8fb;
+  --surface-map: #e4eaf3;
+  --surface-sunken: #f6f8fb;
   --surface-card: #ffffff;
-  --surface-overlay: #fffffff5;
-  --surface-raised: #f7f9fd;
-  --surface-tile: #dfe5f0;
+  /* Chrome flutuante sobre o mapa: branco a 92% + blur(20px). */
+  --surface-overlay: rgba(255, 255, 255, 0.92);
+  --surface-raised: #f6f8fb;
+  --surface-tile: #f1f5fa;
+  /* Tile de ícone com acento — distinto do tile neutro. */
+  --surface-tile-accent: #eaf4fb;
 
-  /* Azul mais profundo: o #35B7F7 do escuro não tem contraste sobre branco. */
-  --brand-300: #35b7f7;
-  --brand-400: #1a9ee0;
+  --brand-300: #8edafc;
+  --brand-400: #35b7f7;
   --brand-500: #0e86c6;
-  --brand-600: #0a6b9e;
+  --brand-600: #0b6da3;
 
   --success-400: #2fd16a;
-  --success-500: #17a34a;
-  --success-600: #12833c;
+  --success-500: #20b457;
+  --success-600: #178b44;
 
-  --warning-500: #b3730a;
-  --danger-500: #d92626;
+  /* Âmbar: fundo/traço #F5A623; para TEXTO sobre claro o handoff pede #B87400. */
+  --warning-500: #f5a623;
+  --warning-text: #b87400;
+  --danger-500: #f04545;
+  --danger-text: #c93636;
 
-  --content-primary: #0d1626;
-  --content-secondary: #4a5a72;
-  --content-tertiary: #6b7a90;
+  /* Fundos de estado (§4.1). */
+  --state-go: #e7f7ed;
+  --state-warn: #fef3e0;
+  --state-danger: #fdecec;
+  --state-info: #eaf4fb;
+
+  --content-primary: #0a0e1a;
+  --content-secondary: #5b6b85;
+  --content-tertiary: #8a98ae;
+  /* Eyebrow / desabilitado — um degrau acima do terciário. */
+  --content-quaternary: #94a3b8;
   --content-on-accent: #ffffff;
 
-  /* Bordas/realces: escuros sobre fundo claro. */
-  --hairline: 13 22 38;
+  --hairline: 10 14 26;
+}
+
+/*
+ * Chrome de NAVEGAÇÃO. Fica fora dos blocos de tema de propósito: o handoff
+ * (§4.1, §7) determina que a navegação ativa é escura independentemente do
+ * tema escolhido, para imersão. São os únicos tokens do app que não invertem.
+ */
+:root {
+  --nav-surface: #0f1729;
+  --nav-content: #ffffff;
+  --nav-content-secondary: #93a6c4;
+  --nav-accent: #8edafc;
+  --nav-control: rgba(255, 255, 255, 0.1);
 }
 
 html,
