@@ -75,31 +75,37 @@ export function NavigationPanel({
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-gutter pt-[max(1rem,env(safe-area-inset-top))]">
         {progress?.nextStep ? (
-          <div className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-hairline/15 bg-surface-overlay px-3.5 py-3 shadow-float backdrop-blur-xl">
-            <ManeuverIcon maneuver={progress.nextStep.maneuver} />
+          /*
+            `GuidanceBanner` (handoff §5.1): card ESCURO #0F1729 de raio 28px,
+            com tile de manobra 54px, "EM 200 m" em 13/800 no acento claro,
+            manobra 25/900 e a via em 14/600.
+
+            O escuro aqui não vem do tema: o handoff (§4.1, §7) define a
+            navegação como escura sempre, para imersão — por isso as cores saem
+            dos tokens --nav-*, que não invertem com o tema escolhido.
+          */
+          <div className="pointer-events-auto flex items-center gap-3.5 rounded-2xl bg-nav-surface px-4 py-3.5 shadow-nav-banner">
+            <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-lg bg-nav-control text-nav-content">
+              <ManeuverIcon maneuver={progress.nextStep.maneuver} />
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[21px] font-extrabold leading-tight text-content-primary">
-                {progress.nextStep.instruction}
+              {/*
+                "EM" em caixa alta, a distância NÃO. O `uppercase` aplicado à
+                linha inteira transformava "60 m" em "60 M" — a unidade métrica
+                é minúscula por regra do handoff (§4.2).
+              */}
+              <p className="text-[13px] font-extrabold tracking-[0.6px] text-nav-accent">
+                <span className="uppercase">Em</span> {formatDistance(progress.distanceToNextManeuverMeters)}
               </p>
-              <p className="mt-0.5 truncate text-[16px] text-content-secondary">
-                {progress.nextStep.roadName && `${progress.nextStep.roadName} `}
-                <span className="font-bold text-brand-500">
-                  {formatDistance(progress.distanceToNextManeuverMeters)}
-                </span>
-              </p>
+              <p className="mt-0.5 truncate text-maneuver text-nav-content">{progress.nextStep.instruction}</p>
+              {progress.nextStep.roadName && (
+                <p className="mt-0.5 truncate text-[14px] font-semibold text-nav-content-secondary">
+                  {progress.nextStep.roadName}
+                </p>
+              )}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-col gap-2">
               <VoiceToggle enabled={voiceEnabled} onToggle={onToggleVoice} />
-              <button
-                type="button"
-                onClick={onStop}
-                aria-label="Encerrar navegação"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-surface-tile text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                </svg>
-              </button>
             </div>
           </div>
         ) : (
@@ -148,46 +154,67 @@ export function NavigationPanel({
           via, em vez de mostrar um rótulo vazio.
         */}
         {progress?.currentRoadName && (
-          <div className="pointer-events-auto self-start rounded-pill border border-hairline/15 bg-surface-overlay px-3.5 py-1.5 shadow-float backdrop-blur-xl">
-            <p className="truncate text-[15px] font-bold text-content-primary">{progress.currentRoadName}</p>
+          <div className="pointer-events-auto self-start rounded-pill bg-nav-surface px-3.5 py-1.5 shadow-float">
+            <p className="truncate text-[15px] font-bold text-nav-content">{progress.currentRoadName}</p>
           </div>
         )}
 
         {/*
-          Controles do modo navegação agrupados numa linha só, na zona do
-          polegar. Antes o recentralizar flutuava sozinho; juntar as duas ações
-          evita botão espalhado pela tela e mantém o alvo de toque grande.
+          Velocidade à esquerda e controles do mapa à direita, na mesma linha
+          de base. O botão de alternativa saiu daqui: o handoff o coloca na
+          `NavStatsBar`, junto de "Sair", que é onde as AÇÕES da navegação
+          ficam agrupadas — aqui em cima ficam só leitura e controle de câmera.
         */}
         <div className="flex items-end justify-between gap-3">
           <StatPill label="Velocidade" value={currentSpeedKmh != null ? `${currentSpeedKmh} km/h` : '—'} />
-          <div className="flex items-center gap-2">
-            {onFindAlternative && (
-              <button
-                type="button"
-                onClick={onFindAlternative}
-                disabled={isSearchingAlternative}
-                aria-label="Buscar rota alternativa"
-                className="pointer-events-auto flex h-12 items-center gap-2 rounded-pill border border-hairline/15 bg-surface-overlay px-4 text-[15px] font-bold text-content-primary shadow-float backdrop-blur-xl transition-all duration-fast active:scale-[.97] active:opacity-[.88] disabled:opacity-60"
-              >
-                {isSearchingAlternative ? (
-                  <span className="h-[18px] w-[18px] animate-spin rounded-pill border-2 border-brand-500 border-t-transparent" />
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-brand-500" fill="none" stroke="currentColor" strokeWidth={2.2}>
-                    <path d="M4 7h5l3.5 10H20M4 17h5l1.6-4.6" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M17 4l3 3-3 3M17 14l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-                Alternativa
-              </button>
-            )}
-            {recenterControl}
-          </div>
+          {recenterControl}
         </div>
 
-        <div className="pointer-events-auto grid grid-cols-3 gap-2 rounded-2xl border border-hairline/15 bg-surface-overlay px-3 py-card shadow-float backdrop-blur-xl">
-          <NavStat value={arrivalTime(remainingDurationMinutes)} label="Hora de chegada" tone="accent" />
-          <NavStat value={formatEta(remainingDurationMinutes)} label="Tempo restante" />
-          <NavStat value={formatDistance(remainingDistanceMeters)} label="Distância restante" />
+        {/*
+          `NavStatsBar` (handoff §5.1): encostada na base, raio só no topo, ETA
+          em verde 30/900, a linha "distância · chegada" abaixo, e as ações à
+          direita — buscar alternativa e sair.
+
+          Ela é o único elemento do app que sangra até a borda inferior: o
+          handoff a desenha assim para o painel fechar a tela, com o home
+          indicator sobre o próprio escuro.
+        */}
+        <div className="pointer-events-auto -mx-gutter -mb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center gap-3 rounded-t-2xl bg-nav-surface px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 shadow-nav-panel">
+          <div className="min-w-0 flex-1">
+            <p className="text-eta text-success-400">{formatEta(remainingDurationMinutes)}</p>
+            <p className="mt-1 truncate text-[14px] font-semibold text-nav-content-secondary">
+              {formatDistance(remainingDistanceMeters)} · chegada {arrivalTime(remainingDurationMinutes)}
+            </p>
+          </div>
+
+          {onFindAlternative && (
+            <button
+              type="button"
+              onClick={onFindAlternative}
+              disabled={isSearchingAlternative}
+              aria-label="Buscar rota alternativa"
+              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-pill bg-nav-control text-nav-content transition-all duration-fast active:scale-[.97] active:opacity-[.88] disabled:opacity-60"
+            >
+              {isSearchingAlternative ? (
+                <span className="h-[18px] w-[18px] animate-spin rounded-pill border-2 border-nav-content border-t-transparent" />
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 2l4 4-4 4" />
+                  <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                  <path d="M7 22l-4-4 4-4" />
+                  <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                </svg>
+              )}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onStop}
+            className="flex h-[52px] shrink-0 items-center rounded-pill bg-danger-500 px-6 text-btn-primary text-white transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+          >
+            Sair
+          </button>
         </div>
       </div>
     </>
@@ -215,17 +242,6 @@ function StatPill({
       <span className={`text-[24px] font-extrabold ${tone === 'go' ? 'text-success-500' : 'text-content-primary'}`}>
         {value}
       </span>
-    </div>
-  )
-}
-
-function NavStat({ value, label, tone = 'default' }: { value: string; label: string; tone?: 'default' | 'accent' }) {
-  return (
-    <div className="text-center">
-      <p className={`text-[27px] font-extrabold leading-tight ${tone === 'accent' ? 'text-brand-500' : 'text-content-primary'}`}>
-        {value}
-      </p>
-      <p className="mt-1 text-[14px] text-content-secondary">{label}</p>
     </div>
   )
 }

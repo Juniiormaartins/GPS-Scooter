@@ -723,10 +723,8 @@ export default function App() {
           poi={selectedPoi}
           isSaved={isPoiSaved}
           userPoint={userPosition}
-          routeDistanceMeters={
-            preview && isSamePoint(preview.destination, selectedPoi.point)
-              ? preview.result.selected.route.totalDistanceMeters
-              : null
+          previewRoute={
+            preview && isSamePoint(preview.destination, selectedPoi.point) ? preview.result.selected : null
           }
           isRouteLoading={isPreviewLoading}
           onDismiss={() => setSelectedPoi(null)}
