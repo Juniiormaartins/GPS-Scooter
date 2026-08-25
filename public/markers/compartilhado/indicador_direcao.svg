@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="cone" x1="256" y1="40" x2="256" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35B7F7" stop-opacity="0"></stop>
+      <stop offset="1" stop-color="#35B7F7" stop-opacity=".62"></stop>
+    </linearGradient>
+  </defs>
+  <path d="M256 300 L392 60 A 210 210 0 0 0 120 60 Z" fill="url(#cone)"></path>
+</svg>

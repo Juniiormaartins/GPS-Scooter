@@ -5,7 +5,15 @@ import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
-import { hasRiderSprites, probeRiderSprites, riderSpriteUrl } from '@/components/map/riderMarker'
+import {
+  hasRiderSprites,
+  MIN_LEGIBLE_SPRITE_PX,
+  probeRiderSprites,
+  riderSpriteUrl,
+  SHARED_ASSETS,
+  SPRITE_ANCHOR_Y,
+} from '@/components/map/riderMarker'
+import type { VehicleModelId } from '@/config/userPreferences'
 import type { Eligibility } from '@/types/routing'
 
 export interface RouteOptionGeometry {
@@ -88,6 +96,11 @@ interface MapViewProps {
    * posição e a direção continuam vindo do GPS, não daqui.
    */
   speedKmh?: number | null
+  /**
+   * Veículo escolhido no perfil. Decide QUAL família de sprites o marcador usa
+   * — a troca é só de asset: âncora, halo e cone são idênticos nos três.
+   */
+  vehicleModelId?: VehicleModelId
   /**
    * Incremente para devolver o mapa ao norte UMA vez (botão de bússola).
    * Mesmo padrão de `centerRequestId`: um token, não um booleano, para que
@@ -403,6 +416,7 @@ export function MapView({
   isRoutePreview = false,
   isNavigating = false,
   speedKmh = null,
+  vehicleModelId = 'scooter-32',
   resetNorthRequestId = 0,
   onBearingChange,
   followUser = false,
@@ -431,13 +445,15 @@ export function MapView({
   const [spriteTick, setSpriteTick] = useState(0)
   useEffect(() => {
     let cancelled = false
-    probeRiderSprites('scooter').then((found: boolean) => {
+    // Refeito a cada troca de veículo: os oito ângulos do NOVO veículo
+    // precisam ser verificados e pré-carregados antes de aparecerem.
+    probeRiderSprites(vehicleModelId).then((found: boolean) => {
       if (found && !cancelled) setSpriteTick((value) => value + 1)
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [vehicleModelId])
   const routeGeometryRef = useRef(routeGeometry)
   routeGeometryRef.current = routeGeometry
   const onUserInteractionRef = useRef(onUserInteraction)
@@ -982,13 +998,10 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    // Marcador personalizado durante TODA a navegação. A condição antes
-    // incluía `headingDeg != null`, e isso o escondia justamente no começo do
-    // percurso: a direção só é liberada acima de 3 km/h e `coords.heading` vem
-    // null com o aparelho parado. Quem ligava a navegação parado via o disco
-    // genérico. A direção agora é tratada dentro do próprio marcador (ver
-    // setVehicleHeadingVisibility), não pela troca do marcador inteiro.
-    updateUserMarker(userMarkerRef, map, userPoint, headingDeg, isNavigating)
+    // Sprite do veículo escolhido no perfil. Fora da navegação ele também
+    // aparece (menor), porque o rumo vem da rota quando o GPS ainda não tem —
+    // ver routeBearingDeg em progress.ts.
+    updateUserMarker(userMarkerRef, map, userPoint, headingDeg, isNavigating, vehicleModelId)
 
     if (followUser && userPoint) {
       const zoom = navigationZoomForSpeed(speedKmh, navigationZoomRef.current)
@@ -1016,7 +1029,7 @@ export function MapView({
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh, spriteTick])
+  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh, spriteTick, vehicleModelId])
 
   useEffect(() => {
     const map = mapRef.current
@@ -1143,7 +1156,8 @@ function updateUserMarker(
   map: MapLibreMap,
   point: LngLat | null,
   headingDeg: number | null,
-  asVehicle: boolean,
+  isNavigating: boolean,
+  vehicle: VehicleModelId,
 ) {
   if (!point) {
     ref.current?.remove()
@@ -1151,41 +1165,137 @@ function updateUserMarker(
     return
   }
 
-  // O sprite é o caminho de maior fidelidade: o marcador passa a SER a imagem
-  // de referência em vez de uma aproximação vetorial. Só entra quando os
-  // arquivos existem de fato (ver riderMarker.ts).
-  const useSprite = asVehicle && headingDeg != null && hasRiderSprites('scooter')
-  const variant = useSprite ? 'sprite' : asVehicle ? 'vehicle' : 'dot'
+  /**
+   * O sprite do veículo aparece SEMPRE que os assets existem — o puck 2D é
+   * fallback só para quando eles não foram publicados.
+   *
+   * Sem rumo conhecido o veículo é desenhado a 0°, que no pacote é a vista de
+   * FRENTE. Isso não afirma direção: é a apresentação em repouso, como um
+   * veículo parado de frente para quem olha. O que some sem rumo é o CONE, que
+   * é o elemento que aponta para algum lado — e esse sim seria mentira.
+   */
+  const useSprite = hasRiderSprites(vehicle)
+  const variant = useSprite ? `sprite:${vehicle}` : 'puck'
+
   if (ref.current && ref.current.getElement().dataset.variant !== variant) {
     ref.current.remove()
     ref.current = null
   }
 
   if (!ref.current) {
-    const el = useSprite ? createUserSpriteElement() : asVehicle ? createUserVehicleElement() : createUserDotElement()
-    el.dataset.variant = variant
+    const element = useSprite ? createVehicleSpriteElement(isNavigating) : createFallbackPuckElement()
+    element.dataset.variant = variant
     ref.current = new maplibregl.Marker({
-      element: el,
-      // Gira junto com o mapa, não com a tela — ver comentário em
-      // createUserVehicleElement.
-      rotationAlignment: 'map',
+      element,
+      // Ancorado no PONTO DE CONTATO do pneu com o chão (68% da altura da
+      // imagem), não no centro: ancorar no centro faria o veículo flutuar
+      // acima da via.
+      anchor: 'center',
+      offset: useSprite ? [0, spriteAnchorOffsetPx(isNavigating)] : [0, 0],
+      // O sprite é uma vista fixa e NÃO gira. O que gira é o halo e o cone,
+      // por dentro do elemento (ver applySpriteHeading).
+      rotationAlignment: 'viewport',
     })
   }
 
   ref.current.setLngLat([point.lng, point.lat]).addTo(map)
 
   if (useSprite) {
-    // O sprite JÁ é a vista daquele ângulo, então ele não gira: trocar de
-    // imagem é o que muda a direção. Girar a imagem produziria a mesma vista
-    // tombando, não outro ângulo.
-    const image = ref.current.getElement().querySelector('img')
-    if (image) image.setAttribute('src', riderSpriteUrl('scooter', headingDeg ?? 0))
-  } else if (asVehicle) {
-    setVehicleHeadingVisibility(ref.current.getElement(), headingDeg != null)
+    applySpriteHeading(ref.current.getElement(), vehicle, headingDeg, isNavigating)
   }
-  // O disco de fallback é simétrico: rotacioná-lo não muda nada visualmente,
-  // mas zerar evita herdar um ângulo do marcador anterior.
-  ref.current.setRotation(!useSprite && asVehicle ? (headingDeg ?? 0) : 0)
+}
+
+/** Tamanho do sprite em tela. O pacote sugere 96–128px na navegação ativa. */
+function spriteSizePx(isNavigating: boolean): number {
+  return isNavigating ? 108 : 76
+}
+
+/**
+ * Deslocamento vertical que move a âncora do centro para o ponto de contato.
+ *
+ * O MapLibre ancora no centro do elemento; o pacote quer y=68% da imagem. A
+ * diferença é (0,68 − 0,5) da altura, aplicada para CIMA (offset negativo
+ * sobe o elemento, deixando o ponto de contato sobre a coordenada).
+ */
+function spriteAnchorOffsetPx(isNavigating: boolean): number {
+  return -(SPRITE_ANCHOR_Y - 0.5) * spriteSizePx(isNavigating)
+}
+
+/**
+ * Elemento do sprite, montado na ordem de camadas do pacote:
+ * halo → cone de direção → PNG do veículo.
+ *
+ * A sombra de contato NÃO é uma camada aqui: ela já vem embutida no render de
+ * cada PNG, projetada em plano transparente. Sobrepor a SVG duplicaria.
+ */
+function createVehicleSpriteElement(isNavigating: boolean): HTMLElement {
+  const size = spriteSizePx(isNavigating)
+  const element = document.createElement('div')
+  element.className = 'relative'
+  element.style.width = `${size}px`
+  element.style.height = `${size}px`
+  element.innerHTML = `
+    <img data-role="halo" src="${SHARED_ASSETS.halo}" alt="" aria-hidden="true"
+         class="pointer-events-none absolute inset-0 h-full w-full select-none" draggable="false" />
+    <img data-role="cone" src="${SHARED_ASSETS.directionCone}" alt="" aria-hidden="true"
+         class="pointer-events-none absolute inset-0 h-full w-full select-none" draggable="false" />
+    <img data-role="vehicle" alt="" aria-hidden="true"
+         class="pointer-events-none absolute inset-0 h-full w-full select-none" draggable="false" />
+  `
+  return element
+}
+
+/** Puck 2D do pacote — usado sem rumo confiável ou quando os sprites não foram publicados. */
+function createFallbackPuckElement(): HTMLElement {
+  const element = document.createElement('div')
+  element.className = 'relative h-[64px] w-[64px]'
+  element.innerHTML = `
+    <img src="${SHARED_ASSETS.fallbackPuck}" alt="" aria-hidden="true"
+         class="pointer-events-none h-full w-full select-none" draggable="false" />
+  `
+  return element
+}
+
+/**
+ * Aplica o rumo: troca o PNG pelo ângulo mais próximo e gira APENAS o cone.
+ *
+ * O PNG não gira nunca — é uma vista renderizada em perspectiva, e rotacioná-la
+ * produziria o veículo tombando em vez de outro ângulo. O cone, por ser
+ * simétrico e plano, gira continuamente e é ele que dá a leitura fina de
+ * direção entre um sprite e o seguinte.
+ */
+function applySpriteHeading(
+  element: HTMLElement,
+  vehicle: VehicleModelId,
+  headingDeg: number | null,
+  isNavigating: boolean,
+) {
+  const vehicleImage = element.querySelector('[data-role="vehicle"]') as HTMLImageElement | null
+  if (vehicleImage) {
+    const url = riderSpriteUrl(vehicle, headingDeg ?? 0)
+    if (vehicleImage.getAttribute('src') !== url) vehicleImage.setAttribute('src', url)
+  }
+
+  const cone = element.querySelector('[data-role="cone"]') as HTMLElement | null
+  if (cone) {
+    // O cone só aparece em navegação ativa E com rumo conhecido: ele é o
+    // elemento que aponta, então sem rumo ele afirmaria uma direção inexistente.
+    cone.style.opacity = isNavigating && headingDeg != null ? '1' : '0'
+    cone.style.transform = `rotate(${headingDeg ?? 0}deg)`
+    cone.style.transition = 'transform 240ms cubic-bezier(.4,0,.2,1)'
+  }
+
+  const halo = element.querySelector('[data-role="halo"]') as HTMLElement | null
+  if (halo) halo.style.opacity = '1'
+
+  const size = spriteSizePx(isNavigating)
+  if (element.style.width !== `${size}px`) {
+    element.style.width = `${size}px`
+    element.style.height = `${size}px`
+  }
+  // Guarda o tamanho mínimo legível do pacote como documentação viva: abaixo
+  // dele o veículo deixa de ser reconhecível e o puck 2D é o certo.
+  void MIN_LEGIBLE_SPRITE_PX
 }
 
 /**
@@ -1517,183 +1627,5 @@ function markerClassName(kind: 'origin' | 'destination'): string {
   return kind === 'origin' ? `${base} bg-brand-500` : `${base} bg-success-500`
 }
 
-/**
- * Marcador do usuário durante a NAVEGAÇÃO.
- *
- * POR QUE NÃO É UMA SCOOTER DESENHADA. Foram testadas cinco silhuetas de
- * scooter/moto vista de cima, renderizadas lado a lado a 300 px e a 56 px:
- * guidão largo com estrado, guidão estreito com rodas escuras, guidão curvo,
- * perspectiva traseira com retrovisores, e rodas exageradas. Nenhuma lê como
- * um veículo — o olho resolve todas como figura humana, garrafa ou camiseta.
- * E isso acontece MESMO a 300 px, o que descarta "é pequeno demais" como
- * explicação: um veículo de duas rodas visto de cima é um corpo estreito e
- * simétrico com um travessão, e essa é a mesma silhueta de um boneco de
- * braços abertos. Insistir renderia um marcador bonito no Figma e ilegível
- * no mapa.
- *
- * O QUE ESTE MARCADOR FAZ. A identidade vem do tratamento, não de um desenho
- * literal — que é a mesma escolha do Google Maps e do Apple Maps:
- * - cone de direção em wedge com gradiente, projetado à frente;
- * - disco com gradiente do azul da marca e aro branco de 2,8px, o que garante
- *   leitura tanto sobre o mapa escuro quanto sobre as vias brancas do tema
- *   claro, sem precisar de duas versões do marcador;
- * - sombra projetada, dando o descolamento do mapa;
- * - seta com o vinco lateral mais claro, que sugere volume sem cair em
- *   pseudo-3D.
- *
- * `rotationAlignment: 'map'` é essencial: a rotação é em relação ao MAPA, não
- * à tela. Como a câmera também gira para o heading, a seta aponta sempre para
- * o topo da tela; e se o usuário girar o mapa com o dedo, ela continua
- * apontando para a direção geográfica correta em vez de seguir o gesto.
- */
-/** Marcador por SPRITE — usado só quando os PNGs de referência existem. */
-function createUserSpriteElement(): HTMLElement {
-  const el = document.createElement('div')
-  el.className = 'relative flex h-[76px] w-[76px] items-center justify-center'
-  el.innerHTML = `<img alt="" class="h-full w-full select-none object-contain" draggable="false" />`
-  return el
-}
 
-function createUserVehicleElement(): HTMLElement {
-  const el = document.createElement('div')
-  el.className = 'relative flex h-[76px] w-[76px] items-center justify-center'
 
-  // Scooter vista de TRÁS E DE CIMA, como nas referências: o usuário vê o
-  // próprio veículo se afastando, que é a leitura natural quando o mapa gira
-  // para o rumo do deslocamento.
-  //
-  // Camadas, de trás para a frente (a ordem é o que dá profundidade sem
-  // sombra real, que o SVG não tem):
-  //   1. cone de direção   — para onde se vai
-  //   2. anel                — o "disco" das referências. É um CÍRCULO, não
-  //                          uma elipse: marcadores DOM são alinhados à tela e
-  //                          não recebem a perspectiva do mapa, então achatar
-  //                          para "deitar no chão" só produzia um círculo
-  //                          espremido que não casava com a inclinação real
-  //   3. sombra de contato — elipse escura sob a roda, ancora o veículo
-  //   4. veículo           — estrado, roda traseira com lanterna, coluna,
-  //                          guidão e o badge de raio
-  //
-  // LIMITE HONESTO: isto é vetor chapado. Não tem material, reflexo nem
-  // iluminação volumétrica do render 3D das referências — os gradientes
-  // fingem volume, não o calculam. Quando os PNGs existirem em
-  // public/markers/, eles substituem este desenho (ver riderMarker.ts).
-  el.innerHTML = `
-    <svg viewBox="0 0 76 76" class="absolute inset-0 h-full w-full" aria-hidden="true">
-      <defs>
-        <linearGradient id="gs-cone" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#35B7F7" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".62"/>
-        </linearGradient>
-        <radialGradient id="gs-ring-fill" cx="50%" cy="50%" r="50%">
-          <stop offset="55%" stop-color="#0E86C6" stop-opacity=".55"/>
-          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".18"/>
-        </radialGradient>
-        <linearGradient id="gs-deck" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#46536B"/>
-          <stop offset="100%" stop-color="#1C2432"/>
-        </linearGradient>
-        <linearGradient id="gs-stem" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#2A3444"/>
-          <stop offset="45%" stop-color="#525F76"/>
-          <stop offset="100%" stop-color="#222B39"/>
-        </linearGradient>
-        <filter id="gs-contact" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="2.2"/>
-        </filter>
-      </defs>
-
-      <path data-role="cone" d="M38 4 L58 32 A22 22 0 0 0 18 32 Z" fill="url(#gs-cone)"/>
-
-      <circle data-role="ring" cx="38" cy="44" r="19" fill="url(#gs-ring-fill)"/>
-      <circle data-role="ring-edge" cx="38" cy="44" r="19" fill="none" stroke="#FFFFFF" stroke-width="3"/>
-
-      <ellipse cx="38" cy="52" rx="10" ry="3.5" fill="#0F1729" opacity=".3" filter="url(#gs-contact)"/>
-
-      <g data-role="vehicle">
-        <rect x="32.6" y="35" width="10.8" height="19" rx="4.4" fill="url(#gs-deck)"/>
-        <rect x="34.6" y="36.4" width="6.8" height="8" rx="3" fill="#5A6980" opacity=".55"/>
-        <rect x="34.8" y="48.6" width="6.4" height="6.4" rx="2.6" fill="#151C27"/>
-        <rect x="36.2" y="50.6" width="3.6" height="2.4" rx="1.2" fill="#FF6A3D"/>
-        <rect x="36.1" y="20" width="3.8" height="17" rx="1.9" fill="url(#gs-stem)"/>
-        <rect x="24.4" y="18.4" width="27.2" height="4" rx="2" fill="#26303F"/>
-        <circle cx="25.2" cy="20.4" r="2.6" fill="#161D28"/>
-        <circle cx="50.8" cy="20.4" r="2.6" fill="#161D28"/>
-        <rect x="31.6" y="14.6" width="12.8" height="10" rx="3.2" fill="#0F1729" stroke="#35B7F7" stroke-width="1.1"/>
-        <path d="M39.4 16.6 35.6 20.4h2.5l-1.7 3.4 3.8-4.2h-2.4z" fill="#35B7F7"/>
-      </g>
-
-      <circle data-role="idle" cx="38" cy="44" r="10" fill="#FFFFFF" opacity="0"/>
-      <circle data-role="idle-core" cx="38" cy="44" r="6.5" fill="#0E86C6" opacity="0"/>
-    </svg>
-  `
-  return el
-}
-
-/**
- * Liga/desliga a afirmação de DIREÇÃO dentro do marcador.
- *
- * O marcador personalizado passa a ser usado durante toda a navegação — antes
- * ele exigia `headingDeg != null` e, como a direção só é liberada acima de
- * 3 km/h (e `coords.heading` vem null parado), na prática TODA navegação
- * começava mostrando o disco genérico. Era o bug relatado: "continuo vendo o
- * ponto azul".
- *
- * O que continua condicionado ao dado é a direção, não o marcador: sem
- * heading confiável, o cone e a seta somem e fica um núcleo redondo. Assim o
- * usuário nunca vê uma seta apontando para um lado que não medimos.
- */
-function setVehicleHeadingVisibility(element: HTMLElement, hasHeading: boolean) {
-  const set = (role: string, opacity: string) => {
-    const node = element.querySelector(`[data-role="${role}"]`) as SVGElement | null
-    if (node) node.style.opacity = opacity
-  }
-  // Sem rumo confiável some o CONE e some o VEÍCULO — um veículo desenhado
-  // apontando para algum lado afirmaria uma direção que não medimos. Sobra o
-  // anel no chão com um núcleo branco: "você está aqui, direção desconhecida".
-  set('cone', hasHeading ? '1' : '0')
-  set('vehicle', hasHeading ? '1' : '0')
-  // O fallback é um disco azul com aro branco — a mesma linguagem do marcador
-  // fora da navegação. Antes era só um círculo BRANCO dentro do anel branco,
-  // o que lia como gráfico quebrado em vez de "posição conhecida, direção não".
-  set('idle', hasHeading ? '0' : '1')
-  set('idle-core', hasHeading ? '0' : '1')
-}
-
-/**
- * Fallback: SEM direção confiável (parado, sinal fraco, navegação não
- * iniciada) o marcador volta a ser um disco com halo de precisão.
- *
- * Mantém a mesma linguagem visual do marcador de veículo — mesmo gradiente,
- * mesmo aro — mas sem a scooter e sem o cone de direção, porque desenhar um
- * veículo apontado para algum lado afirmaria uma orientação que não temos.
- */
-function createUserDotElement(): HTMLElement {
-  const el = document.createElement('div')
-  el.className = 'relative flex h-[96px] w-[96px] items-center justify-center'
-  // `RiderPuck`, estado 2D (handoff §5.2): halo pulsante de 96px, disco branco
-  // de 40px com núcleo azul de 30px e glyph de RAIO — identidade de mobilidade
-  // elétrica, não o ponto azul genérico de mapa.
-  //
-  // O cone de direção do handoff não é desenhado aqui: fora da navegação não
-  // temos rumo confiável (o heading do GPS só é liberado acima de 3 km/h), e
-  // um cone apontando para um lado arbitrário afirmaria direção que não
-  // medimos. Ele aparece no marcador de navegação, onde há rumo.
-  el.innerHTML = `
-    <svg viewBox="0 0 96 96" class="absolute inset-0 h-full w-full" aria-hidden="true">
-      <defs>
-        <filter id="gs-puck-shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F1729" flood-opacity=".22"/>
-        </filter>
-      </defs>
-      <circle cx="48" cy="48" r="48" fill="rgba(14,134,198,.16)">
-        <animate attributeName="r" values="41;70;70" dur="2.6s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values=".55;0;0" dur="2.6s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="48" cy="48" r="20" fill="#FFFFFF" filter="url(#gs-puck-shadow)"/>
-      <circle cx="48" cy="48" r="15" fill="#0E86C6"/>
-      <path d="M50.6 39.2 44.1 48.6h4.2l-2.9 8.2 6.5-9.4h-4.2z" fill="#FFFFFF"/>
-    </svg>
-  `
-  return el
-}

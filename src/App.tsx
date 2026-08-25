@@ -726,6 +726,8 @@ export default function App() {
         routeWarnings={routeWarnings}
         isRoutePreview={!activeScoredRoute && preview != null}
         isNavigating={isNavigationView}
+        // O marcador segue o veículo escolhido no Perfil / seletor de veículo.
+        vehicleModelId={preferences.vehicleModelId}
         followUser={isNavigationView && isFollowingUser}
         speedKmh={isNavigationView ? navigationSession.currentSpeedKmh : null}
         headingDeg={isNavigationView ? navigationSession.headingDeg : null}
