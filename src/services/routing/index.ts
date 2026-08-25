@@ -6,7 +6,11 @@ import { describeAvoidanceHit, evaluateAvoidances } from '@/services/routing/avo
 import { fetchRouteElevationProfile } from '@/services/routing/elevation'
 import { analyzeRouteSeverity } from '@/services/routing/segmentSeverity'
 import type { VehicleClassificationContext } from '@/services/routing/roadClassification'
-import { getUserPreferences, ROUTE_PREFERENCE_TOLERANCE } from '@/config/userPreferences'
+import {
+  ELEVATION_DEPENDENT_AVOIDANCES,
+  getUserPreferences,
+  ROUTE_PREFERENCE_TOLERANCE,
+} from '@/config/userPreferences'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
 
@@ -75,13 +79,20 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
     referenceSpeedKmh: preferences.referenceSpeedKmh,
   }
 
+  // A elevação só é consultada quando alguma preferência realmente depende
+  // dela. Sem isso, cada cálculo de rota disparava uma chamada de rede POR
+  // CANDIDATA (cinco candidatas = cinco chamadas) para um perfil que nenhuma
+  // outra parte do app lê — e o cálculo acontece bem mais do que parece: no
+  // preview automático ao escolher um destino e em cada "buscar alternativa".
+  const needsElevation = preferences.avoidances.some((id) => ELEVATION_DEPENDENT_AVOIDANCES.includes(id))
+
   const scored: ScoredRoute[] = await Promise.all(
     candidates.map(async (route) => {
       // Enriquecimento e elevação são independentes entre si: buscar em
       // paralelo evita somar os dois prazos no tempo de cálculo da rota.
       const [enrichedSegments, elevation] = await Promise.all([
         withDeadline(enrichRouteSegments(route), ENRICHMENT_DEADLINE_MS, route.segments),
-        withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null),
+        needsElevation ? withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null) : null,
       ])
       const enrichedRoute = { ...route, segments: enrichedSegments }
       // Enriquecimento entrega os MESMOS objetos de segmento quando falha.
@@ -107,6 +118,8 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
         /** Score já descontado das preferências — é ele que ordena o ranking. */
         preferenceScore: Math.max(0, suitabilityScore - avoidance.penaltyPoints),
         avoidanceHits: avoidance.hits,
+        // null também quando nenhuma preferência de inclinação está ativa —
+        // não é "falhou", é "não foi pedido" (ver needsElevation acima).
         elevation,
         severity: analyzeRouteSeverity(enrichedRoute, vehicle, isEnriched),
         eligibility,

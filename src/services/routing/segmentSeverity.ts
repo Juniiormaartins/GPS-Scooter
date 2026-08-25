@@ -184,12 +184,6 @@ function dominantRoadName(route: CandidateRoute, segmentIndexes: number[]): stri
   return best
 }
 
-export const SEVERITY_LABEL: Record<SegmentSeverity, string> = {
-  suitable: 'adequado',
-  attention: 'atenção',
-  critical: 'não recomendado',
-}
-
 /**
  * Frase de explicação de um trecho. Cita a via quando ela é conhecida —
  * "180 m na BR-153" é acionável; "180 m em via não recomendada" é abstrato.

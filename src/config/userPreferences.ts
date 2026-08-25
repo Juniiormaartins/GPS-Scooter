@@ -87,6 +87,17 @@ export const AVOIDANCE_OPTIONS: AvoidanceOption[] = [
 ]
 
 /**
+ * Preferências cuja detecção depende do perfil de elevação.
+ *
+ * Existe para o pipeline saber quando a consulta de elevação vale a pena. O
+ * perfil não alimenta mais nada hoje — nem pontuação, nem tela — então buscá-lo
+ * com as duas opções desmarcadas é uma chamada de rede POR ROTA CANDIDATA para
+ * um dado que ninguém lê. Se algum dia a elevação passar a alimentar outra
+ * coisa (ETA por inclinação, autonomia real), esta é a lista a revisar.
+ */
+export const ELEVATION_DEPENDENT_AVOIDANCES: AvoidanceId[] = ['steep-climbs', 'steep-descents']
+
+/**
  * Peso da preferência por veículo. A condição detectada é a mesma; o quanto
  * ela incomoda não é.
  *
