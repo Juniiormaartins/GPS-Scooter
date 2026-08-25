@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/Button'
 import { SuitabilityBar } from '@/components/route/SuitabilityBar'
 import { describeRun } from '@/services/routing/segmentSeverity'
 import { describeComparison, type RouteComparison } from '@/services/routing/alternatives'
@@ -10,8 +9,11 @@ interface AlternativeSheetProps {
   current: ScoredRoute
   alternative: ScoredRoute
   comparison: RouteComparison
-  onAccept: () => void
-  onKeep: () => void
+  /** Qual rota está valendo AGORA — a seleção é estado do App, não desta sheet. */
+  selected: 'current' | 'alternative'
+  /** Tocar num card já troca a rota desenhada no mapa. */
+  onSelect: (which: 'current' | 'alternative') => void
+  onDismiss: () => void
 }
 
 /**
@@ -27,9 +29,14 @@ interface AlternativeSheetProps {
  * — trocar o trajeto sob os pés dele sem aviso é pior do que não oferecer
  * alternativa nenhuma. Aqui ele compara e decide.
  */
-export function AlternativeSheet({ current, alternative, comparison, onAccept, onKeep }: AlternativeSheetProps) {
-  /** Começa na rota ATUAL: não decidir mantém o que já está sendo seguido. */
-  const [selected, setSelected] = useState<'current' | 'alternative'>('current')
+export function AlternativeSheet({
+  current,
+  alternative,
+  comparison,
+  selected,
+  onSelect,
+  onDismiss,
+}: AlternativeSheetProps) {
   const [showDetails, setShowDetails] = useState(false)
 
   const chosen = selected === 'current' ? current : alternative
@@ -37,6 +44,19 @@ export function AlternativeSheet({ current, alternative, comparison, onAccept, o
 
   return (
     <>
+      {/*
+        Fechar pela área do mapa: sem botões de confirmação, é o toque fora que
+        encerra a comparação. O que estiver selecionado no momento é o que fica
+        valendo — e o padrão é a rota ATUAL, então não decidir nada mantém o
+        trajeto que já estava sendo seguido.
+      */}
+      <button
+        type="button"
+        aria-label="Fechar comparação de rotas"
+        onClick={onDismiss}
+        className="pointer-events-auto absolute inset-0 z-20"
+      />
+
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,env(safe-area-inset-top))]">
         <span className="rounded-pill bg-nav-surface px-4 py-2 text-[13px] font-extrabold text-nav-content shadow-float">
           Comparando alternativas · navegação pausada
@@ -53,7 +73,7 @@ export function AlternativeSheet({ current, alternative, comparison, onAccept, o
             route={current}
             reason="Rota atual"
             selected={selected === 'current'}
-            onSelect={() => setSelected('current')}
+            onSelect={() => onSelect('current')}
           />
           <RouteCompareCard
             route={alternative}
@@ -65,20 +85,21 @@ export function AlternativeSheet({ current, alternative, comparison, onAccept, o
                   : 'Alternativa'
             }
             selected={selected === 'alternative'}
-            onSelect={() => setSelected('alternative')}
+            onSelect={() => onSelect('alternative')}
             deltas={deltas}
           />
         </div>
 
         {/*
-          "Ver detalhes" expande os TRECHOS da rota escolhida — é a pergunta
-          que sobra depois de ver a barra: "onde exatamente está o problema?".
+          Rodapé recuado com "Ver detalhes" CENTRALIZADO, como no handoff.
+          Expande os TRECHOS da rota escolhida — é a pergunta que sobra depois
+          de ver a barra: "onde exatamente está o problema?".
         */}
-        <div className="mt-3 rounded-tile bg-surface-sunken px-3.5 py-2.5">
+        <div className="mt-3 rounded-tile bg-surface-sunken px-3.5 py-3">
           <button
             type="button"
             onClick={() => setShowDetails((value) => !value)}
-            className="flex w-full items-center justify-between gap-2 text-[14px] font-extrabold text-brand-500 transition-all duration-fast active:scale-[.97]"
+            className="flex w-full items-center justify-center gap-1.5 text-[15px] font-extrabold text-brand-500 transition-all duration-fast active:scale-[.97]"
           >
             Ver detalhes
             <svg
@@ -95,7 +116,7 @@ export function AlternativeSheet({ current, alternative, comparison, onAccept, o
           </button>
 
           {showDetails && (
-            <ul className="mt-2.5 flex flex-col gap-1.5">
+            <ul className="mt-3 flex flex-col gap-1.5">
               {chosen.severity.runs.length === 0 ? (
                 <li className="text-[13px] font-semibold text-content-secondary">
                   Nenhum trecho de atenção nesta rota.
@@ -114,15 +135,6 @@ export function AlternativeSheet({ current, alternative, comparison, onAccept, o
               )}
             </ul>
           )}
-        </div>
-
-        <div className="mt-4 flex gap-2.5">
-          <Button variant="secondary" size="md" onClick={onKeep} className="max-w-[150px]">
-            Manter atual
-          </Button>
-          <Button variant="primary" size="md" onClick={selected === 'alternative' ? onAccept : onKeep}>
-            {selected === 'alternative' ? 'Trocar rota' : 'Continuar'}
-          </Button>
         </div>
       </div>
     </>
@@ -157,7 +169,9 @@ function RouteCompareCard({
             <path d="M11 20A7 7 0 0 1 4 13c0-5 4-9 16-9 0 10-5 16-9 16Z" />
             <path d="M4 20c2-6 6-9 11-10" />
           </svg>
-          <span className="truncate text-[13px] font-bold text-content-secondary">{reason}</span>
+          <span className={`truncate text-[13px] font-bold ${selected ? 'text-brand-500' : 'text-content-secondary'}`}>
+            {reason}
+          </span>
         </div>
 
         <div className="mt-1 flex items-baseline gap-2.5">

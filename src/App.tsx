@@ -72,7 +72,13 @@ export default function App() {
   const [isSearchingAlternative, setIsSearchingAlternative] = useState(false)
   const [navigationNotice, setNavigationNotice] = useState<string | null>(null)
   /** Alternativa encontrada e ainda não decidida pelo usuário. */
-  const [alternative, setAlternative] = useState<{ route: ScoredRoute; comparison: RouteComparison } | null>(null)
+  const [alternative, setAlternative] = useState<{
+    route: ScoredRoute
+    comparison: RouteComparison
+    /** Rota que estava valendo quando a comparação abriu — para poder voltar a ela. */
+    original: ScoredRoute
+    applied: boolean
+  } | null>(null)
   const [isFollowingUser, setIsFollowingUser] = useState(true)
   const [sheetSnap, setSheetSnap] = useState<SheetSnapPoint>('half')
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
@@ -412,7 +418,12 @@ export default function App() {
         return
       }
 
-      setAlternative({ route: picked, comparison: compareRoutes(activeScoredRoute, picked) })
+      setAlternative({
+        route: picked,
+        comparison: compareRoutes(activeScoredRoute, picked),
+        original: activeScoredRoute,
+        applied: false,
+      })
     } catch {
       showNavigationNotice('Não foi possível buscar uma alternativa agora.')
     } finally {
@@ -420,14 +431,22 @@ export default function App() {
     }
   }
 
-  /** Aceita a sugestão: a alternativa vira a rota ativa e a navegação continua sem interrupção. */
-  function handleAcceptAlternative() {
+  /**
+   * Troca de rota DENTRO da comparação.
+   *
+   * Tocar num card aplica na hora — é assim que o handoff (tela 05) define, e
+   * é seguro porque a ação é imediatamente reversível tocando no outro card.
+   * Não há botão de confirmar: o que estiver aplicado quando a sheet fechar é
+   * o que fica valendo, e o padrão é a rota atual.
+   */
+  function handleSelectAlternative(which: 'current' | 'alternative') {
     if (!alternative) return
-    setRouteResult({ selected: alternative.route, alternatives: [] })
-    setActiveRouteId(alternative.route.route.id)
-    setAlternative(null)
-    // O trajeto mudou: o que estava na fila de voz descreve manobras que não
-    // existem mais. `useVoiceGuidance` já limpa a fila ao ver outra rota.
+    const chosen = which === 'alternative' ? alternative.route : alternative.original
+    setRouteResult({ selected: chosen, alternatives: [] })
+    setActiveRouteId(chosen.route.id)
+    setAlternative({ ...alternative, applied: which === 'alternative' })
+    // O trajeto mudou: `useVoiceGuidance` limpa a fila ao ver outra rota, e o
+    // desvio pendente deixa de valer para a rota nova.
     navigationSession.acknowledgeRecalculation()
   }
 
@@ -731,11 +750,12 @@ export default function App() {
 
         {alternative && (
           <AlternativeSheet
-            current={activeScoredRoute}
+            current={alternative.original}
             alternative={alternative.route}
             comparison={alternative.comparison}
-            onAccept={handleAcceptAlternative}
-            onKeep={() => setAlternative(null)}
+            selected={alternative.applied ? 'alternative' : 'current'}
+            onSelect={handleSelectAlternative}
+            onDismiss={() => setAlternative(null)}
           />
         )}
         </>
