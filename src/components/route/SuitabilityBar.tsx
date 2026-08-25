@@ -1,4 +1,4 @@
-import type { RouteSeverityAnalysis } from '@/services/routing/segmentSeverity'
+import type { RouteSeverityAnalysis, RouteSeverityBreakdown } from '@/services/routing/segmentSeverity'
 import { formatDistance } from '@/utils/geo'
 
 /**
@@ -23,20 +23,31 @@ const BLOCK_COLOR = {
   critical: 'bg-danger-500',
 } as const
 
-export function SuitabilityBar({ severity }: { severity: RouteSeverityAnalysis }) {
+export function SuitabilityBar({
+  severity,
+  breakdown: breakdownOverride,
+  compact = false,
+}: {
+  severity: RouteSeverityAnalysis
+  /** Sobrepõe a composição da rota inteira — usado para mostrar só o trecho restante. */
+  breakdown?: RouteSeverityBreakdown
+  /** Versão de uma linha, para caber dentro do painel de navegação. */
+  compact?: boolean
+}) {
   if (!severity.isReliable) return null
 
-  const { breakdown } = severity
+  const breakdown = breakdownOverride ?? severity.breakdown
   const total = breakdown.totalMeters
   if (total <= 0) return null
 
   // Distribui os blocos por proporção, garantindo ao menos UM bloco para
   // qualquer categoria presente — 200 m de trecho crítico em 15 km some no
   // arredondamento, e some justamente a informação que mais importa.
-  const share = (meters: number) => (meters <= 0 ? 0 : Math.max(1, Math.round((meters / total) * BLOCK_COUNT)))
+  const blockCount = compact ? 16 : BLOCK_COUNT
+  const share = (meters: number) => (meters <= 0 ? 0 : Math.max(1, Math.round((meters / total) * blockCount)))
   const critical = share(breakdown.criticalMeters)
   const attention = share(breakdown.attentionMeters)
-  const suitable = Math.max(0, BLOCK_COUNT - critical - attention)
+  const suitable = Math.max(0, blockCount - critical - attention)
 
   const blocks: (keyof typeof BLOCK_COLOR)[] = [
     ...Array<'suitable'>(suitable).fill('suitable'),
@@ -53,7 +64,10 @@ export function SuitabilityBar({ severity }: { severity: RouteSeverityAnalysis }
       )} de atenção, ${formatDistance(breakdown.criticalMeters)} não recomendados`}
     >
       {blocks.map((kind, index) => (
-        <span key={index} className={`h-[9px] flex-1 rounded-[3px] ${BLOCK_COLOR[kind]}`} />
+        <span
+          key={index}
+          className={`flex-1 rounded-[3px] ${compact ? 'h-[6px]' : 'h-[9px]'} ${BLOCK_COLOR[kind]}`}
+        />
       ))}
     </div>
   )

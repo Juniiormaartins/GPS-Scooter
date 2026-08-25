@@ -1,4 +1,4 @@
-import { RouteBreakdown } from '@/components/route/RouteBreakdown'
+import { SuitabilityBar, SuitabilitySummary } from '@/components/route/SuitabilityBar'
 import { Button } from '@/components/ui/Button'
 import { SectionLabel, Tag } from '@/components/ui/primitives'
 import type { Eligibility, ScoredRoute } from '@/types/routing'
@@ -110,38 +110,65 @@ function RouteOptionCard({
   const tone = ELIGIBILITY_TONE[scoredRoute.eligibility]
   const reason = scoredRoute.highlights[0]
 
+  /*
+    CARD COMPACTO. A versão anterior dava o mesmo peso a todas as candidatas —
+    selo, motivo em 16px, barra e resumo em cada uma —, e com três rotas a
+    lista não cabia na tela sem rolar. Comparar exige ver as opções LADO A
+    LADO; se é preciso rolar entre elas, a comparação se perde.
+
+    A hierarquia agora é: toda candidata mostra o essencial para comparar
+    (tempo, distância, composição do trajeto). Só a SELECIONADA se expande com
+    o motivo por extenso e os trechos citados um a um — que é a informação de
+    quem já escolheu e quer conferir.
+  */
   return (
     <button
       type="button"
       onClick={onSelect}
-      // `items-start`: com a composição por trecho embaixo, a coluna da
-      // esquerda ficou alta e o ETA centralizado colidia com a barra. Ancorado
-      // no topo, ele fica na mesma linha do selo, que é onde se espera lê-lo.
-      className={`flex w-full items-start gap-4 rounded-lg px-card py-3.5 text-left transition-all duration-base ease-standard ${
-        isSelected ? 'border-2 border-brand-500 bg-surface-raised' : 'border border-hairline/10 bg-surface-sunken'
+      className={`flex w-full items-center gap-3.5 rounded-xl px-3.5 py-3 text-left transition-all duration-base ease-standard active:scale-[.97] ${
+        isSelected ? 'border-2 border-brand-500 bg-[#F7FBFE]' : 'border border-hairline/[.08] bg-surface-card'
       }`}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <Tag tone={tone}>{scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}</Tag>
-          <span className="text-body font-semibold text-content-secondary">
+          <span className="text-[12.5px] font-bold text-content-tertiary">
+            {scoredRoute.suitabilityScore}% adequada
+          </span>
+        </div>
+
+        <div className="mt-1 flex items-baseline gap-2.5">
+          <span className="text-metric-card text-content-primary">{formatEta(scoredRoute.etaMinutes)}</span>
+          <span className="text-[17px] font-semibold text-content-secondary">
             {formatDistance(scoredRoute.route.totalDistanceMeters)}
           </span>
-          <span className="text-body font-semibold text-content-tertiary">{scoredRoute.suitabilityScore}/100</span>
         </div>
-        {reason && (
-          <p className={`mt-1.5 text-[16px] ${isSelected ? 'text-content-primary' : 'text-content-secondary'}`}>{reason}</p>
+
+        <div className="mt-2">
+          <SuitabilityBar severity={scoredRoute.severity} compact={!isSelected} />
+        </div>
+
+        {/* Só a selecionada explica: nas outras isso viraria parede de texto. */}
+        {isSelected && (
+          <>
+            {reason && <p className="mt-2 text-[13.5px] font-semibold text-content-secondary">{reason}</p>}
+            <div className="mt-1">
+              <SuitabilitySummary severity={scoredRoute.severity} />
+            </div>
+          </>
         )}
-        {/* A composição por trecho aparece em TODOS os cards — é justamente ao
-            comparar alternativas que ela decide a escolha. Os trechos citados
-            um a um ficam só na selecionada, para os outros cards não virarem
-            parede de texto. */}
-        <RouteBreakdown severity={scoredRoute.severity} compact={!isSelected} />
       </div>
+
       <span
-        className={`shrink-0 whitespace-nowrap pt-0.5 text-metric ${isSelected ? 'text-content-primary' : 'text-content-secondary'}`}
+        className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-pill ${
+          isSelected ? 'bg-brand-500 text-white' : 'border-2 border-hairline/[.14]'
+        }`}
       >
-        {formatEta(scoredRoute.etaMinutes)}
+        {isSelected && (
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth={3}>
+            <path d="M5 12l4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
       </span>
     </button>
   )

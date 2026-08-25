@@ -195,3 +195,42 @@ export function describeRun(run: SeverityRun): string {
     ? `${distance}${where} em via não recomendada para o seu veículo.`
     : `${distance}${where} exigem atenção.`
 }
+
+/**
+ * Composição do trecho que AINDA FALTA, a partir da distância já percorrida.
+ *
+ * Existe porque durante a navegação a composição da rota inteira mente por
+ * omissão: faltando 800 m de um percurso de 15 km, uma barra dizendo "1,2 km
+ * em atenção" descreve algo que em grande parte já ficou para trás. O que
+ * importa em movimento é o que vem pela frente.
+ *
+ * Segmentos parcialmente percorridos entram só com a fração restante — cortar
+ * o segmento inteiro faria a barra pular a cada junção.
+ */
+export function remainingSeverity(
+  analysis: RouteSeverityAnalysis,
+  distanceTraveledMeters: number,
+): RouteSeverityBreakdown {
+  const breakdown: RouteSeverityBreakdown = {
+    suitableMeters: 0,
+    attentionMeters: 0,
+    criticalMeters: 0,
+    totalMeters: 0,
+  }
+
+  let cursor = 0
+  for (const segment of analysis.segments) {
+    const end = cursor + segment.distanceMeters
+    cursor = end
+
+    const remaining = Math.min(segment.distanceMeters, Math.max(0, end - distanceTraveledMeters))
+    if (remaining <= 0) continue
+
+    if (segment.severity === 'critical') breakdown.criticalMeters += remaining
+    else if (segment.severity === 'attention') breakdown.attentionMeters += remaining
+    else breakdown.suitableMeters += remaining
+    breakdown.totalMeters += remaining
+  }
+
+  return breakdown
+}

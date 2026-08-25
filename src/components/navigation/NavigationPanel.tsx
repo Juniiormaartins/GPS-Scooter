@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { LOW_ACCURACY_THRESHOLD_METERS, type GeolocationSample } from '@/hooks/useGeolocation'
 import type { NavigationProgress } from '@/services/navigation/progress'
+import { SuitabilityBar } from '@/components/route/SuitabilityBar'
+import { remainingSeverity } from '@/services/routing/segmentSeverity'
 import type { ManeuverType, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
 
@@ -73,6 +75,14 @@ export function NavigationPanel({
   const remainingDistanceMeters = progress?.remainingDistanceMeters ?? route.totalDistanceMeters
   const remainingDurationMinutes = progress?.remainingDurationMinutes ?? etaMinutes
   const lowAccuracy = gpsSample ? gpsSample.accuracyMeters > LOW_ACCURACY_THRESHOLD_METERS : false
+
+  /**
+   * Composição do que AINDA FALTA. A da rota inteira mentiria por omissão em
+   * movimento: faltando 800 m de 15 km, "1,2 km em atenção" descreveria em
+   * grande parte um trecho já percorrido.
+   */
+  const remaining = progress ? remainingSeverity(scoredRoute.severity, progress.distanceTraveledMeters) : null
+  const remainingAtRisk = remaining ? remaining.attentionMeters + remaining.criticalMeters : 0
 
   return (
     <>
@@ -190,6 +200,25 @@ export function NavigationPanel({
             <p className="mt-1 truncate text-[14px] font-semibold text-nav-content-secondary">
               {formatDistance(remainingDistanceMeters)} · chegada {arrivalTime(remainingDurationMinutes)}
             </p>
+
+            {/*
+              ADEQUAÇÃO DO QUE FALTA. Este app existe para dizer se a via serve
+              ao veículo, e essa informação estava ausente justamente na tela em
+              que o usuário está EM CIMA das vias avaliadas — o dado já chegava
+              aqui em `scoredRoute.severity` e não era usado.
+              Uma barra, não uma porcentagem: "87%" não é acionável em
+              movimento; ver que falta um bloco âmbar à frente é.
+            */}
+            {remaining && remaining.totalMeters > 0 && (
+              <div className="mt-2.5 flex flex-col gap-1">
+                <SuitabilityBar severity={scoredRoute.severity} breakdown={remaining} compact />
+                <p className="truncate text-[12px] font-semibold text-nav-content-secondary">
+                  {remainingAtRisk > 0
+                    ? `${formatDistance(remainingAtRisk)} de atenção pela frente`
+                    : 'Restante todo em vias adequadas'}
+                </p>
+              </div>
+            )}
           </div>
 
           {onFindAlternative && (
