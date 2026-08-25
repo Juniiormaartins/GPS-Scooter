@@ -5,6 +5,7 @@ import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
+import { applyPoiIcons } from '@/components/map/poiIcons'
 import {
   hasRiderSprites,
   MIN_LEGIBLE_SPRITE_PX,
@@ -502,6 +503,7 @@ export function MapView({
       layersReady = true
       applyCartography(map, themeRef.current)
       refineCartography(map, themeRef.current)
+      void applyPoiIcons(map, themeRef.current)
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -736,6 +738,7 @@ export function MapView({
     const applyTheme = () => {
       applyCartography(map, theme)
       refineCartography(map, theme)
+      void applyPoiIcons(map, theme)
 
       // As camadas de rota do app também trocam de paleta: os tons do tema
       // escuro (ciano/verde vivos) perdem contraste sobre um mapa claro.
