@@ -95,6 +95,17 @@ export interface RouteStep {
   point: LngLat
   /** Distância acumulada desde o início da rota até este ponto de manobra. */
   cumulativeDistanceMeters: number
+  /**
+   * Textos de VOZ do provedor, quando ele os fornece (o Valhalla fornece).
+   *
+   * São melhores que qualquer frase montada aqui: já vêm com a contagem de
+   * saída de rotatória, o encadeamento ("Então, vire à esquerda") e a
+   * localização correta. `verbalPost` é o que preenche os silêncios longos —
+   * é literalmente "Continue por 800 metros".
+   */
+  verbalAlert?: string
+  verbalPre?: string
+  verbalPost?: string
 }
 
 export interface CandidateRoute {

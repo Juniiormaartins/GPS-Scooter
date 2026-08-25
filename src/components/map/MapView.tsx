@@ -467,7 +467,23 @@ export function MapView({
     map.on('dragstart', notifyUserInteraction)
     map.on('zoomstart', notifyUserInteraction)
 
-    map.on('load', () => {
+    /**
+     * As camadas do app são criadas quando o ESTILO fica pronto, não no evento
+     * `load`.
+     *
+     * `load` só dispara quando o estilo E os primeiros tiles carregam. Com o
+     * provedor de tiles limitando requisições (429 — observado em execução), o
+     * evento nunca vinha e o app ficava SEM NENHUMA camada de rota: nem
+     * traçado, nem trechos coloridos, nem marcadores. O mapa base não aparecer
+     * é um problema de rede; a rota não aparecer por causa disso é um problema
+     * nosso, e é o que este trecho conserta.
+     *
+     * `styledata` dispara mais de uma vez, daí a trava.
+     */
+    let layersReady = false
+    const setUpAppLayers = () => {
+      if (layersReady || !map.getStyle()) return
+      layersReady = true
       applyCartography(map, themeRef.current)
       refineCartography(map, themeRef.current)
 
@@ -630,7 +646,10 @@ export function MapView({
       }
 
       onMapReady?.(map)
-    })
+    }
+
+    if (map.isStyleLoaded()) setUpAppLayers()
+    else map.on('styledata', setUpAppLayers)
 
     mapRef.current = map
     return () => {
@@ -808,8 +827,11 @@ export function MapView({
       if (!map.getLayer(layerId)) return
       map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
     }
-    setVisibility(ROUTE_LAYER_ID, !showingOptions)
-    setVisibility(ROUTE_CASING_LAYER_ID, !showingOptions)
+    // A rota ATIVA aparece sempre, pela camada segmentada — é ela que carrega
+    // as cores por trecho. As candidatas convivem com ela, desenhadas por
+    // baixo e sem incluir a ativa (ver routeOptions em App.tsx).
+    setVisibility(ROUTE_LAYER_ID, true)
+    setVisibility(ROUTE_CASING_LAYER_ID, true)
     setVisibility(ROUTE_OPTIONS_LAYER_ID, showingOptions)
     setVisibility(ROUTE_OPTIONS_DASHED_LAYER_ID, showingOptions)
     setVisibility(ROUTE_OPTIONS_HIT_LAYER_ID, showingOptions)
@@ -831,35 +853,6 @@ export function MapView({
       geometry: { type: 'LineString', coordinates },
     })
 
-    const segmentSource = map.getSource(ROUTE_SEGMENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
-    if (segmentSource) {
-      const usable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
-      segmentSource.setData({
-        type: 'FeatureCollection',
-        // Sem classificação por trecho (rota sem segmentos, enriquecimento que
-        // não respondeu), desenha a rota inteira como adequada em vez de
-        // deixar o mapa sem traçado — e "adequada" aqui é o padrão honesto:
-        // não afirmamos problema onde não temos dado.
-        features: usable.length
-          ? usable.map((segment) => ({
-              type: 'Feature' as const,
-              properties: { severity: segment.severity },
-              geometry: {
-                type: 'LineString' as const,
-                coordinates: segment.path.map((point) => [point.lng, point.lat]),
-              },
-            }))
-          : coordinates.length >= 2
-            ? [
-                {
-                  type: 'Feature' as const,
-                  properties: { severity: 'suitable' },
-                  geometry: { type: 'LineString' as const, coordinates },
-                },
-              ]
-            : [],
-      })
-    }
 
     // Centraliza e enquadra a câmera na rota recém-calculada, com respiro para
     // não ficar escondida atrás do cabeçalho de busca (topo) e do RoutePanel (base).
@@ -874,6 +867,57 @@ export function MapView({
       fitToBounds(map, bounds, { top: 220, bottom: 220, left: 48, right: 48 }, { duration: 600 })
     }
   }, [routeGeometry, routeOptions.length])
+
+  /**
+   * TRECHOS COLORIDOS da rota ativa.
+   *
+   * Efeito PRÓPRIO, e isso é o conserto de dois bugs que juntos faziam os
+   * trechos não recomendados nunca aparecerem no mapa:
+   *
+   * 1. Este `setData` vivia dentro do efeito da rota única, que começa com
+   *    `if (routeOptions.length > 0) return`. Na tela de ESCOLHA de rota há
+   *    candidatas, então o efeito saía cedo e a fonte segmentada nunca era
+   *    preenchida — os trechos só poderiam aparecer durante a navegação.
+   * 2. As dependências eram `[routeGeometry, routeOptions.length]`. Quando a
+   *    classificação chega depois (ver enrichRouteResult), a GEOMETRIA não
+   *    muda — só os segmentos —, então o efeito não re-rodava e a cor nunca
+   *    era aplicada.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    const segmentSource = map?.getSource(ROUTE_SEGMENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (!map || !segmentSource) return
+
+    const usable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
+    const fallback: [number, number][] = (routeGeometry ?? []).map((point) => [point.lng, point.lat])
+
+    segmentSource.setData({
+      type: 'FeatureCollection',
+      // Sem classificação por trecho (ainda chegando, ou provedor sem
+      // resposta), desenha a rota inteira como adequada em vez de deixar o
+      // mapa sem traçado — "adequada" aqui é ausência de dado, e é por isso
+      // que o painel diz explicitamente que a classificação não está
+      // disponível em vez de a cor afirmar sozinha.
+      features: usable.length
+        ? usable.map((segment) => ({
+            type: 'Feature' as const,
+            properties: { severity: segment.severity },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: segment.path.map((point) => [point.lng, point.lat]),
+            },
+          }))
+        : fallback.length >= 2
+          ? [
+              {
+                type: 'Feature' as const,
+                properties: { severity: 'suitable' },
+                geometry: { type: 'LineString' as const, coordinates: fallback },
+              },
+            ]
+          : [],
+    })
+  }, [routeSeveritySegments, routeGeometry])
 
   // Múltiplas candidatas simultâneas — uma linha colorida por elegibilidade
   // para cada rota, enquadrando a câmera em todas de uma vez (não só a ativa).

@@ -104,7 +104,11 @@ export function useGeolocation() {
     setState((prev) => ({ ...prev, isLocating: true, error: null }))
     watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
-      maximumAge: 2000,
+      // `maximumAge: 2000` autorizava o navegador a devolver uma posição de
+      // até 2 segundos atrás — e ele devolve, para poupar bateria. Numa
+      // desaceleração isso é meia frenagem de atraso na velocidade exibida.
+      // 0 obriga leitura nova a cada amostra.
+      maximumAge: 0,
       timeout: 15000,
     })
   }, [handleSuccess, handleError])

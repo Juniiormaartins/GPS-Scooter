@@ -17,7 +17,17 @@ import type { CandidateRoute, RouteStep } from '@/types/routing'
  * detecção de desvio de rota.
  */
 
-const OFF_ROUTE_THRESHOLD_METERS = 40
+/**
+ * Distância perpendicular a partir da qual a posição é considerada fora da
+ * rota.
+ *
+ * Era 40 m, que é largo demais: numa malha urbana as quadras têm 60–100 m, e
+ * 40 m de folga cobre boa parte da rua paralela — entrar na via errada não
+ * disparava nada até estar bem adiantado nela. 22 m ainda absorve a imprecisão
+ * típica de GPS urbano (8–15 m) somada à largura de uma avenida, sem cobrir a
+ * quadra vizinha.
+ */
+const OFF_ROUTE_THRESHOLD_METERS = 22
 const ARRIVAL_THRESHOLD_METERS = 20
 
 export interface NavigationProgress {

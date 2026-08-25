@@ -38,6 +38,12 @@ export function AlternativeSheet({
   onDismiss,
 }: AlternativeSheetProps) {
   const [showDetails, setShowDetails] = useState(false)
+  /**
+   * Sheet recolhida: só os dois cards, sem o rodapé de detalhes. Serve para
+   * liberar a metade de baixo do mapa enquanto o usuário compara os traçados —
+   * é o mesmo motivo de não haver scrim.
+   */
+  const [collapsed, setCollapsed] = useState(false)
 
   const chosen = selected === 'current' ? current : alternative
   const deltas = describeComparison(comparison)
@@ -45,26 +51,37 @@ export function AlternativeSheet({
   return (
     <>
       {/*
-        Fechar pela área do mapa: sem botões de confirmação, é o toque fora que
-        encerra a comparação. O que estiver selecionado no momento é o que fica
-        valendo — e o padrão é a rota ATUAL, então não decidir nada mantém o
-        trajeto que já estava sendo seguido.
+        NÃO existe scrim cobrindo o mapa aqui.
+        
+        Antes havia um `<button>` de tela inteira servindo de "toque fora para
+        fechar", e ele engolia todo arrasto, pinça e rotação — a tela dizia
+        "comparando alternativas" enquanto tornava impossível comparar coisa
+        alguma. Comparar trajetos EXIGE mexer no mapa: afastar para ver as duas
+        rotas inteiras, aproximar num cruzamento, seguir cada traçado com o
+        dedo. Fechar é papel do botão explícito abaixo.
       */}
-      <button
-        type="button"
-        aria-label="Fechar comparação de rotas"
-        onClick={onDismiss}
-        className="pointer-events-auto absolute inset-0 z-20"
-      />
-
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,env(safe-area-inset-top))]">
-        <span className="rounded-pill bg-nav-surface px-4 py-2 text-[13px] font-extrabold text-nav-content shadow-float">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="pointer-events-auto flex items-center gap-2 rounded-pill bg-nav-surface px-4 py-2 text-[13px] font-extrabold text-nav-content shadow-float transition-all duration-fast active:scale-[.97]"
+        >
           Comparando alternativas · navegação pausada
-        </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
       </div>
 
       <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet">
-        <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-surface-handle" />
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          aria-label={collapsed ? 'Expandir comparação' : 'Recolher para ver o mapa'}
+          className="mx-auto mb-4 flex h-6 w-full items-center justify-center"
+        >
+          <span className="h-[5px] w-11 rounded-pill bg-surface-handle" />
+        </button>
 
         <h2 className="text-sheet-title-sm text-content-primary">Rota alternativa encontrada</h2>
 
@@ -90,6 +107,8 @@ export function AlternativeSheet({
           />
         </div>
 
+        {!collapsed && (
+        <>
         {/*
           Rodapé recuado com "Ver detalhes" CENTRALIZADO, como no handoff.
           Expande os TRECHOS da rota escolhida — é a pergunta que sobra depois
@@ -136,6 +155,8 @@ export function AlternativeSheet({
             </ul>
           )}
         </div>
+        </>
+        )}
       </div>
     </>
   )

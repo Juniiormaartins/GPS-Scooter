@@ -1,6 +1,7 @@
 import { env, isRoutingConfigured } from '@/config/env'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, ManeuverType, RouteRequest, RouteSegment, RouteStep } from '@/types/routing'
+import { normalizeInstruction } from '@/services/routing/instructions'
 
 /**
  * Camada de integração com o provedor externo de roteamento.
@@ -178,6 +179,16 @@ interface ValhallaManeuver {
   length: number
   begin_shape_index: number
   end_shape_index: number
+  /**
+   * Textos prontos para VOZ. O Valhalla os produz em três estágios (aviso
+   * antecipado, momento da manobra, depois da manobra), que é exatamente a
+   * estrutura que uma navegação falada precisa.
+   */
+  verbal_transition_alert_instruction?: string
+  verbal_pre_transition_instruction?: string
+  verbal_post_transition_instruction?: string
+  /** Número da saída da rotatória — dado estruturado, não texto. */
+  roundabout_exit_count?: number
 }
 
 interface ValhallaLeg {
@@ -260,13 +271,28 @@ function valhallaTripToCandidateRoute(trip: ValhallaTrip, id: string): Candidate
 
     segments.push({ path: path.length >= 2 ? path : geometry.slice(maneuver.begin_shape_index, maneuver.begin_shape_index + 2), distanceMeters, roadClass: 'unknown', roadName })
 
+    // A locale pt-BR do Valhalla é incompleta para rotatórias com nome — ele
+    // cai no template em inglês. `normalizeInstruction` reescreve a moldura
+    // usando `roundabout_exit_count`, que é dado estruturado (ver instructions.ts).
+    const exitCount = maneuver.roundabout_exit_count ?? null
+    const instruction = normalizeInstruction(maneuver.instruction, exitCount)
+
     steps.push({
       maneuver: maneuverTypeFromInstruction(maneuver.instruction, index === 0, index === leg.maneuvers.length - 1),
-      instruction: maneuver.instruction,
+      instruction,
       roadName,
       distanceMeters,
       point: path[0] ?? geometry[maneuver.begin_shape_index] ?? geometry[0],
       cumulativeDistanceMeters,
+      verbalAlert: maneuver.verbal_transition_alert_instruction
+        ? normalizeInstruction(maneuver.verbal_transition_alert_instruction, exitCount)
+        : undefined,
+      verbalPre: maneuver.verbal_pre_transition_instruction
+        ? normalizeInstruction(maneuver.verbal_pre_transition_instruction, exitCount)
+        : undefined,
+      verbalPost: maneuver.verbal_post_transition_instruction
+        ? normalizeInstruction(maneuver.verbal_post_transition_instruction, exitCount)
+        : undefined,
     })
     cumulativeDistanceMeters += distanceMeters
   })

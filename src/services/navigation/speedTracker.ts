@@ -43,20 +43,62 @@ const STATIONARY_THRESHOLD_MPS = 0.7 // ≈ 2,5 km/h
 /** Acima disso é claramente erro de leitura para os veículos deste app. */
 const IMPLAUSIBLE_SPEED_MPS = 33 // ≈ 120 km/h
 
-/** Peso da amostra nova na média exponencial. Baixo = mais estável, alto = mais reativo. */
-const SMOOTHING_FACTOR = 0.35
+/**
+ * Suavização ASSIMÉTRICA: a queda acompanha mais rápido que a subida.
+ *
+ * O relato de teste real foi preciso — num ônibus freando, o número ficava
+ * parado em ~20 km/h e caía direto para 0. Duas causas, ambas aqui:
+ *
+ * 1. Um fator único de 0,35 para os dois sentidos. Vindo de 20 km/h, cada
+ *    amostra só andava um terço do caminho, e a desaceleração inteira (uns 5
+ *    segundos) cabia em poucas amostras — o número mal saía do lugar.
+ * 2. O clamp de "parado" pulava a suavização e ia direto a zero, produzindo o
+ *    degrau final.
+ *
+ * Frear é informação de segurança e é real; uma subida repentina é mais
+ * provavelmente ruído. Daí a assimetria: 0,6 descendo, 0,35 subindo.
+ */
+const SMOOTHING_UP = 0.35
+const SMOOTHING_DOWN = 0.6
+
+/** Abaixo disso na tela, mostra 0: 1 km/h não é informação, é ruído residual. */
+const DISPLAY_ZERO_BELOW_KMH = 1.5
+
+/**
+ * Variação máxima plausível de velocidade, em m/s².
+ *
+ * Um teto de velocidade ABSOLUTA não serve aqui: o usuário pode estar num
+ * ônibus a 60 km/h, e isso é legítimo. O que não é legítimo é CHEGAR lá num
+ * segundo. Uma leitura isolada de 60 km/h vinda de 18 empurrava a tela para 33
+ * (medido) — não porque 60 seja impossível, mas porque a aceleração seria.
+ *
+ * 4 m/s² é aceleração vigorosa de automóvel; frear chega a 8 em situação de
+ * emergência. Daí os dois limites serem diferentes: a física é assimétrica.
+ */
+const MAX_ACCELERATION_MPS2 = 4
+const MAX_DECELERATION_MPS2 = 8
 
 /** Sem amostra válida por mais que isso, a leitura anterior fica velha demais para continuar exibida. */
 const STALE_AFTER_MS = 8000
 
 export interface SpeedTrackerState {
   smoothedMps: number | null
+  /**
+   * Última leitura ACEITA, antes da suavização.
+   *
+   * O limite de aceleração precisa comparar com ela, não com o valor
+   * suavizado: ancorar no suavizado faz a trava e a suavização brigarem, e o
+   * atraso se acumula — medido, um ônibus acelerando de verdade até 60 km/h
+   * (2,8 m/s², dentro do limite) só chegava a 34 na tela.
+   */
+  lastAcceptedMps: number | null
   lastSample: GeolocationSample | null
   lastValidAtMs: number | null
 }
 
 export const INITIAL_SPEED_STATE: SpeedTrackerState = {
   smoothedMps: null,
+  lastAcceptedMps: null,
   lastSample: null,
   lastValidAtMs: null,
 }
@@ -73,6 +115,7 @@ export function trackSpeed(previous: SpeedTrackerState, sample: GeolocationSampl
     const isStale = previous.lastValidAtMs == null || sample.timestamp - previous.lastValidAtMs > STALE_AFTER_MS
     return {
       smoothedMps: isStale ? null : previous.smoothedMps,
+      lastAcceptedMps: isStale ? null : previous.lastAcceptedMps,
       lastSample: sample,
       lastValidAtMs: previous.lastValidAtMs,
     }
@@ -84,14 +127,25 @@ export function trackSpeed(previous: SpeedTrackerState, sample: GeolocationSampl
   }
 
   // Parado é parado: exibir 2 km/h porque a posição tremeu é número falso.
-  const clamped = rawMps < STATIONARY_THRESHOLD_MPS ? 0 : rawMps
+  let clamped = rawMps < STATIONARY_THRESHOLD_MPS ? 0 : rawMps
 
-  const smoothedMps =
-    previous.smoothedMps == null || clamped === 0
-      ? clamped
-      : previous.smoothedMps + SMOOTHING_FACTOR * (clamped - previous.smoothedMps)
+  // Limite de aceleração: descarta o salto fisicamente impossível de uma
+  // leitura espúria, sem impor teto de velocidade (ver MAX_ACCELERATION_MPS2).
+  if (previous.lastAcceptedMps != null && previous.lastSample) {
+    const elapsed = Math.max(0.5, Math.min(5, (sample.timestamp - previous.lastSample.timestamp) / 1000))
+    const maxRise = previous.lastAcceptedMps + MAX_ACCELERATION_MPS2 * elapsed
+    const maxFall = previous.lastAcceptedMps - MAX_DECELERATION_MPS2 * elapsed
+    clamped = Math.min(maxRise, Math.max(maxFall, clamped))
+  }
 
-  return { smoothedMps, lastSample: sample, lastValidAtMs: sample.timestamp }
+  // O zero NÃO pula mais a suavização. Antes ele ia direto ao destino, e era
+  // isso que produzia o degrau de 20 para 0 sem passar pelo meio. Agora ele
+  // desce pela mesma curva, só que pela rápida.
+  const previousMps = previous.smoothedMps
+  const factor = previousMps != null && clamped < previousMps ? SMOOTHING_DOWN : SMOOTHING_UP
+  const smoothedMps = previousMps == null ? clamped : previousMps + factor * (clamped - previousMps)
+
+  return { smoothedMps, lastAcceptedMps: clamped, lastSample: sample, lastValidAtMs: sample.timestamp }
 }
 
 /**
@@ -127,5 +181,8 @@ function resolveRawSpeedMps(previousSample: GeolocationSample | null, sample: Ge
 /** Valor pronto para a tela, em km/h — `null` quando não há leitura confiável. */
 export function speedKmhForDisplay(state: SpeedTrackerState): number | null {
   if (state.smoothedMps == null) return null
-  return Math.round(state.smoothedMps * 3.6)
+  const kmh = state.smoothedMps * 3.6
+  // A cauda da exponencial nunca chega a zero exato; sem este corte a tela
+  // ficaria oscilando em 1 km/h com o veículo parado.
+  return kmh < DISPLAY_ZERO_BELOW_KMH ? 0 : Math.round(kmh)
 }

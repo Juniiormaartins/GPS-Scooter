@@ -1,49 +1,62 @@
 import { useEffect, useRef } from 'react'
 import type { NavigationProgress } from '@/services/navigation/progress'
 import { clearPendingSpeech, speak, stopSpeaking } from '@/services/navigation/voiceGuidance'
-import type { CandidateRoute } from '@/types/routing'
+import type { CandidateRoute, RouteStep } from '@/types/routing'
 
 /**
  * Instruções faladas durante a navegação.
  *
- * Não precisou de nenhuma mudança na arquitetura de rotas: o
- * `computeNavigationProgress` já entrega, a cada atualização de GPS, o índice
- * do passo atual, a próxima manobra e a distância até ela. Este hook só
- * observa esses valores e decide QUANDO e O QUE falar — a serialização da
- * fala em si (fila + respiro entre frases) vive em services/navigation/voiceGuidance.
+ * O `computeNavigationProgress` já entrega, a cada amostra de GPS, o passo
+ * atual, a próxima manobra e a distância até ela. Este hook decide QUANDO e O
+ * QUE falar; a serialização da fala (fila + respiro) vive em
+ * services/navigation/voiceGuidance.
  *
- * O QUE MUDOU DEPOIS DO TESTE DE RUA: as instruções se atropelavam em
- * rotatórias e em sequências de manobras próximas. Eram três causas
- * distintas, e as três estão tratadas abaixo:
+ * ESTRATÉGIA EM QUATRO MOMENTOS. Cada um responde a uma pergunta diferente, e
+ * é a ausência dos dois extremos que fazia a navegação parecer muda:
  *
- * 1. Anúncio antecipado disparando junto com o imediato. Um passo de 80 m já
- *    nasce com distância < 100 m, então o estágio "near" disparava no mesmo
- *    instante em que o passo começava e o "now" logo atrás. Agora um estágio
- *    só é falado se couber dentro do passo (ver `stageFitsInStep`).
- * 2. Falas concorrentes se cancelando. Cada `speak` novo cancelava o anterior
- *    no meio da frase. Agora só a instrução urgente ("agora") interrompe.
- * 3. Manobras encadeadas viravam duas frases coladas. Quando a manobra
- *    seguinte vem logo depois, as duas entram numa frase só ("...e em seguida
- *    vire à direita"), que é como um GPS de verdade fala.
+ *   1. ANTECIPADO  — "Em 400 metros, vire à direita para Rua 10."
+ *                    Só quando o passo é longo o bastante para o aviso caber;
+ *                    num passo de 80 m ele dispararia junto com o comando.
+ *   2. PREPARAÇÃO  — "Prepare-se para virar à direita."
+ *                    O momento de mudar de faixa, olhar o retrovisor.
+ *   3. COMANDO     — o texto do provedor, no instante da manobra.
+ *   4. SEGUIMENTO  — "Continue por 800 metros."
+ *                    É o que preenche o silêncio depois de uma manobra quando
+ *                    a próxima está longe. Sem ele, o app ficava minutos mudo e
+ *                    parecia ter travado.
+ *
+ * O TEXTO VEM DO PROVEDOR, não daqui. O Valhalla produz `verbalAlert`,
+ * `verbalPre` e `verbalPost` já em português e já com a contagem de saída de
+ * rotatória ("siga pela segunda saída"), que nenhuma frase montada por nós
+ * teria. Só a moldura de distância é nossa. Quando o provedor não fornece
+ * (OSRM), caímos no texto da instrução, que a camada de provedor já monta em
+ * português.
  */
 
 /** Limiares de antecipação, em metros. */
-const ANNOUNCE_STAGES: { key: string; withinMeters: number }[] = [
-  { key: 'far', withinMeters: 300 },
-  { key: 'near', withinMeters: 100 },
-  { key: 'now', withinMeters: 25 },
-]
+const ANNOUNCE_STAGES = [
+  { key: 'far', withinMeters: 400 },
+  { key: 'prepare', withinMeters: 150 },
+  { key: 'now', withinMeters: 30 },
+] as const
+
+type StageKey = (typeof ANNOUNCE_STAGES)[number]['key']
 
 /**
- * Um anúncio antecipado só faz sentido se o passo for mais longo que o
- * limiar: dizer "em 300 metros vire" no começo de um passo de 80 m é falar de
- * uma manobra que já está a 80 m. Com margem de 20 m para o passo que fica
- * quase em cima do limiar.
+ * Um aviso antecipado só faz sentido se couber dentro do passo: dizer "em 400
+ * metros, vire" no começo de um passo de 90 m é anunciar algo que já está a
+ * 90 m. Margem de 30 m para o passo que fica quase em cima do limiar.
  */
-const STAGE_FIT_MARGIN_METERS = 20
+const STAGE_FIT_MARGIN_METERS = 30
 
-/** Abaixo disso, a manobra seguinte é anunciada junto com a atual em vez de virar uma segunda frase. */
-const CHAIN_NEXT_MANEUVER_WITHIN_METERS = 60
+/** Abaixo disso, a manobra seguinte é anunciada junto com a atual. */
+const CHAIN_NEXT_MANEUVER_WITHIN_METERS = 80
+
+/**
+ * A partir deste comprimento, o passo ganha o aviso de seguimento ("continue
+ * por X"). Abaixo disso não há silêncio para preencher.
+ */
+const FOLLOW_UP_MIN_STEP_METERS = 700
 
 export function useVoiceGuidance(
   progress: NavigationProgress | null,
@@ -56,8 +69,6 @@ export function useVoiceGuidance(
   const hasAnnouncedStartRef = useRef(false)
   const hasAnnouncedArrivalRef = useRef(false)
 
-  // Sessão nova (ou voz desligada) começa do zero: sem isso, retomar uma
-  // navegação ficaria mudo porque as chaves antigas ainda estariam marcadas.
   useEffect(() => {
     if (isNavigating && enabled) return
     spokenRef.current.clear()
@@ -66,8 +77,8 @@ export function useVoiceGuidance(
     stopSpeaking()
   }, [isNavigating, enabled])
 
-  // Rota nova (recálculo por desvio): o que estava na fila descreve manobras
-  // que não existem mais. Descarta o pendente sem cortar a frase em curso.
+  // Rota nova (recálculo por desvio, troca de alternativa): o que estava na
+  // fila descreve manobras que não existem mais.
   useEffect(() => {
     if (!isNavigating) return
     spokenRef.current.clear()
@@ -95,78 +106,91 @@ export function useVoiceGuidance(
     const step = progress.nextStep
     if (!step) return
 
+    const stepIndex = progress.currentStepIndex
     const distance = progress.distanceToNextManeuverMeters
+    const say = (stageKey: string, text: string, urgent = false) => {
+      const key = `${stepIndex}:${stageKey}`
+      if (spokenRef.current.has(key)) return false
+      spokenRef.current.add(key)
+      speak(text, { urgent })
+      return true
+    }
+
+    // SEGUIMENTO: logo depois de entrar num passo longo, diz quanto falta até
+    // a próxima manobra. Dispara cedo (ainda longe do fim) justamente porque a
+    // função dele é ocupar o silêncio que vem a seguir.
+    const previousStep = route?.steps[stepIndex - 1]
+    if (
+      previousStep &&
+      step.distanceMeters >= FOLLOW_UP_MIN_STEP_METERS &&
+      distance > step.distanceMeters - 120 &&
+      previousStep.verbalPost
+    ) {
+      if (say('follow', previousStep.verbalPost)) return
+    }
+
     // Só o estágio MAIS PRÓXIMO ainda não falado e que caiba no passo — se o
-    // GPS pular (túnel, sinal fraco), anuncia direto o mais urgente em vez de
+    // GPS pular (túnel, sinal fraco), anuncia o mais urgente em vez de
     // despejar os três de uma vez.
     const stage = ANNOUNCE_STAGES.filter(
-      (entry) => distance <= entry.withinMeters && stageFitsInStep(entry, step.distanceMeters),
+      (entry) => distance <= entry.withinMeters && stageFitsInStep(entry.key, step.distanceMeters),
     ).pop()
     if (!stage) return
 
-    const key = `${progress.currentStepIndex}:${stage.key}`
-    if (spokenRef.current.has(key)) return
-    spokenRef.current.add(key)
-
-    // Os estágios mais antecipados do MESMO passo já não têm serventia depois
-    // que o mais próximo foi falado — marcá-los evita que um tick atrasado do
-    // GPS ainda dispare "em 300 metros" depois do "agora".
+    // Estágios mais antecipados do MESMO passo perdem a serventia depois que o
+    // mais próximo foi falado.
     for (const earlier of ANNOUNCE_STAGES) {
-      if (earlier.withinMeters > stage.withinMeters) {
-        spokenRef.current.add(`${progress.currentStepIndex}:${earlier.key}`)
-      }
+      if (earlier.withinMeters > stage.withinMeters) spokenRef.current.add(`${stepIndex}:${earlier.key}`)
     }
 
-    const followUp = route?.steps[progress.currentStepIndex + 1] ?? null
+    const followUp = route?.steps[stepIndex + 1] ?? null
     const chained = followUp != null && followUp.distanceMeters <= CHAIN_NEXT_MANEUVER_WITHIN_METERS
-
-    // Se a manobra seguinte foi dita junto ("...e em seguida vire à direita"),
-    // ela não deve ser repetida sozinha alguns segundos depois — repetir é
-    // exatamente o atropelamento relatado nas rotatórias.
     if (chained) {
-      for (const entry of ANNOUNCE_STAGES) {
-        spokenRef.current.add(`${progress.currentStepIndex + 1}:${entry.key}`)
-      }
+      for (const entry of ANNOUNCE_STAGES) spokenRef.current.add(`${stepIndex + 1}:${entry.key}`)
     }
 
-    speak(buildSpokenInstruction(step.instruction, stage.key, distance, followUp), {
-      urgent: stage.key === 'now',
-    })
+    say(stage.key, buildSpokenInstruction(step, stage.key, distance, chained ? followUp : null), stage.key === 'now')
   }, [progress, enabled, isNavigating, route])
 }
 
-function stageFitsInStep(stage: { withinMeters: number }, stepDistanceMeters: number): boolean {
-  // O estágio imediato ("agora") vale sempre: é o que efetivamente comanda a manobra.
-  if (stage.withinMeters <= 25) return true
-  return stepDistanceMeters + STAGE_FIT_MARGIN_METERS >= stage.withinMeters
+function stageFitsInStep(stage: StageKey, stepDistanceMeters: number): boolean {
+  // O comando vale sempre: é o que efetivamente manda executar a manobra.
+  if (stage === 'now') return true
+  const threshold = ANNOUNCE_STAGES.find((entry) => entry.key === stage)?.withinMeters ?? 0
+  return stepDistanceMeters + STAGE_FIT_MARGIN_METERS >= threshold
 }
 
-/**
- * Monta a frase falada a partir da instrução que o provedor já entregou em
- * português ("Vire à esquerda para Rua T-55"). Nunca inventa manobra: só
- * acrescenta o contexto de distância na frente e, quando a manobra seguinte
- * vem logo em seguida, encadeia as duas numa frase só.
- */
 function buildSpokenInstruction(
-  instruction: string,
-  stage: string,
+  step: RouteStep,
+  stage: StageKey,
   distanceMeters: number,
-  followUp: { instruction: string; distanceMeters: number } | null,
+  chainedNext: RouteStep | null,
 ): string {
-  const base =
-    stage === 'now'
-      ? `${instruction} agora`
-      : // Arredonda para múltiplos de 50 m — "em 287 metros" soa a robô.
-        `Em ${Math.max(50, Math.round(distanceMeters / 50) * 50)} metros, ${lowercaseFirst(instruction)}`
+  // Preferência de texto por estágio: o provedor tem uma frase própria para o
+  // aviso e outra para o comando, e elas diferem de propósito.
+  const alertText = step.verbalAlert ?? step.instruction
+  const commandText = step.verbalPre ?? step.instruction
 
-  // Encadeamento: em rotatória e em cruzamentos seguidos, a manobra seguinte
-  // chega antes de a próxima frase caber. Falar as duas juntas é o que evita
-  // a sensação de voz atropelada — e é o comportamento de um GPS de verdade.
-  if (followUp && followUp.distanceMeters <= CHAIN_NEXT_MANEUVER_WITHIN_METERS) {
-    return `${base}, e em seguida ${lowercaseFirst(followUp.instruction)}.`
+  if (stage === 'far') {
+    // Arredonda para múltiplos de 50 m — "em 287 metros" soa a robô.
+    const rounded = Math.max(50, Math.round(distanceMeters / 50) * 50)
+    return `Em ${rounded} metros, ${lowercaseFirst(stripTrailingPeriod(alertText))}.`
   }
 
+  if (stage === 'prepare') {
+    return `Prepare-se: ${lowercaseFirst(stripTrailingPeriod(alertText))}.`
+  }
+
+  const base = stripTrailingPeriod(commandText)
+  if (chainedNext) {
+    const next = chainedNext.verbalPre ?? chainedNext.instruction
+    return `${base}, e em seguida ${lowercaseFirst(stripTrailingPeriod(next))}.`
+  }
   return `${base}.`
+}
+
+function stripTrailingPeriod(text: string): string {
+  return text.trim().replace(/\.$/, '')
 }
 
 function lowercaseFirst(text: string): string {

@@ -7,11 +7,14 @@ import { computeBearingDegrees, haversineDistanceMeters } from '@/utils/geo'
 import type { CandidateRoute } from '@/types/routing'
 
 /**
- * Amostras consecutivas fora da rota antes de considerar desvio "real" (e não
- * ruído momentâneo do GPS) — evita disparar recálculo por um único ponto
- * impreciso.
+ * Amostras consecutivas fora da rota antes de considerar desvio "real".
+ *
+ * Eram 3, ou seja ~3 segundos de atraso somados ao limiar largo de distância —
+ * a 30 km/h isso é meio quarteirão percorrido antes de o app perceber. Com o
+ * limiar de distância agora mais estrito (22 m), 2 amostras bastam para
+ * descartar um ponto isolado ruim sem prolongar a espera.
  */
-const SUSTAINED_OFF_ROUTE_SAMPLES = 3
+const SUSTAINED_OFF_ROUTE_SAMPLES = 2
 
 /**
  * Deslocamento mínimo entre duas amostras para inferir direção a partir delas.
@@ -38,7 +41,7 @@ const MIN_SPEED_FOR_HEADING_KMH = 3
  * e ainda vira uma esquina de 90° em ~4 amostras (≈4 s), que é o tempo real
  * de fazer a curva.
  */
-const HEADING_SMOOTHING = 0.25
+const HEADING_SMOOTHING = 0.4
 
 /**
  * Acima desta diferença, assume a direção nova de uma vez em vez de

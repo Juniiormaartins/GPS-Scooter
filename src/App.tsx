@@ -26,7 +26,7 @@ import { useVoiceGuidance } from '@/hooks/useVoiceGuidance'
 import { isSpeechSupported, primeFromUserGesture } from '@/services/navigation/voiceGuidance'
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
-import { planRoute } from '@/services/routing'
+import { enrichRouteResult, planRoute } from '@/services/routing'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
@@ -591,12 +591,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigationSession.routeDeviated])
 
-  const routeOptions = allRoutes.map((entry) => ({
-    id: entry.route.id,
-    geometry: entry.route.geometry,
-    eligibility: entry.eligibility,
-    isActive: entry.route.id === activeScoredRoute?.route.id,
-  }))
+  /**
+   * Candidatas desenhadas no mapa — SEM a ativa.
+   *
+   * A camada de candidatas fica acima da camada de trechos coloridos, então
+   * incluir a rota ativa aqui a redesenhava por cima em azul chapado e
+   * escondia as cores de adequação justamente na tela em que o usuário compara
+   * rotas. A ativa é desenhada pela camada segmentada, trecho a trecho.
+   */
+  const routeOptions = allRoutes
+    .filter((entry) => entry.route.id !== activeScoredRoute?.route.id)
+    .map((entry) => ({
+      id: entry.route.id,
+      geometry: entry.route.geometry,
+      eligibility: entry.eligibility,
+      isActive: false,
+    }))
 
   /**
    * Modo navegação — controla APENAS quais painéis aparecem por cima e como o
@@ -654,6 +664,46 @@ export default function App() {
 
     return candidates.sort((a, b) => a.aheadMeters - b.aheadMeters)[0] ?? null
   })()
+
+  /**
+   * Classificação das vias chega DEPOIS da rota.
+   *
+   * O enriquecimento (Overpass) leva 10–15 s e antes corria contra um prazo
+   * dentro do `planRoute`: passou do prazo, resultado descartado, rota sem
+   * classificação nenhuma — era por isso que os trechos não recomendados nunca
+   * apareciam destacados. Agora a rota aparece em segundos e a classificação
+   * chega quando chegar, repintando o traçado.
+   *
+   * `routeResult` é comparado por identidade: o upgrade substitui o objeto, e
+   * a segunda passada vê `isReliable` já verdadeiro e não refaz nada.
+   */
+  useEffect(() => {
+    if (!routeResult) return
+    let cancelled = false
+    enrichRouteResult(routeResult)
+      .then((upgraded) => {
+        if (upgraded && !cancelled) setRouteResult(upgraded)
+      })
+      .catch(() => {
+        // Falhou: a rota continua utilizável, só sem classificação por trecho.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [routeResult])
+
+  useEffect(() => {
+    if (!preview) return
+    let cancelled = false
+    enrichRouteResult(preview.result)
+      .then((upgraded) => {
+        if (upgraded && !cancelled) setPreview((current) => (current ? { ...current, result: upgraded } : current))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [preview])
 
   const isNavigationView = isNavigating && activeScoredRoute != null
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null

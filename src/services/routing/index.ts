@@ -29,18 +29,6 @@ import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
  *    alternativas para o usuário.
  */
 /**
- * Prazo máximo do enriquecimento por rota. Ele é OPCIONAL para o produto — a
- * rota existe e pode ser exibida sem as tags do OSM; ela só perde precisão na
- * classificação de adequação. Portanto nunca deve segurar a tela: se estourar,
- * seguimos com os segmentos originais do provedor de rota.
- *
- * Este é um segundo cinto de segurança além do timeout dentro de
- * segmentEnrichment.ts — protege contra qualquer caminho que, por bug, deixe
- * uma promise pendente e trave o "Calculando rota…" para sempre.
- */
-const ENRICHMENT_DEADLINE_MS = 15000
-
-/**
  * Prazo do perfil de elevação. Assim como o enriquecimento, é OPCIONAL: sem
  * ele a rota existe e é exibida, apenas sem a dimensão de inclinação. Nunca
  * pode segurar a tela de "Calculando rota…".
@@ -88,17 +76,13 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
 
   const scored: ScoredRoute[] = await Promise.all(
     candidates.map(async (route) => {
-      // Enriquecimento e elevação são independentes entre si: buscar em
-      // paralelo evita somar os dois prazos no tempo de cálculo da rota.
-      const [enrichedSegments, elevation] = await Promise.all([
-        withDeadline(enrichRouteSegments(route), ENRICHMENT_DEADLINE_MS, route.segments),
-        needsElevation ? withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null) : null,
-      ])
+      // Elevação continua com prazo: ela é opcional e rápida.
+      // O ENRIQUECIMENTO NÃO ENTRA AQUI — ver `enrichRouteResult` abaixo.
+      const elevation = needsElevation
+        ? await withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null)
+        : null
+      const enrichedSegments = route.segments
       const enrichedRoute = { ...route, segments: enrichedSegments }
-      // Enriquecimento entrega os MESMOS objetos de segmento quando falha.
-      // Sem esta verificação, uma rota inteira sem dado de via seria
-      // classificada como adequada e a interface afirmaria isso com todas as
-      // letras — inventando confiança que não temos.
       const isEnriched = enrichedSegments.some((segment) => segment.osmTags != null)
 
       const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute, vehicle)
@@ -211,6 +195,67 @@ function attachHighlights(routes: ScoredRoute[], recommendedId: string) {
 
     entry.highlights = highlights
   }
+}
+
+/**
+ * Enriquece uma rota JÁ ENTREGUE e devolve a versão classificada.
+ *
+ * POR QUE ISTO EXISTE. Antes o enriquecimento corria contra um prazo dentro do
+ * `planRoute`: se o Overpass demorasse mais que o prazo, o resultado era
+ * DESCARTADO e a rota ficava sem classificação nenhuma. Medido em execução: a
+ * consulta trouxe 3.511 vias com tags completas, mas o cálculo total levou
+ * 15,7 s contra um prazo de 15 s — o dado chegou e foi jogado fora. Era essa a
+ * razão de os trechos não recomendados nunca aparecerem destacados.
+ *
+ * Correr contra prazo é o mecanismo errado para este dado. A rota precisa
+ * aparecer rápido; a CLASSIFICAÇÃO dela pode chegar alguns segundos depois e
+ * atualizar as cores. Agora é isso: `planRoute` entrega em segundos, e quem
+ * chamou pede o upgrade quando quiser.
+ *
+ * Devolve `null` quando não há nada a acrescentar — aí o chamador nem precisa
+ * re-renderizar.
+ */
+export async function enrichRouteResult(result: RouteResult): Promise<RouteResult | null> {
+  const preferences = getUserPreferences()
+  const vehicle: VehicleClassificationContext = {
+    modelId: preferences.vehicleModelId,
+    referenceSpeedKmh: preferences.referenceSpeedKmh,
+  }
+
+  const upgrade = async (scored: ScoredRoute): Promise<ScoredRoute> => {
+    // Já classificado (rota reaproveitada do preview): não refaz.
+    if (scored.severity.isReliable) return scored
+
+    const enrichedSegments = await enrichRouteSegments(scored.route)
+    if (!enrichedSegments.some((segment) => segment.osmTags != null)) return scored
+
+    const enrichedRoute = { ...scored.route, segments: enrichedSegments }
+    const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute, vehicle)
+    const avoidance = evaluateAvoidances(enrichedRoute, preferences, scored.elevation)
+
+    return {
+      ...scored,
+      route: enrichedRoute,
+      issues: [
+        ...issues,
+        ...avoidance.hits.map((hit) => ({ severity: 'warning' as const, reason: describeAvoidanceHit(hit) })),
+      ],
+      breakdown,
+      suitabilityScore,
+      preferenceScore: Math.max(0, suitabilityScore - avoidance.penaltyPoints),
+      avoidanceHits: avoidance.hits,
+      eligibility,
+      severity: analyzeRouteSeverity(enrichedRoute, vehicle, true),
+    }
+  }
+
+  const [selected, ...alternatives] = await Promise.all([
+    upgrade(result.selected),
+    ...result.alternatives.map(upgrade),
+  ])
+
+  const changed = selected !== result.selected || alternatives.some((entry, i) => entry !== result.alternatives[i])
+  return changed ? { selected, alternatives } : null
 }
 
 export { calculateEtaMinutes } from '@/services/routing/eta'

@@ -105,39 +105,95 @@ function boundingBoxCacheKey(bbox: BoundingBox): string {
 // (kumi.systems 502, private.coffee 500), então a saída foi dar tempo.
 const CLIENT_TIMEOUT_MS = 13000
 
+/**
+ * Chave de cache persistente por sessão.
+ *
+ * O cache era só de memória, então recarregar a página descartava tudo e a
+ * mesma área era consultada de novo — com o Overpass público, cada consulta
+ * custa 10–15 s e pode falhar. `sessionStorage` mantém o resultado enquanto a
+ * aba viver, que cobre o caso real: sair da navegação, voltar, refazer a rota.
+ */
+const SESSION_CACHE_PREFIX = 'gps-scooter:overpass:'
+
+function readSessionCache(key: string): OverpassWay[] | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_CACHE_PREFIX + key)
+    return raw ? (JSON.parse(raw) as OverpassWay[]) : null
+  } catch {
+    return null
+  }
+}
+
+function writeSessionCache(key: string, ways: OverpassWay[]) {
+  try {
+    sessionStorage.setItem(SESSION_CACHE_PREFIX + key, JSON.stringify(ways))
+  } catch {
+    // Cota estourada ou storage bloqueado — seguir sem persistir não quebra nada.
+  }
+}
+
+async function requestWays(query: string, timeoutMs: number): Promise<OverpassWay[]> {
+  const abortController = new AbortController()
+  const abortTimer = setTimeout(() => abortController.abort(), timeoutMs)
+  try {
+    const response = await fetch(OVERPASS_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: query,
+      signal: abortController.signal,
+    })
+    if (!response.ok) throw new Error(`Overpass respondeu ${response.status}`)
+    const payload = (await response.json()) as { elements?: OverpassWay[] }
+    return payload.elements ?? []
+  } finally {
+    clearTimeout(abortTimer)
+  }
+}
+
 async function fetchWaysInBoundingBox(bbox: BoundingBox): Promise<OverpassWay[]> {
   const cacheKey = boundingBoxCacheKey(bbox)
+
   const cached = boundingBoxCache.get(cacheKey)
   if (cached) return cached
 
+  const persisted = readSessionCache(cacheKey)
+  if (persisted) {
+    const resolved = Promise.resolve(persisted)
+    boundingBoxCache.set(cacheKey, resolved)
+    return resolved
+  }
+
   const query = `[out:json][timeout:20];way["highway"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});out tags geom;`
 
-  const abortController = new AbortController()
-  const abortTimer = setTimeout(() => abortController.abort(), CLIENT_TIMEOUT_MS)
-
-  const request = fetch(OVERPASS_BASE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: query,
-    signal: abortController.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) throw new Error('Overpass request failed')
-      // Sob carga o Overpass responde 200 com uma PÁGINA HTML de erro; sem
-      // esta checagem, o response.json() estoura de um jeito confuso.
-      const contentType = response.headers.get('content-type') ?? ''
-      if (!contentType.includes('json')) throw new Error('Overpass respondeu em formato inesperado')
-      const data = (await response.json()) as OverpassResponse
-      return data.elements ?? []
+  /**
+   * UMA nova tentativa em caso de falha.
+   *
+   * O endpoint público do Overpass é lento e instável de forma intermitente —
+   * medido, uma consulta de bbox urbano em Goiânia levou 14,7 s. Boa parte das
+   * falhas é timeout ou 429 momentâneo, e a segunda tentativa costuma passar.
+   * Sem retry, uma falha isolada deixava a rota INTEIRA sem classificação de
+   * via, que é o motivo de os trechos não recomendados não aparecerem
+   * destacados no teste de rua.
+   */
+  const request = (async () => {
+    try {
+      return await requestWays(query, CLIENT_TIMEOUT_MS)
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      return requestWays(query, CLIENT_TIMEOUT_MS)
+    }
+  })()
+    .then((ways) => {
+      writeSessionCache(cacheKey, ways)
+      return ways
     })
     .catch(() => {
-      // Falha (timeout, rede, HTML de erro): remove do cache para que a
-      // próxima rota nesta mesma área possa tentar de novo. Sem isso, uma
-      // única falha deixaria a região sem classificação pelo resto da sessão.
+      // Falha nas duas tentativas: remove do cache para que a próxima rota
+      // nesta área possa tentar de novo. Sem isso, uma falha deixaria a região
+      // sem classificação pelo resto da sessão.
       boundingBoxCache.delete(cacheKey)
       return [] as OverpassWay[]
     })
-    .finally(() => clearTimeout(abortTimer))
 
   boundingBoxCache.set(cacheKey, request)
   return request
