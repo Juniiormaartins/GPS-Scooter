@@ -108,6 +108,18 @@ export interface RouteSeveritySegment {
 const ROUTE_SOURCE_ID = 'gps-scooter-route'
 /** Mesma rota, quebrada por trecho — alimenta a linha colorida (o casing segue contínuo, sem emendas). */
 const ROUTE_SEGMENTS_SOURCE_ID = 'gps-scooter-route-segments'
+/**
+ * Brilho da rota. Duas camadas largas e translúcidas por baixo do traçado
+ * fingem o bloom da referência.
+ *
+ * O MapLibre não tem pós-processamento — não existe bloom de verdade. O que
+ * dá para fazer é empilhar linhas cada vez mais largas e mais transparentes,
+ * o que produz um halo com degrau em vez de degradê contínuo. Duas camadas
+ * bastam: com uma o halo tem borda dura, com quatro o custo de preenchimento
+ * sobe sem ganho visível num traçado fino.
+ */
+const ROUTE_GLOW_OUTER_LAYER_ID = 'gps-scooter-route-glow-outer'
+const ROUTE_GLOW_INNER_LAYER_ID = 'gps-scooter-route-glow-inner'
 const ROUTE_CASING_LAYER_ID = 'gps-scooter-route-casing'
 const ROUTE_LAYER_ID = 'gps-scooter-route-line'
 const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
@@ -304,6 +316,12 @@ function fitToBounds(
   map.fitBounds(bounds, { padding: { top, bottom, left, right }, bearing: 0, pitch: 0, ...options })
 }
 
+/** Largura do halo: um múltiplo da largura da rota, para o brilho acompanhar o zoom. */
+function routeGlowWidth(weight: RouteLineWeight, factor: number): maplibregl.ExpressionSpecification {
+  const [z14, z17, z20] = ROUTE_WIDTH_BY_WEIGHT[weight]
+  return ['interpolate', ['linear'], ['zoom'], 14, z14 * factor, 17, z17 * factor, 20, z20 * factor]
+}
+
 function routeWidthExpression(weight: RouteLineWeight, casing = false): maplibregl.ExpressionSpecification {
   const [z14, z17, z20] = ROUTE_WIDTH_BY_WEIGHT[weight]
   const extra = casing ? ROUTE_CASING_EXTRA_PX : 0
@@ -423,6 +441,7 @@ export function MapView({
 
     map.on('load', () => {
       applyCartography(map, themeRef.current)
+      refineCartography(map, themeRef.current)
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -440,6 +459,31 @@ export function MapView({
       // Camada de contorno (casing) clara sob a linha principal: garante que a
       // rota permaneça legível mesmo sobre áreas do mapa predominantemente azuis.
       map.addSource(ROUTE_SEGMENTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+
+      map.addLayer({
+        id: ROUTE_GLOW_OUTER_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': MAP_COLORS.routeSelected,
+          'line-width': routeGlowWidth('confirmed', 3.1),
+          'line-opacity': 0.16,
+          'line-blur': 8,
+        },
+      })
+      map.addLayer({
+        id: ROUTE_GLOW_INNER_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': MAP_COLORS.routeSelected,
+          'line-width': routeGlowWidth('confirmed', 1.9),
+          'line-opacity': 0.26,
+          'line-blur': 4,
+        },
+      })
 
       map.addLayer({
         id: ROUTE_CASING_LAYER_ID,
@@ -628,6 +672,7 @@ export function MapView({
 
     const applyTheme = () => {
       applyCartography(map, theme)
+      refineCartography(map, theme)
 
       // As camadas de rota do app também trocam de paleta: os tons do tema
       // escuro (ciano/verde vivos) perdem contraste sobre um mapa claro.
@@ -635,7 +680,9 @@ export function MapView({
       const repaint = (layerId: string, color: unknown) => {
         if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-color', color)
       }
-      repaint(ROUTE_CASING_LAYER_ID, palette.routeCasing)
+      repaint(ROUTE_GLOW_OUTER_LAYER_ID, palette.routeSelected)
+    repaint(ROUTE_GLOW_INNER_LAYER_ID, palette.routeSelected)
+    repaint(ROUTE_CASING_LAYER_ID, palette.routeCasing)
       repaint(ROUTE_LAYER_ID, severityColor(theme))
       repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
       repaint(ROUTE_OPTIONS_DASHED_LAYER_ID, routeOptionsColor(theme))
@@ -685,6 +732,20 @@ export function MapView({
     if (!map || !map.getLayer(ROUTE_LAYER_ID)) return
 
     const weight: RouteLineWeight = isNavigating ? 'navigating' : isRoutePreview ? 'preview' : 'confirmed'
+
+    // O halo só aparece na NAVEGAÇÃO. Fora dela existem alternativas na tela e
+    // um brilho em volta de cada uma viraria borrão; ali o traçado precisa de
+    // borda nítida para o toque acertar a rota certa.
+    for (const [id, factor, opacity] of [
+      [ROUTE_GLOW_OUTER_LAYER_ID, 3.1, 0.16],
+      [ROUTE_GLOW_INNER_LAYER_ID, 1.9, 0.26],
+    ] as const) {
+      if (!map.getLayer(id)) continue
+      map.setPaintProperty(id, 'line-width', routeGlowWidth(weight, factor))
+      map.setPaintProperty(id, 'line-opacity', isNavigating ? opacity : 0)
+      map.setPaintProperty(id, 'line-color', routePalette(themeRef.current).routeSelected)
+    }
+
     map.setPaintProperty(ROUTE_LAYER_ID, 'line-width', routeWidthExpression(weight))
     map.setPaintProperty(ROUTE_LAYER_ID, 'line-opacity', weight === 'preview' ? 0.75 : 0.95)
     if (map.getLayer(ROUTE_CASING_LAYER_ID)) {
@@ -945,7 +1006,35 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerRequestId])
 
-  return <div ref={containerRef} className="absolute inset-0" />
+  return (
+    <div className="absolute inset-0">
+      <div ref={containerRef} className="absolute inset-0" />
+
+      {/*
+        ATMOSFERA. A referência tem profundidade de campo e vinheta — as bordas
+        escurecem e desfocam, e o olho vai para o centro. O MapLibre não tem
+        pós-processamento (sem blur, sem bloom), mas o ESCURECIMENTO das bordas
+        é só uma sobreposição, e é ele que carrega a maior parte da sensação.
+        O desfoque não dá para reproduzir; a vinheta dá.
+
+        `pointer-events-none` é obrigatório aqui: sem isso a camada engoliria
+        todo arrasto, toque e pinça do mapa.
+
+        Na navegação a vinheta é mais forte — o chrome é escuro e a imersão é o
+        objetivo declarado; fora dela fica sutil, para não sujar a leitura da
+        cartografia enquanto o usuário explora.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 transition-opacity duration-slow ease-out"
+        style={{
+          background: isNavigating
+            ? 'radial-gradient(120% 85% at 50% 62%, rgba(6,10,20,0) 38%, rgba(6,10,20,.34) 76%, rgba(6,10,20,.62) 100%)'
+            : 'radial-gradient(120% 90% at 50% 50%, rgba(10,14,26,0) 55%, rgba(10,14,26,.10) 82%, rgba(10,14,26,.22) 100%)',
+        }}
+      />
+    </div>
+  )
 }
 
 function updateMarker(
@@ -1031,6 +1120,151 @@ function updateUserMarker(
  * testamos (Mapbox dark-v11) têm contraste fundo/via de ~1,5x, ilegível para
  * um GPS. A paleta do handoff tem ~3x, medido.
  */
+/**
+ * Refinamento cartográfico por CAMADA NOMEADA.
+ *
+ * A recoloração geral (applyCartography) trabalha por heurística no id, porque
+ * precisa tolerar qualquer estilo compatível com MapLibre. Isto aqui é o
+ * oposto: mira os ids exatos do estilo MapTiler `streets-v2` que usamos, que
+ * foram enumerados do style.json real (90 camadas — "Minor road", "Major road",
+ * "Highway", "Building 3D", e as respectivas "* outline").
+ *
+ * Por que os dois existem: a heurística garante que o mapa NUNCA fica feio se
+ * o provedor mudar; esta camada dá o acabamento fino — largura por zoom,
+ * contorno, volume dos prédios — que é o que aproxima a cartografia da
+ * referência. Se um id sumir, o `setPaint`/`setLayout` falha em silêncio e o
+ * mapa continua com a recoloração geral.
+ */
+/**
+ * Vias cujo traço é engrossado no zoom de navegação. O ajuste é um FATOR sobre
+ * a expressão original, nunca uma substituição.
+ *
+ * A primeira versão disto trocava as larguras por uma tabela própria e ficou
+ * pior: o MapTiler define largura por `class` dentro de cada camada
+ * (secondary, tertiary, minor, service, track…), e a tabela chapada jogava
+ * toda essa hierarquia fora — no zoom de exploração as ruas viraram fios.
+ * Multiplicar preserva a nuance que já existe e só aumenta a presença onde a
+ * navegação acontece.
+ */
+const THICKENED_ROAD_LAYERS = [
+  'Highway',
+  'Highway outline',
+  'Major road',
+  'Major road outline',
+  'Minor road',
+  'Minor road outline',
+]
+
+/**
+ * Expressões originais do provedor, guardadas na primeira passada.
+ *
+ * Sem este cache, cada troca de tema multiplicaria de novo sobre o resultado
+ * já multiplicado e as vias cresceriam sem parar.
+ */
+const originalRoadWidths = new WeakMap<MapLibreMap, Map<string, unknown>>()
+
+/**
+ * Engrossa uma expressão de largura sem perder a nuance por classe de via.
+ *
+ * Não dá para simplesmente multiplicar: no MapLibre, uma expressão de `zoom`
+ * só é válida no nível MAIS EXTERNO da propriedade. `['*', <interpolate zoom>,
+ * <interpolate zoom>]` é rejeitado — e rejeitado em silêncio, sem exceção: a
+ * propriedade simplesmente não muda. (Verificado no mapa em execução: a
+ * chamada não lança e `getPaintProperty` devolve o valor antigo.)
+ *
+ * A saída é reconstruir a mesma interpolação de zoom, multiplicando cada
+ * SAÍDA por uma constante. Aí não há zoom aninhado e o `match` por classe do
+ * provedor (secondary, tertiary, minor, service…) segue intacto.
+ *
+ * Devolve null quando a expressão não tem o formato esperado — nesse caso a
+ * largura original fica como está, que é o comportamento seguro.
+ */
+function scaleZoomInterpolate(expression: unknown): maplibregl.ExpressionSpecification | null {
+  if (!Array.isArray(expression) || expression[0] !== 'interpolate') return null
+  const zoomOperand = expression[2]
+  if (!Array.isArray(zoomOperand) || zoomOperand[0] !== 'zoom') return null
+
+  // 1× até o zoom de exploração (nada muda ali) e crescendo só a partir do
+  // zoom em que se navega, que é onde a via precisa de presença.
+  const factorAt = (zoom: number) => {
+    if (zoom <= 14) return 1
+    if (zoom >= 20) return 1.55
+    return 1 + ((zoom - 14) * 0.55) / 6
+  }
+
+  const rebuilt: unknown[] = [expression[0], expression[1], expression[2]]
+  for (let i = 3; i < expression.length; i += 2) {
+    const stop = expression[i]
+    const output = expression[i + 1]
+    if (typeof stop !== 'number') return null
+    rebuilt.push(stop, ['*', output, factorAt(stop)])
+  }
+
+  return rebuilt as maplibregl.ExpressionSpecification
+}
+
+function refineCartography(map: MapLibreMap, theme: 'dark' | 'light') {
+  const C = theme === 'light' ? MAP_COLORS_LIGHT : MAP_COLORS
+
+  const setPaint = (layerId: string, property: string, value: unknown) => {
+    try {
+      if (map.getLayer(layerId)) map.setPaintProperty(layerId, property, value as never)
+    } catch {
+      // Estilo do provedor mudou: a recoloração geral já cobriu esta camada.
+    }
+  }
+
+  let cache = originalRoadWidths.get(map)
+  if (!cache) {
+    cache = new Map()
+    originalRoadWidths.set(map, cache)
+  }
+
+  for (const layerId of THICKENED_ROAD_LAYERS) {
+    if (!map.getLayer(layerId)) continue
+    if (!cache.has(layerId)) {
+      try {
+        cache.set(layerId, map.getPaintProperty(layerId, 'line-width'))
+      } catch {
+        continue
+      }
+    }
+    const original = cache.get(layerId)
+    if (original == null) continue
+
+    const scaled = scaleZoomInterpolate(original)
+    if (scaled) setPaint(layerId, 'line-width', scaled)
+  }
+
+  // Contorno das vias na cor da paleta: é ele que separa duas ruas paralelas
+  // e dá definição ao traçado sobre o terreno.
+  for (const layerId of ['Highway outline', 'Major road outline', 'Minor road outline']) {
+    setPaint(layerId, 'line-color', C.roadCasing)
+  }
+
+  // Prédios em volume. Sem sombras nem oclusão (o MapLibre 4 não tem nenhuma
+  // das duas), o relevo vem do gradiente vertical embutido — a face de cima
+  // clareia em relação à base — e da altura vinda do dado real.
+  setPaint('Building 3D', 'fill-extrusion-vertical-gradient', true)
+  setPaint('Building 3D', 'fill-extrusion-opacity', theme === 'light' ? 0.5 : 0.42)
+  // Prédios altos ficam levemente mais claros: dá leitura de silhueta urbana
+  // sem inventar iluminação que o renderizador não calcula.
+  setPaint('Building 3D', 'fill-extrusion-color', [
+    'interpolate',
+    ['linear'],
+    ['coalesce', ['get', 'render_height'], 0],
+    0,
+    C.building,
+    60,
+    theme === 'light' ? '#E9EEF6' : '#243449',
+  ])
+
+  // Água e verde são os únicos pontos de cor do mapa — é o que evita o cinza
+  // uniforme da referência virar um borrão sem hierarquia.
+  setPaint('Water', 'fill-color', C.water)
+  setPaint('River', 'line-color', C.water)
+}
+
 function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
   const C = theme === 'light' ? MAP_COLORS_LIGHT : MAP_COLORS
   const setPaint = (layerId: string, property: string, value: string | number) => {
@@ -1231,30 +1465,71 @@ function markerClassName(kind: 'origin' | 'destination'): string {
  */
 function createUserVehicleElement(): HTMLElement {
   const el = document.createElement('div')
-  el.className = 'relative flex h-[68px] w-[68px] items-center justify-center'
+  el.className = 'relative flex h-[76px] w-[76px] items-center justify-center'
+
+  // Scooter vista de TRÁS E DE CIMA, como nas referências: o usuário vê o
+  // próprio veículo se afastando, que é a leitura natural quando o mapa gira
+  // para o rumo do deslocamento.
+  //
+  // Camadas, de trás para a frente (a ordem é o que dá profundidade sem
+  // sombra real, que o SVG não tem):
+  //   1. cone de direção   — para onde se vai
+  //   2. anel no chão      — o "disco" das referências, achatado em elipse
+  //                          para insinuar que está deitado no plano
+  //   3. sombra de contato — elipse escura sob a roda, ancora o veículo
+  //   4. veículo           — estrado, roda traseira com lanterna, coluna,
+  //                          guidão e o badge de raio
+  //
+  // LIMITE HONESTO: isto é vetor chapado. Não tem material, reflexo nem
+  // iluminação volumétrica do render 3D das referências — os gradientes
+  // fingem volume, não o calculam. Quando os PNGs existirem em
+  // public/markers/, eles substituem este desenho (ver riderMarker.ts).
   el.innerHTML = `
-    <svg viewBox="0 0 68 68" class="absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox="0 0 76 76" class="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
         <linearGradient id="gs-cone" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#35B7F7" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".72"/>
+          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".62"/>
         </linearGradient>
-        <linearGradient id="gs-disc" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#5FCBFF"/>
-          <stop offset="55%" stop-color="#2196E8"/>
-          <stop offset="100%" stop-color="#0F6ABF"/>
+        <radialGradient id="gs-ring-fill" cx="50%" cy="50%" r="50%">
+          <stop offset="55%" stop-color="#0E86C6" stop-opacity=".55"/>
+          <stop offset="100%" stop-color="#35B7F7" stop-opacity=".18"/>
+        </radialGradient>
+        <linearGradient id="gs-deck" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#46536B"/>
+          <stop offset="100%" stop-color="#1C2432"/>
         </linearGradient>
-        <filter id="gs-shadow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="2.4" stdDeviation="3" flood-color="#04121F" flood-opacity=".5"/>
+        <linearGradient id="gs-stem" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#2A3444"/>
+          <stop offset="45%" stop-color="#525F76"/>
+          <stop offset="100%" stop-color="#222B39"/>
+        </linearGradient>
+        <filter id="gs-contact" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="2.2"/>
         </filter>
       </defs>
-      <path data-role="cone" d="M34 4 L53 29 A23 23 0 0 0 15 29 Z" fill="url(#gs-cone)"/>
-      <circle cx="34" cy="34" r="18.5" fill="url(#gs-disc)" stroke="#FFFFFF" stroke-width="3.2" filter="url(#gs-shadow)"/>
-      <g data-role="arrow" transform="translate(34 34) scale(1.25) translate(-12 -12)">
-        <path d="M12 3.6 L18.6 20.4 A0.9 0.9 0 0 1 17.4 21.5 L12 18.9 L6.6 21.5 A0.9 0.9 0 0 1 5.4 20.4 Z" fill="#FFFFFF"/>
-        <path d="M12 3.6 L12 18.9 L6.6 21.5 A0.9 0.9 0 0 1 5.4 20.4 Z" fill="#D6EFFF"/>
+
+      <path data-role="cone" d="M38 6 L58 34 A22 22 0 0 0 18 34 Z" fill="url(#gs-cone)"/>
+
+      <ellipse data-role="ring" cx="38" cy="46" rx="23" ry="14" fill="url(#gs-ring-fill)"/>
+      <ellipse data-role="ring-edge" cx="38" cy="46" rx="23" ry="14" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+
+      <ellipse cx="38" cy="53" rx="11" ry="4" fill="#0F1729" opacity=".28" filter="url(#gs-contact)"/>
+
+      <g data-role="vehicle">
+        <rect x="32.6" y="35" width="10.8" height="19" rx="4.4" fill="url(#gs-deck)"/>
+        <rect x="34.6" y="36.4" width="6.8" height="8" rx="3" fill="#5A6980" opacity=".55"/>
+        <rect x="34.8" y="48.6" width="6.4" height="6.4" rx="2.6" fill="#151C27"/>
+        <rect x="36.2" y="50.6" width="3.6" height="2.4" rx="1.2" fill="#FF6A3D"/>
+        <rect x="36.1" y="20" width="3.8" height="17" rx="1.9" fill="url(#gs-stem)"/>
+        <rect x="24.4" y="18.4" width="27.2" height="4" rx="2" fill="#26303F"/>
+        <circle cx="25.2" cy="20.4" r="2.6" fill="#161D28"/>
+        <circle cx="50.8" cy="20.4" r="2.6" fill="#161D28"/>
+        <rect x="31.6" y="14.6" width="12.8" height="10" rx="3.2" fill="#0F1729" stroke="#35B7F7" stroke-width="1.1"/>
+        <path d="M39.4 16.6 35.6 20.4h2.5l-1.7 3.4 3.8-4.2h-2.4z" fill="#35B7F7"/>
       </g>
-      <circle data-role="idle" cx="34" cy="34" r="7.5" fill="#FFFFFF" opacity="0"/>
+
+      <circle data-role="idle" cx="38" cy="46" r="9" fill="#FFFFFF" opacity="0"/>
     </svg>
   `
   return el
@@ -1274,12 +1549,16 @@ function createUserVehicleElement(): HTMLElement {
  * usuário nunca vê uma seta apontando para um lado que não medimos.
  */
 function setVehicleHeadingVisibility(element: HTMLElement, hasHeading: boolean) {
-  const cone = element.querySelector('[data-role="cone"]') as SVGElement | null
-  const arrow = element.querySelector('[data-role="arrow"]') as SVGElement | null
-  const idle = element.querySelector('[data-role="idle"]') as SVGElement | null
-  if (cone) cone.style.opacity = hasHeading ? '1' : '0'
-  if (arrow) arrow.style.opacity = hasHeading ? '1' : '0'
-  if (idle) idle.style.opacity = hasHeading ? '0' : '1'
+  const set = (role: string, opacity: string) => {
+    const node = element.querySelector(`[data-role="${role}"]`) as SVGElement | null
+    if (node) node.style.opacity = opacity
+  }
+  // Sem rumo confiável some o CONE e some o VEÍCULO — um veículo desenhado
+  // apontando para algum lado afirmaria uma direção que não medimos. Sobra o
+  // anel no chão com um núcleo branco: "você está aqui, direção desconhecida".
+  set('cone', hasHeading ? '1' : '0')
+  set('vehicle', hasHeading ? '1' : '0')
+  set('idle', hasHeading ? '0' : '1')
 }
 
 /**
