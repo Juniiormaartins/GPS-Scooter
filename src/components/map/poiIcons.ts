@@ -1,149 +1,307 @@
-import type { Map as MapLibreMap } from 'maplibre-gl'
+import type { ExpressionSpecification, Map as MapLibreMap } from 'maplibre-gl'
+
+import {
+  BADGE_FILE_PX,
+  BADGE_MIN_ZOOM,
+  badgeUrl,
+  DOT_FILE_PX,
+  dotUrl,
+  POI_CATEGORIES,
+  POI_CLASS_MAP,
+  POI_FALLBACK,
+  POI_LAYER_IDS,
+  poiImageId,
+  type PoiCategory,
+} from '@/components/map/poiLibrary'
 
 /**
- * Ícones de POI por CATEGORIA.
+ * Aplica a biblioteca de POIs do Claude Design às camadas de POI do MapTiler.
  *
- * DE ONDE VINHAM OS ÍCONES ANTIGOS: os POIs chegam pela camada vetorial `poi`
- * do MapTiler, e o estilo `streets-v2` já os agrupa em camadas semânticas
- * (Food, Transport, Healthcare, Shopping, Culture, Education, Tourism, Sport,
- * Park, Station, Public). Cada camada resolve `icon-image` a partir do `class`
- * do POI contra o sprite do provedor, com `dot` como último recurso — e é esse
- * `dot` que aparecia repetido em metade dos estabelecimentos.
+ * DIVISÃO DE RESPONSABILIDADE: `poiLibrary.ts` diz QUAL asset cada classe usa;
+ * este arquivo só rasteriza, registra e aponta as camadas. Corrigir uma
+ * equivalência não passa por aqui.
  *
- * O CONSERTO É POR CAMADA, NÃO POR ESTABELECIMENTO. Como o agrupamento
- * semântico já existe, basta registrar um ícone nosso por categoria e trocar o
- * `icon-image` daquela camada. Nenhum POI é recriado, nenhum desaparece, e a
- * fonte de dados continua sendo a do provedor.
+ * A TROCA É POR `class`, NÃO POR CAMADA. A versão anterior registrava um ícone
+ * por camada semântica do estilo (Food, Shopping, Transport…) e apontava a
+ * camada inteira para ele — o que forçava 12 desenhos a cobrir centenas de
+ * classes: posto de gasolina, ponto de recarga, bicicletário e estacionamento
+ * dividiam o mesmo ícone porque o estilo os agrupa todos em `Transport`. Agora
+ * o `icon-image` é uma expressão sobre `['get','class']`, então cada feição
+ * escolhe seu badge dentro da camada em que já estava. Nenhum POI é recriado,
+ * nenhum muda de lugar, a fonte de dados continua sendo a do provedor e os
+ * filtros/zoom/ranking das camadas ficam intactos.
  *
- * POR QUE RASTER E NÃO SDF: o MapLibre aceita `sdf: true` e permite tingir o
- * ícone por expressão, mas trata o canal alfa como campo de distância — em
- * formas finas de 14px o resultado fica borrado. Aqui as imagens são
- * rasterizadas com a cor já embutida e REGISTRADAS DE NOVO quando o tema muda,
- * o que mantém o traço nítido nos dois temas.
+ * OS DOIS TEMAS USAM O MESMO ASSET. O pacote resolve legibilidade com anel
+ * branco a 94% e sombra própria, não com cor de fundo — então não há versão
+ * clara e versão escura, e os ícones são rasterizados UMA vez por sessão em
+ * vez de a cada troca de tema (a versão anterior re-rasterizava 11 ícones a
+ * cada troca).
  */
 
-/** Categoria → camadas do estilo MapTiler que ela cobre. */
-const CATEGORY_LAYERS: Record<string, string[]> = {
-  food: ['Food'],
-  transport: ['Transport'],
-  health: ['Healthcare'],
-  shopping: ['Shopping'],
-  culture: ['Culture'],
-  education: ['Education'],
-  tourism: ['Tourism'],
-  sport: ['Sport'],
-  park: ['Park'],
-  station: ['Station'],
-  public: ['Public'],
+/**
+ * DPR de rasterização.
+ *
+ * Os arquivos são SVG, então dá para rasterizar em qualquer resolução — mas o
+ * MapLibre guarda tudo num atlas de textura, e resolução demais custa memória
+ * de GPU sem ganho visível. 3 é o teto útil: acima disso nenhuma tela de
+ * celular resolve a diferença.
+ */
+const MAX_RASTER_RATIO = 3
+
+function rasterRatio(): number {
+  return Math.min(Math.max(window.devicePixelRatio || 1, 2), MAX_RASTER_RATIO)
 }
 
 /**
- * Traços dos ícones, em grade de 24. Monoline de 2px, cantos redondos — a
- * mesma linguagem dos ícones da interface, para o mapa não parecer de outro
- * produto.
- */
-const CATEGORY_PATHS: Record<string, string> = {
-  // Talher: cobre restaurante, lanchonete, bar, café e sorveteria numa família só.
-  food: 'M7 3v8a2 2 0 0 0 4 0V3M9 11v10M17 3c-1.6 1-2.4 2.7-2.4 5s.8 3.6 2.4 4v9',
-  // Bomba de combustível — vale para posto e para ponto de recarga.
-  transport: 'M4 20V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v15M3 20h12M6 9h5M16 8l3 3v6a1.5 1.5 0 0 0 3 0v-8l-2.5-2.5',
-  // Cruz médica.
-  health: 'M12 5v14M5 12h14',
-  // Sacola de compras.
-  shopping: 'M5 8h14l-1 12H6L5 8ZM9 8V6a3 3 0 0 1 6 0v2',
-  // Colunas — museu, teatro, galeria.
-  culture: 'M4 10h16M5 10v9M10 10v9M14 10v9M19 10v9M3 19h18M12 3l8 5H4l8-5Z',
-  // Capelo.
-  education: 'M2 8l10-4 10 4-10 4L2 8ZM6 10v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5',
-  // Estrela — atração e hospedagem.
-  tourism: 'M12 4l2.4 5.2 5.6.6-4.2 3.9 1.2 5.6L12 16.4 6.9 19.3l1.2-5.6L4 9.8l5.6-.6L12 4Z',
-  // Halter.
-  sport: 'M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10',
-  // Árvore.
-  park: 'M12 3l5 7h-3l4 6h-4v5h-4v-5H6l4-6H7l5-7Z',
-  // Ônibus.
-  station: 'M5 6h14v9H5zM5 15v3h3v-3M16 15v3h3v-3M5 10h14M8 12.5h.01M16 12.5h.01',
-  // Marcador genérico, mas com forma própria — melhor que o ponto do provedor.
-  public: 'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
-}
-
-/** Cores por tema. O ícone precisa ler sobre o terreno, não competir com a rota. */
-const THEME_COLORS = {
-  light: { stroke: '#5B6B85', halo: '#FFFFFF' },
-  dark: { stroke: '#93A6C4', halo: '#0B111F' },
-} as const
-
-const ICON_PIXEL_SIZE = 44
-const ICON_PIXEL_RATIO = 2
-
-function iconId(category: string): string {
-  return `gps-poi-${category}`
-}
-
-/**
- * Desenha o ícone num canvas.
+ * Rasteriza um SVG num tamanho exato.
  *
- * O halo por trás do traço é o que garante leitura sobre qualquer parte do
- * mapa — sobre uma via branca, sobre o terreno ou sobre uma área verde. Sem
- * ele, um traço fino de 2px some assim que o fundo tem a mesma luminosidade.
+ * O `width`/`height` do arquivo é reescrito antes de virar imagem. Sem isso o
+ * navegador usa o tamanho intrínseco do SVG (96px no badge, 32px no dot) como
+ * resolução do bitmap, e o ícone apareceria borrado em tela de alto DPI — o
+ * `viewBox` continua o mesmo, então o desenho não distorce.
  */
-async function renderIcon(path: string, theme: 'dark' | 'light'): Promise<HTMLImageElement> {
-  const { stroke, halo } = THEME_COLORS[theme]
-  const size = ICON_PIXEL_SIZE
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
-    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path d="${path}" stroke="${halo}" stroke-width="5" stroke-opacity=".9"/>
-      <path d="${path}" stroke="${stroke}" stroke-width="2"/>
-    </g>
-  </svg>`
+async function rasterize(url: string, pixels: number): Promise<HTMLImageElement> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`POI asset ausente: ${url}`)
+  const contentType = response.headers.get('content-type') ?? ''
+  // Este app é uma SPA: o servidor de desenvolvimento e a Vercel reescrevem
+  // caminho desconhecido para o index.html COM status 200. Sem checar o
+  // content-type, um asset faltando viraria um `<img>` apontando para HTML.
+  if (!contentType.includes('svg')) throw new Error(`POI asset não é SVG: ${url}`)
 
-  const image = new Image(size * ICON_PIXEL_RATIO, size * ICON_PIXEL_RATIO)
-  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+  const source = await response.text()
+  const sized = source
+    .replace(/\swidth="[^"]*"/, ` width="${pixels}"`)
+    .replace(/\sheight="[^"]*"/, ` height="${pixels}"`)
+
+  const image = new Image()
+  image.decoding = 'sync'
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized)}`
   await image.decode()
   return image
 }
 
+interface RasterizedIcon {
+  image: HTMLImageElement
+  pixelRatio: number
+}
+
 /**
- * Registra (ou atualiza) os ícones e aponta cada camada de POI para o seu.
+ * Cache de rasterização, por sessão.
  *
- * Idempotente de propósito: é chamada na montagem e de novo a cada troca de
- * tema, e o MapLibre lança se `addImage` receber um id que já existe — daí a
- * distinção entre `addImage` e `updateImage`.
- *
- * Falha em silêncio por camada: se o provedor renomear ou remover uma delas, as
- * outras continuam válidas e os POIs daquela seguem com o ícone original.
+ * Chaveado só pelo id da imagem porque nem a variante nem o tema mudam o
+ * bitmap. Guarda a PROMESSA e não o resultado: se duas chamadas concorrentes
+ * pedirem o mesmo ícone (montagem e troca de tema quase juntas), as duas
+ * esperam a mesma rasterização em vez de disparar duas.
  */
-export async function applyPoiIcons(map: MapLibreMap, theme: 'dark' | 'light') {
-  for (const [category, layers] of Object.entries(CATEGORY_LAYERS)) {
-    const path = CATEGORY_PATHS[category]
-    if (!path) continue
+const rasterCache = new Map<string, Promise<RasterizedIcon>>()
+
+function loadIcon(category: PoiCategory, variant: 'badge' | 'dot'): Promise<RasterizedIcon> {
+  const id = poiImageId(category, variant)
+  const cached = rasterCache.get(id)
+  if (cached) return cached
+
+  const cssSize = variant === 'badge' ? BADGE_FILE_PX : DOT_FILE_PX
+  const ratio = rasterRatio()
+  const url = variant === 'badge' ? badgeUrl(category) : dotUrl(category)
+
+  const promise = rasterize(url, Math.round(cssSize * ratio)).then((image) => ({ image, pixelRatio: ratio }))
+  rasterCache.set(id, promise)
+  return promise
+}
+
+/**
+ * Expressão que escolhe o asset a partir da `class` da feição.
+ *
+ * Um único `match` com ~130 chaves em vez de um ícone por camada. O MapLibre
+ * compila `match` numa tabela de busca, então o custo por feição é constante —
+ * não é uma cadeia de comparações.
+ *
+ * Classe desconhecida ou ausente cai em `poi_generico`, nunca em ícone nenhum:
+ * esconder o POI por falta de mapeamento seria perder informação real do
+ * provedor por um detalhe nosso.
+ */
+function imageExpression(variant: 'badge' | 'dot'): ExpressionSpecification {
+  const cases: string[] = []
+  for (const [className, category] of Object.entries(POI_CLASS_MAP)) {
+    cases.push(className, poiImageId(category, variant))
+  }
+  return [
+    'match',
+    ['coalesce', ['get', 'class'], ''],
+    ...cases,
+    poiImageId(POI_FALLBACK, variant),
+  ] as unknown as ExpressionSpecification
+}
+
+/**
+ * `icon-image` final: ponto no zoom baixo, badge a partir do zoom de rua.
+ *
+ * O pacote define o `dot` justamente para densidade alta — num zoom de bairro
+ * os badges de 40px se sobreporiam e o MapLibre esconderia a maior parte
+ * deles, o que dá um mapa que pisca POIs conforme se navega. Trocar a variante
+ * mantém todos visíveis.
+ */
+function iconImageExpression(forceDot: boolean): ExpressionSpecification {
+  if (forceDot) return imageExpression('dot')
+  return [
+    'step',
+    ['zoom'],
+    imageExpression('dot'),
+    BADGE_MIN_ZOOM,
+    imageExpression('badge'),
+  ] as unknown as ExpressionSpecification
+}
+
+/**
+ * `icon-size` acompanhando a troca de variante.
+ *
+ * Uma curva só, e não duas aninhadas: o MapLibre exige que `['zoom']` apareça
+ * apenas no nível mais externo da expressão, então `step(zoom, interpolate(zoom
+ * …))` é rejeitado.
+ *
+ * Os valores saem dos tamanhos de arquivo (ver poiLibrary): dot de 22px em
+ * escala 1, badge de 40px em escala 1. O degrau entre 14,99 e 15 é o ponto em
+ * que o ponto vira badge.
+ */
+function iconSizeExpression(forceDot: boolean): ExpressionSpecification {
+  if (forceDot) {
+    // Navegação: 14px fixos. A rota e a manobra têm prioridade absoluta.
+    return 14 / 22 as unknown as ExpressionSpecification
+  }
+  return [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    11,
+    0.73, // ponto de 16px
+    14.99,
+    1, // ponto de 22px
+    BADGE_MIN_ZOOM,
+    0.78, // badge de 31px
+    17,
+    0.88, // badge de 35px
+    19,
+    1, // badge de 40px
+  ] as unknown as ExpressionSpecification
+}
+
+/**
+ * Posição do rótulo — à direita do BADGE, abaixo do PONTO.
+ *
+ * O pacote pede o nome à direita do badge, e faz sentido: o MapTiler o põe
+ * abaixo com 0,8em de deslocamento, medida feita para o ícone de 14px dele, e
+ * com um badge de 31–40px o nome encostaria na sombra.
+ *
+ * Mas só a partir do badge. No zoom de bairro o ícone é o ponto de 20px, e
+ * rótulo à direita alarga muito o símbolo: como as camadas do estilo usam
+ * `text-optional`, símbolo largo significa mais rótulo descartado por colisão
+ * — exatamente onde há mais POIs. Abaixo do zoom de rua o rótulo volta para
+ * baixo, que é a posição mais compacta.
+ *
+ * O deslocamento é em EM do texto, não em pixels.
+ */
+function textAnchorExpression(forceDot: boolean): ExpressionSpecification {
+  if (forceDot) return 'top' as unknown as ExpressionSpecification
+  return ['step', ['zoom'], 'top', BADGE_MIN_ZOOM, 'left'] as unknown as ExpressionSpecification
+}
+
+function textOffsetExpression(forceDot: boolean): ExpressionSpecification {
+  if (forceDot) return ['literal', [0, 0.8]] as unknown as ExpressionSpecification
+  return [
+    'step',
+    ['zoom'],
+    ['literal', [0, 0.9]],
+    BADGE_MIN_ZOOM,
+    ['literal', [1.8, 0]],
+  ] as unknown as ExpressionSpecification
+}
+
+/** Registro de imagens já colocadas em cada mapa — `addImage` lança se o id repetir. */
+const registeredMaps = new WeakSet<MapLibreMap>()
+
+/**
+ * `text-field` original de cada camada, para poder devolver.
+ *
+ * Durante a navegação os rótulos somem, e sumir aqui é esvaziar o `text-field`
+ * (não mexer em `text-opacity`, que carrega a expressão de ranking do
+ * provedor — sobrescrevê-la destruiria o controle de densidade dele).
+ */
+const originalTextFields = new WeakMap<MapLibreMap, Map<string, unknown>>()
+
+async function registerImages(map: MapLibreMap) {
+  if (registeredMaps.has(map)) return
+  registeredMaps.add(map)
+
+  const jobs: Promise<void>[] = []
+  for (const category of POI_CATEGORIES) {
+    for (const variant of ['badge', 'dot'] as const) {
+      jobs.push(
+        loadIcon(category, variant)
+          .then(({ image, pixelRatio }) => {
+            const id = poiImageId(category, variant)
+            if (map.hasImage(id)) return
+            map.addImage(id, image, { pixelRatio })
+          })
+          .catch(() => {
+            // Um asset ausente não pode derrubar os outros 39. A classe que
+            // dependia dele fica sem imagem e o MapLibre desenha o rótulo sem
+            // ícone, que é degradação aceitável.
+          }),
+      )
+    }
+  }
+  await Promise.all(jobs)
+}
+
+/**
+ * Ponto de entrada. Idempotente: chamada na montagem, na troca de tema e ao
+ * entrar/sair da navegação.
+ *
+ * `theme` não é mais usado para escolher asset (o pacote é único para os dois
+ * temas) — continua no parâmetro porque quem chama já o tem e porque uma
+ * eventual versão por tema entraria aqui sem mudar as chamadas.
+ */
+export async function applyPoiIcons(
+  map: MapLibreMap,
+  _theme: 'dark' | 'light',
+  options: { isNavigating?: boolean } = {},
+) {
+  const forceDot = options.isNavigating === true
+
+  await registerImages(map)
+
+  let snapshot = originalTextFields.get(map)
+  if (!snapshot) {
+    snapshot = new Map()
+    originalTextFields.set(map, snapshot)
+  }
+
+  for (const layerId of POI_LAYER_IDS) {
+    if (!map.getLayer(layerId)) continue
 
     try {
-      const image = await renderIcon(path, theme)
-      const id = iconId(category)
-      if (map.hasImage(id)) map.updateImage(id, image)
-      else map.addImage(id, image, { pixelRatio: ICON_PIXEL_RATIO })
-
-      for (const layerId of layers) {
-        if (!map.getLayer(layerId)) continue
-        map.setLayoutProperty(layerId, 'icon-image', id)
-        // Tamanho único em todas as categorias: é o que faz o conjunto ler
-        // como uma família em vez de ícones avulsos de origens diferentes.
-        map.setLayoutProperty(layerId, 'icon-size', [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          13,
-          0.42,
-          16,
-          0.55,
-          19,
-          0.7,
-        ])
+      if (!snapshot.has(layerId)) {
+        snapshot.set(layerId, map.getLayoutProperty(layerId, 'text-field'))
       }
+
+      map.setLayoutProperty(layerId, 'icon-image', iconImageExpression(forceDot))
+      map.setLayoutProperty(layerId, 'icon-size', iconSizeExpression(forceDot))
+      // Sem âncora explícita o badge quadrado herda o alinhamento pensado para
+      // o ícone pequeno do provedor.
+      map.setLayoutProperty(layerId, 'icon-anchor', 'center')
+      // Folga entre símbolos. O padrão do estilo é 2, dimensionado para o
+      // ícone de 14px do provedor: com badge de 31–40px os POIs vizinhos
+      // encostariam. `text-padding` fica como o provedor deixou — a densidade
+      // de rótulos é decisão dele, e sobrescrevê-la aqui só desligaria POIs
+      // que ele considera relevantes.
+      map.setLayoutProperty(layerId, 'icon-padding', forceDot ? 2 : 6)
+
+      map.setLayoutProperty(layerId, 'text-anchor', textAnchorExpression(forceDot))
+      map.setLayoutProperty(layerId, 'text-offset', textOffsetExpression(forceDot))
+      map.setLayoutProperty(layerId, 'text-field', forceDot ? '' : snapshot.get(layerId))
     } catch {
-      // Ícone não renderizou ou camada mudou de nome — o POI continua com o
-      // ícone do provedor, que é degradação aceitável.
+      // Camada renomeada ou removida pelo provedor: as outras seguem válidas.
     }
   }
 }

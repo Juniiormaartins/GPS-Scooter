@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Genérico / fallback">
+  <defs><linearGradient id="dgenerico" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5B6B85"></stop><stop offset="1" stop-color="#414F66"></stop></linearGradient>
+  <filter id="dsgenerico" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#dgenerico)" filter="url(#dsgenerico)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.4"></circle><path d="M12 3.8v2.8"></path><path d="M12 17.4v2.8"></path><path d="M3.8 12h2.8"></path><path d="M17.4 12h2.8"></path></g>
+</svg>

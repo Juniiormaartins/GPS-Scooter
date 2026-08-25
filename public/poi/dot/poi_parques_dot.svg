@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Parques e áreas verdes">
+  <defs><linearGradient id="dparques" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5FAA63"></stop><stop offset="1" stop-color="#3E8A46"></stop></linearGradient>
+  <filter id="dsparques" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#dparques)" filter="url(#dsparques)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 7.7 11h8.6L12 3.6Z"></path><path d="M12 9.2 6.2 17.6h11.6L12 9.2Z"></path><path d="M12 17.6V21"></path></g>
+</svg>

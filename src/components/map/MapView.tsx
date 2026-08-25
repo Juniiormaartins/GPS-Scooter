@@ -518,6 +518,9 @@ export function MapView({
   onSelectRouteOptionRef.current = onSelectRouteOption
   const themeRef = useRef(theme)
   themeRef.current = theme
+  /** Lido dentro de callbacks que não podem depender do ciclo de render (setUpAppLayers, applyTheme). */
+  const isNavigatingRef = useRef(isNavigating)
+  isNavigatingRef.current = isNavigating
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -558,7 +561,7 @@ export function MapView({
       layersReady = true
       applyCartography(map, themeRef.current)
       refineCartography(map, themeRef.current)
-      void applyPoiIcons(map, themeRef.current)
+      void applyPoiIcons(map, themeRef.current, { isNavigating: isNavigatingRef.current })
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -821,7 +824,7 @@ export function MapView({
     const applyTheme = () => {
       applyCartography(map, theme)
       refineCartography(map, theme)
-      void applyPoiIcons(map, theme)
+      void applyPoiIcons(map, theme, { isNavigating: isNavigatingRef.current })
 
       // As camadas de rota do app também trocam de paleta: os tons do tema
       // escuro (ciano/verde vivos) perdem contraste sobre um mapa claro.
@@ -858,6 +861,29 @@ export function MapView({
       map.off('idle', applyTheme)
     }
   }, [theme])
+
+  /**
+   * Hierarquia dos POIs durante a NAVEGAÇÃO.
+   *
+   * O pacote de POIs é explícito: em navegação ativa os badges viram pontos de
+   * 14px e os rótulos somem, porque a rota e a próxima manobra têm prioridade
+   * absoluta. Efeito próprio, e não dentro do de tema, porque começar a
+   * navegar não troca o tema — e antes disso os POIs continuariam em tamanho
+   * de exploração por cima do traçado.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.isStyleLoaded()) {
+      void applyPoiIcons(map, themeRef.current, { isNavigating })
+      return
+    }
+    const run = () => void applyPoiIcons(map, themeRef.current, { isNavigating })
+    map.once('idle', run)
+    return () => {
+      map.off('idle', run)
+    }
+  }, [isNavigating])
 
   useEffect(() => {
     const map = mapRef.current
