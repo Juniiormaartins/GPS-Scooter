@@ -98,7 +98,12 @@ function boundingBoxCacheKey(bbox: BoundingBox): string {
  * exatamente o travamento relatado. O enriquecimento é best-effort: se
  * estourar, a rota é avaliada sem as tags do OSM em vez de travar o app.
  */
-const CLIENT_TIMEOUT_MS = 6000
+// Medido contra o endpoint público: uma consulta de bbox urbano em Goiânia
+// levou 14,7 s para responder 200. Com 6 s, o enriquecimento falhava quase
+// sempre e TODA a rota caía para 'unknown' — ou seja, a classificação por
+// trecho simplesmente não acontecia. Os espelhos testados estavam piores
+// (kumi.systems 502, private.coffee 500), então a saída foi dar tempo.
+const CLIENT_TIMEOUT_MS = 13000
 
 async function fetchWaysInBoundingBox(bbox: BoundingBox): Promise<OverpassWay[]> {
   const cacheKey = boundingBoxCacheKey(bbox)

@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
+import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import type { Eligibility } from '@/types/routing'
 
 export interface RouteOptionGeometry {
@@ -32,7 +33,20 @@ interface MapViewProps {
   routeGeometry: LngLat[] | null
   /** Várias candidatas simultâneas (tela de seleção de rota) — cada uma colorida pela própria elegibilidade. Ignorado se vazio/ausente; nesse caso usa `routeGeometry`. */
   routeOptions?: RouteOptionGeometry[]
-  /** Trechos problemáticos da rota ATIVA, destacados por cima do traçado principal. */
+  /**
+   * Rota ATIVA quebrada em trechos já classificados para o veículo — é o que
+   * pinta o traçado com cores diferentes. Vazio: a rota é desenhada inteira na
+   * cor principal, usando `routeGeometry`.
+   */
+  routeSeveritySegments?: RouteSeveritySegment[]
+  /**
+   * Trechos que o usuário pediu para EVITAR nas preferências e que mesmo
+   * assim entraram na rota. Eixo diferente da severidade acima: severidade é
+   * "esta via serve para o seu veículo?", isto é "você pediu para não passar
+   * por aqui". Por isso é desenhado como sobreposição tracejada, e não com
+   * mais uma cor na linha — duas informações distintas não podem disputar o
+   * mesmo canal visual.
+   */
   routeWarnings?: RouteWarningSegment[]
   /** Quando true, a câmera acompanha `userPoint` continuamente (uso: navegação ativa). */
   followUser?: boolean
@@ -71,7 +85,14 @@ interface MapViewProps {
   onMapReady?: (map: MapLibreMap) => void
 }
 
+export interface RouteSeveritySegment {
+  path: LngLat[]
+  severity: SegmentSeverity
+}
+
 const ROUTE_SOURCE_ID = 'gps-scooter-route'
+/** Mesma rota, quebrada por trecho — alimenta a linha colorida (o casing segue contínuo, sem emendas). */
+const ROUTE_SEGMENTS_SOURCE_ID = 'gps-scooter-route-segments'
 const ROUTE_CASING_LAYER_ID = 'gps-scooter-route-casing'
 const ROUTE_LAYER_ID = 'gps-scooter-route-line'
 const ROUTE_OPTIONS_SOURCE_ID = 'gps-scooter-route-options'
@@ -96,6 +117,31 @@ const NAVIGATION_ZOOM = 17.5
 // empurra o ponto centralizado (o usuário) para a parte inferior da tela,
 // deixando a rota à frente visível acima dele, como num app de navegação real.
 const NAVIGATION_PADDING = { top: 260, bottom: 40, left: 0, right: 0 }
+
+/**
+ * Cor da linha por severidade do trecho.
+ *
+ * Reaproveita as cores de elegibilidade que já existem na paleta em vez de
+ * introduzir um terceiro conjunto: âmbar e vermelho já significam "com
+ * ressalva" e "não recomendada" no resto do app (selo da rota, cards), então
+ * a linha do mapa passa a falar a mesma língua dos rótulos ao lado dela.
+ *
+ * O trecho adequado usa o azul da marca, não verde: verde no traçado
+ * competiria com o âmbar/vermelho por atenção justamente onde o azul já
+ * significa "este é o seu caminho" em toda a interface.
+ */
+function severityColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecification {
+  const palette = routePalette(theme)
+  return [
+    'match',
+    ['get', 'severity'],
+    'critical',
+    palette.routeByEligibility['not-allowed'],
+    'attention',
+    palette.routeByEligibility.discouraged,
+    palette.routeSelected,
+  ]
+}
 
 /** Paleta de rota do tema atual — o mapa claro precisa de tons mais escuros para ter contraste. */
 function routePalette(theme: 'dark' | 'light') {
@@ -131,6 +177,7 @@ export function MapView({
   userPoint,
   routeGeometry,
   routeOptions = [],
+  routeSeveritySegments = [],
   routeWarnings = [],
   isRoutePreview = false,
   isNavigating = false,
@@ -194,6 +241,8 @@ export function MapView({
       })
       // Camada de contorno (casing) clara sob a linha principal: garante que a
       // rota permaneça legível mesmo sobre áreas do mapa predominantemente azuis.
+      map.addSource(ROUTE_SEGMENTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+
       map.addLayer({
         id: ROUTE_CASING_LAYER_ID,
         type: 'line',
@@ -204,9 +253,9 @@ export function MapView({
       map.addLayer({
         id: ROUTE_LAYER_ID,
         type: 'line',
-        source: ROUTE_SOURCE_ID,
+        source: ROUTE_SEGMENTS_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': routePalette(themeRef.current).routeSelected, 'line-width': 5, 'line-opacity': 0.95 },
+        paint: { 'line-color': severityColor(themeRef.current), 'line-width': 5, 'line-opacity': 0.95 },
       })
 
       // Múltiplas candidatas simultâneas (tela de seleção). Precisa de DUAS camadas
@@ -359,7 +408,7 @@ export function MapView({
         if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-color', color)
       }
       repaint(ROUTE_CASING_LAYER_ID, palette.routeCasing)
-      repaint(ROUTE_LAYER_ID, palette.routeSelected)
+      repaint(ROUTE_LAYER_ID, severityColor(theme))
       repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
       repaint(ROUTE_OPTIONS_DASHED_LAYER_ID, routeOptionsColor(theme))
     }
@@ -425,11 +474,43 @@ export function MapView({
 
     const coordinates: [number, number][] = (routeGeometry ?? []).map((point) => [point.lng, point.lat])
 
+    // O casing continua sendo UMA linha contínua: quebrado por trecho, ele
+    // deixaria emendas visíveis em cada junção.
     source.setData({
       type: 'Feature',
       properties: {},
       geometry: { type: 'LineString', coordinates },
     })
+
+    const segmentSource = map.getSource(ROUTE_SEGMENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (segmentSource) {
+      const usable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
+      segmentSource.setData({
+        type: 'FeatureCollection',
+        // Sem classificação por trecho (rota sem segmentos, enriquecimento que
+        // não respondeu), desenha a rota inteira como adequada em vez de
+        // deixar o mapa sem traçado — e "adequada" aqui é o padrão honesto:
+        // não afirmamos problema onde não temos dado.
+        features: usable.length
+          ? usable.map((segment) => ({
+              type: 'Feature' as const,
+              properties: { severity: segment.severity },
+              geometry: {
+                type: 'LineString' as const,
+                coordinates: segment.path.map((point) => [point.lng, point.lat]),
+              },
+            }))
+          : coordinates.length >= 2
+            ? [
+                {
+                  type: 'Feature' as const,
+                  properties: { severity: 'suitable' },
+                  geometry: { type: 'LineString' as const, coordinates },
+                },
+              ]
+            : [],
+      })
+    }
 
     // Centraliza e enquadra a câmera na rota recém-calculada, com respiro para
     // não ficar escondida atrás do SearchPanel (topo) e do RoutePanel (base).

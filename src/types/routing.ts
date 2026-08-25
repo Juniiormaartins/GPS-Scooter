@@ -1,6 +1,7 @@
 import type { LngLat } from '@/config/region'
 import type { AvoidanceHit } from '@/services/routing/avoidances'
 import type { RouteElevationProfile } from '@/services/routing/elevation'
+import type { RouteSeverityAnalysis } from '@/services/routing/segmentSeverity'
 
 /**
  * Classificação estrutural de vias, alinhada à hierarquia usada por
@@ -130,6 +131,13 @@ export interface ScoredRoute {
   avoidanceHits: AvoidanceHit[]
   /** Perfil de elevação estimado, quando a consulta funcionou. null = indisponível (nunca estimado por outro meio). */
   elevation: RouteElevationProfile | null
+  /**
+   * Classificação TRECHO A TRECHO já resolvida para o veículo ativo — é o que
+   * pinta a rota no mapa e alimenta a explicação de quantos km de cada tipo a
+   * rota tem. Fica aqui, calculada uma vez no pipeline, para que mapa e
+   * painel leiam exatamente a mesma coisa em vez de reclassificarem por conta.
+   */
+  severity: RouteSeverityAnalysis
   /** Permissão/elegibilidade da rota como um todo — o pior valor entre os segmentos (ver Eligibility). Eixo separado de suitabilityScore. */
   eligibility: Eligibility
   issues: RouteSuitabilityIssue[]

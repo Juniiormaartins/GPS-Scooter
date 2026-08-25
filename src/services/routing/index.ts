@@ -4,6 +4,8 @@ import { enrichRouteSegments } from '@/services/routing/segmentEnrichment'
 import { evaluateRoute } from '@/services/routing/ruleEngine'
 import { describeAvoidanceHit, evaluateAvoidances } from '@/services/routing/avoidances'
 import { fetchRouteElevationProfile } from '@/services/routing/elevation'
+import { analyzeRouteSeverity } from '@/services/routing/segmentSeverity'
+import type { VehicleClassificationContext } from '@/services/routing/roadClassification'
 import { getUserPreferences, ROUTE_PREFERENCE_TOLERANCE } from '@/config/userPreferences'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
@@ -32,7 +34,7 @@ import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
  * segmentEnrichment.ts — protege contra qualquer caminho que, por bug, deixe
  * uma promise pendente e trave o "Calculando rota…" para sempre.
  */
-const ENRICHMENT_DEADLINE_MS = 8000
+const ENRICHMENT_DEADLINE_MS = 15000
 
 /**
  * Prazo do perfil de elevação. Assim como o enriquecimento, é OPCIONAL: sem
@@ -65,6 +67,13 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
   }
 
   const preferences = getUserPreferences()
+  // O veículo do perfil passa a atravessar TODO o pipeline: a mesma via pode
+  // ser adequada para uma scooter de 32 km/h e exigir atenção para um
+  // patinete de 25 (ver applyVehicleAdjustment em roadClassification.ts).
+  const vehicle: VehicleClassificationContext = {
+    modelId: preferences.vehicleModelId,
+    referenceSpeedKmh: preferences.referenceSpeedKmh,
+  }
 
   const scored: ScoredRoute[] = await Promise.all(
     candidates.map(async (route) => {
@@ -75,7 +84,13 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
         withDeadline(fetchRouteElevationProfile(route), ELEVATION_DEADLINE_MS, null),
       ])
       const enrichedRoute = { ...route, segments: enrichedSegments }
-      const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute)
+      // Enriquecimento entrega os MESMOS objetos de segmento quando falha.
+      // Sem esta verificação, uma rota inteira sem dado de via seria
+      // classificada como adequada e a interface afirmaria isso com todas as
+      // letras — inventando confiança que não temos.
+      const isEnriched = enrichedSegments.some((segment) => segment.osmTags != null)
+
+      const { issues, suitabilityScore, eligibility, breakdown } = evaluateRoute(enrichedRoute, vehicle)
 
       // As preferências entram DEPOIS da avaliação obrigatória e só subtraem
       // pontos — não podem promover a elegibilidade de uma via inadequada.
@@ -93,6 +108,7 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
         preferenceScore: Math.max(0, suitabilityScore - avoidance.penaltyPoints),
         avoidanceHits: avoidance.hits,
         elevation,
+        severity: analyzeRouteSeverity(enrichedRoute, vehicle, isEnriched),
         eligibility,
         etaMinutes: calculateEtaMinutes(route.totalDistanceMeters),
         highlights: [],

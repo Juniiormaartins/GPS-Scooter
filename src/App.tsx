@@ -22,7 +22,6 @@ import { isSpeechSupported, primeFromUserGesture } from '@/services/navigation/v
 import { isPointWithinRegion, SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { isGeocodingConfigured, isMapConfigured, isRoutingConfigured } from '@/config/env'
 import { planRoute } from '@/services/routing'
-import { classifySegment } from '@/services/routing/roadClassification'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
@@ -425,33 +424,42 @@ export default function App() {
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
   /**
-   * Trechos inadequados DENTRO da rota ativa, para destaque no mapa.
-   * A classificação por segmento já existia (roadClassification.classifySegment)
-   * e alimentava só a pontuação — aqui ela também vira geometria, permitindo
-   * ver ONDE está o pedaço ruim de uma rota que no geral é recomendada.
+   * Trechos da rota ativa já classificados para o veículo — é o que faz o
+   * traçado no mapa ter cores diferentes ao longo do percurso.
+   *
+   * Vem pronto do pipeline (`scoredRoute.severity`), calculado uma única vez
+   * junto com a rota. A tela não reclassifica nada por conta própria: se
+   * fizesse, mapa e painel poderiam discordar sobre o mesmo trecho.
+   */
+  const scoredForDisplay = activeScoredRoute ?? preview?.result.selected ?? null
+  const routeSeveritySegments =
+    // Classificação sem lastro em dado de via não vira cor no mapa. Passar os
+    // trechos assim mesmo pintaria a rota inteira de azul "adequado" — a
+    // mesma afirmação falsa que o painel evita dizer em texto. Sem isso, o
+    // MapView desenha a rota inteira na cor padrão, que é o traçado neutro.
+    scoredForDisplay?.severity.isReliable
+      ? scoredForDisplay.severity.segments.map((segment) => ({ path: segment.path, severity: segment.severity }))
+      : []
+
+  /**
+   * Trechos que o USUÁRIO pediu para evitar e que mesmo assim entraram na rota
+   * (porque eram inevitáveis, ou porque desviar sairia caro demais).
+   *
+   * Eixo SEPARADO da severidade acima, de propósito. Severidade responde "esta
+   * via serve para o meu veículo?"; isto responde "eu pedi para não passar por
+   * aqui". Um trecho pode ser perfeitamente adequado e ainda assim contrariar
+   * uma preferência (uma subida íngreme numa rua residencial tranquila, por
+   * exemplo). Por isso continua como sobreposição, e não como mais uma cor na
+   * linha.
    */
   const routeWarnings = (() => {
     const segments = activeScoredRoute?.route.segments ?? []
-
-    const byClassification = segments
-      .map((segment) => ({ segment, tier: classifySegment(segment) }))
-      .filter(({ tier }) => tier === 'caution' || tier === 'unsuitable' || tier === 'prohibited')
-      .map(({ segment, tier }) => ({
-        path: segment.path,
-        severity: (tier === 'caution' ? 'caution' : 'unsuitable') as 'caution' | 'unsuitable',
-      }))
-
-    // Trechos que o USUÁRIO pediu para evitar e que mesmo assim entraram na
-    // rota (porque eram inevitáveis, ou porque desviar sairia caro demais).
-    // Aparecem com severidade 'caution': a via é utilizável — é uma
-    // preferência contrariada, não uma via inadequada.
     const indexesToAvoid = new Set((activeScoredRoute?.avoidanceHits ?? []).flatMap((hit) => hit.segmentIndexes))
-    const byPreference = [...indexesToAvoid]
+
+    return [...indexesToAvoid]
       .map((index) => segments[index])
       .filter((segment): segment is NonNullable<typeof segment> => segment != null)
       .map((segment) => ({ path: segment.path, severity: 'caution' as const }))
-
-    return [...byClassification, ...byPreference]
   })()
 
   const navigationSession = useNavigationSession(activeScoredRoute?.route ?? null, isNavigating)
@@ -501,6 +509,7 @@ export default function App() {
           isNavigating
           centerRequestId={centerToken}
           headingDeg={navigationSession.headingDeg}
+          routeSeveritySegments={routeSeveritySegments}
           routeWarnings={routeWarnings}
           theme={preferences.theme}
           onUserInteraction={() => setIsFollowingUser(false)}
@@ -552,6 +561,7 @@ export default function App() {
         userPoint={userPosition}
         routeGeometry={activeScoredRoute?.route.geometry ?? preview?.result.selected.route.geometry ?? null}
         routeOptions={routeOptions}
+        routeSeveritySegments={routeSeveritySegments}
         isRoutePreview={!activeScoredRoute && preview != null}
         theme={preferences.theme}
         onSelectRouteOption={setActiveRouteId}

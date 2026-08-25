@@ -1,3 +1,4 @@
+import { RouteBreakdown } from '@/components/route/RouteBreakdown'
 import { Button } from '@/components/ui/Button'
 import { SectionLabel, Tag } from '@/components/ui/primitives'
 import type { Eligibility, ScoredRoute } from '@/types/routing'
@@ -113,7 +114,10 @@ function RouteOptionCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-4 rounded-lg px-card py-3.5 text-left transition-all duration-base ease-standard ${
+      // `items-start`: com a composição por trecho embaixo, a coluna da
+      // esquerda ficou alta e o ETA centralizado colidia com a barra. Ancorado
+      // no topo, ele fica na mesma linha do selo, que é onde se espera lê-lo.
+      className={`flex w-full items-start gap-4 rounded-lg px-card py-3.5 text-left transition-all duration-base ease-standard ${
         isSelected ? 'border-2 border-brand-500 bg-surface-raised' : 'border border-hairline/10 bg-surface-sunken'
       }`}
     >
@@ -128,9 +132,14 @@ function RouteOptionCard({
         {reason && (
           <p className={`mt-1.5 text-[16px] ${isSelected ? 'text-content-primary' : 'text-content-secondary'}`}>{reason}</p>
         )}
+        {/* A composição por trecho aparece em TODOS os cards — é justamente ao
+            comparar alternativas que ela decide a escolha. Os trechos citados
+            um a um ficam só na selecionada, para os outros cards não virarem
+            parede de texto. */}
+        <RouteBreakdown severity={scoredRoute.severity} compact={!isSelected} />
       </div>
       <span
-        className={`shrink-0 whitespace-nowrap text-metric ${isSelected ? 'text-content-primary' : 'text-content-secondary'}`}
+        className={`shrink-0 whitespace-nowrap pt-0.5 text-metric ${isSelected ? 'text-content-primary' : 'text-content-secondary'}`}
       >
         {formatEta(scoredRoute.etaMinutes)}
       </span>

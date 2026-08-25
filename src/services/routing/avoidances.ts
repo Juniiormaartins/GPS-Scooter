@@ -1,5 +1,5 @@
 import { classifyGrade, GRADE_LABEL, type RouteElevationProfile } from '@/services/routing/elevation'
-import { classifySegment } from '@/services/routing/roadClassification'
+import { classifySegment, type VehicleClassificationContext } from '@/services/routing/roadClassification'
 import { formatDistance } from '@/utils/geo'
 import type { AvoidanceId, UserPreferences } from '@/config/userPreferences'
 import { AVOIDANCE_WEIGHT_BY_VEHICLE } from '@/config/userPreferences'
@@ -65,12 +65,17 @@ export function evaluateAvoidances(
   const hits: AvoidanceHit[] = []
   let penaltyPoints = 0
 
+  const vehicle: VehicleClassificationContext = {
+    modelId: preferences.vehicleModelId,
+    referenceSpeedKmh: preferences.referenceSpeedKmh,
+  }
+
   for (const id of active) {
     const segmentIndexes: number[] = []
     let distanceMeters = 0
 
     route.segments.forEach((segment, index) => {
-      if (!segmentMatchesAvoidance(id, segment, elevation?.gradeBySegment[index] ?? null)) return
+      if (!segmentMatchesAvoidance(id, segment, elevation?.gradeBySegment[index] ?? null, vehicle)) return
       segmentIndexes.push(index)
       distanceMeters += segment.distanceMeters
     })
@@ -96,12 +101,17 @@ export function evaluateAvoidances(
  * Isso torna a detecção conservadora por construção: podemos deixar de
  * sinalizar um trecho, mas não sinalizamos um trecho que não conhecemos.
  */
-function segmentMatchesAvoidance(id: AvoidanceId, segment: RouteSegment, gradePercent: number | null): boolean {
+function segmentMatchesAvoidance(
+  id: AvoidanceId,
+  segment: RouteSegment,
+  gradePercent: number | null,
+  vehicle: VehicleClassificationContext,
+): boolean {
   switch (id) {
     case 'express-roads': {
       // Reaproveita a classificação que já existe: o que o produto considera
       // via expressa/rodovia é exatamente o que cai em 'unsuitable'.
-      const tier = classifySegment(segment)
+      const tier = classifySegment(segment, vehicle)
       return tier === 'unsuitable'
     }
 

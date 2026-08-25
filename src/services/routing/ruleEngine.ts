@@ -1,4 +1,10 @@
-import { classifySegment, TIER_ELIGIBILITY, TIER_LABEL, TIER_PENALTY_PER_KM } from '@/services/routing/roadClassification'
+import {
+  classifySegment,
+  TIER_ELIGIBILITY,
+  TIER_LABEL,
+  TIER_PENALTY_PER_KM,
+  type VehicleClassificationContext,
+} from '@/services/routing/roadClassification'
 import { formatDistance } from '@/utils/geo'
 import type { CandidateRoute, Eligibility, RouteSuitabilityIssue, SuitabilityTier, TierBreakdownEntry } from '@/types/routing'
 
@@ -28,14 +34,14 @@ export interface RouteEvaluation {
   issues: RouteSuitabilityIssue[]
 }
 
-export function evaluateRoute(route: CandidateRoute): RouteEvaluation {
+export function evaluateRoute(route: CandidateRoute, vehicle?: VehicleClassificationContext): RouteEvaluation {
   if (route.totalDistanceMeters <= 0) {
     return { suitabilityScore: 0, eligibility: 'allowed', breakdown: [], issues: [] }
   }
 
   const distanceByTier = new Map<SuitabilityTier, number>()
   for (const segment of route.segments) {
-    const tier = classifySegment(segment)
+    const tier = classifySegment(segment, vehicle)
     distanceByTier.set(tier, (distanceByTier.get(tier) ?? 0) + segment.distanceMeters)
   }
 
