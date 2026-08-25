@@ -33,11 +33,13 @@ interface NavigationPanelProps {
   /**
    * Aviso passageiro da navegação (ex.: "nenhuma alternativa diferente").
    *
-   * Existe porque `statusMessage` do App só é renderizado no SearchPanel, que
-   * não está na tela durante a navegação — sem este slot, o retorno da busca
-   * por alternativa seria escrito num lugar invisível.
+   * Existe porque `statusMessage` do App só é renderizado no topo da tela de
+   * exploração, que não está na tela durante a navegação — sem este slot, o
+   * retorno da busca por alternativa seria escrito num lugar invisível.
    */
   notice?: string | null
+  /** Aviso antecipado de trecho classificado à frente (handoff tela 04, item 2). */
+  segmentWarning?: ReactNode
 }
 
 /**
@@ -64,6 +66,7 @@ export function NavigationPanel({
   onFindAlternative,
   isSearchingAlternative = false,
   notice = null,
+  segmentWarning,
 }: NavigationPanelProps) {
   const { route, etaMinutes } = scoredRoute
 
@@ -113,6 +116,8 @@ export function NavigationPanel({
             {locationError ?? 'Obtendo sua localização…'}
           </div>
         )}
+
+        {segmentWarning}
 
         {routeDeviated && (
           <div className="pointer-events-auto rounded-lg bg-warning-500 px-card py-2.5 text-body font-bold text-content-on-accent shadow-float">

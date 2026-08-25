@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapView } from '@/components/map/MapView'
-import { SearchPanel } from '@/components/search/SearchPanel'
 import { LocationHeader, SearchBar } from '@/components/search/LocationHeader'
+import { OriginFallbackCard } from '@/components/search/OriginFallbackCard'
+import { VehicleSheet } from '@/components/vehicle/VehicleSheet'
 import { SearchScreen } from '@/components/search/SearchScreen'
 import { PoiCard } from '@/components/search/PoiCard'
 import { MapControls } from '@/components/controls/MapControls'
@@ -11,6 +12,7 @@ import { BottomNavBar } from '@/components/layout/BottomNavBar'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
+import { SegmentDetailSheet, SegmentWarningPill } from '@/components/navigation/SegmentDetail'
 import { compareRoutes, pickAlternative, type RouteComparison } from '@/services/routing/alternatives'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
@@ -30,11 +32,19 @@ import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/stora
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
 import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult, ScoredRoute } from '@/types/routing'
+import type { SeverityRun } from '@/services/routing/segmentSeverity'
 
 type ActivePanel = 'profile' | 'saved' | 'activity' | null
 
 /** Texto do campo de origem quando a localização atual está em uso mas a geocodificação reversa ainda não resolveu (ou falhou). */
 const CURRENT_LOCATION_LABEL = 'Minha localização atual'
+
+/**
+ * Até onde o aviso antecipado enxerga. 2 km a 25–32 km/h dá alguns minutos de
+ * antecedência — o suficiente para decidir por uma alternativa antes de estar
+ * comprometido com a via. Avisar de algo a 8 km seria ruído.
+ */
+const SEGMENT_WARNING_LOOKAHEAD_METERS = 2000
 
 export default function App() {
   const [originText, setOriginText] = useState('')
@@ -85,6 +95,9 @@ export default function App() {
   const [pendingCenter, setPendingCenter] = useState(false)
   const [centerToken, setCenterToken] = useState(0)
   const [northToken, setNorthToken] = useState(0)
+  const [isVehicleSheetOpen, setIsVehicleSheetOpen] = useState(false)
+  /** Trecho classificado aberto em detalhe (handoff tela 07). */
+  const [openSegmentRunIndex, setOpenSegmentRunIndex] = useState<number | null>(null)
   /** Rumo do mapa, espelhado do MapView só para a agulha da bússola girar. */
   const [mapBearing, setMapBearing] = useState(0)
   const [pendingTraceDestination, setPendingTraceDestination] = useState<{ text: string; point: LngLat } | null>(null)
@@ -594,6 +607,35 @@ export default function App() {
     return [parts[0], parts.slice(1).join(' · ') || null]
   })()
 
+  /**
+   * Trecho classificado logo à FRENTE, para o aviso antecipado.
+   *
+   * Só entra na tela um trecho que ainda não foi passado e que está dentro do
+   * alcance de aviso — avisar de algo a 8 km é ruído, e avisar de algo já
+   * percorrido é erro. Entre os candidatos, vale o mais próximo.
+   */
+  const upcomingSegmentWarning: { run: SeverityRun; index: number; aheadMeters: number } | null = (() => {
+    if (!isNavigating || !activeScoredRoute || !navigationSession.progress) return null
+    const { segments, runs } = activeScoredRoute.severity
+    if (!activeScoredRoute.severity.isReliable) return null
+
+    const traveled = navigationSession.progress.distanceTraveledMeters
+    // Laço explícito, não `forEach`: dentro do callback o TypeScript estreita
+    // `best` para `null` e não consegue alargar de volta na atribuição.
+    const candidates: { run: SeverityRun; index: number; aheadMeters: number }[] = []
+    for (let index = 0; index < runs.length; index += 1) {
+      const run = runs[index]
+      const startIndex = Math.min(...run.segmentIndexes)
+      let start = 0
+      for (let i = 0; i < startIndex; i += 1) start += segments[i]?.distanceMeters ?? 0
+      const aheadMeters = start - traveled
+      if (aheadMeters <= 0 || aheadMeters > SEGMENT_WARNING_LOOKAHEAD_METERS) continue
+      candidates.push({ run, index, aheadMeters })
+    }
+
+    return candidates.sort((a, b) => a.aheadMeters - b.aheadMeters)[0] ?? null
+  })()
+
   const isNavigationView = isNavigating && activeScoredRoute != null
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
@@ -608,6 +650,7 @@ export default function App() {
         // de escolha e sumiriam de qualquer forma pela visibilidade das camadas.
         routeOptions={isNavigationView ? [] : routeOptions}
         routeSeveritySegments={routeSeveritySegments}
+        comparisonGeometry={alternative?.route.route.geometry ?? null}
         // Os trechos que o usuário pediu para evitar passam a aparecer também
         // na tela de escolha — antes só a navegação recebia esta prop, então a
         // informação sumia justamente na hora de comparar as alternativas.
@@ -653,6 +696,7 @@ export default function App() {
             />
           }
           onStop={() => {
+            setOpenSegmentRunIndex(null)
             setIsNavigating(false)
             setIsFollowingUser(true)
             setAlternative(null)
@@ -661,10 +705,33 @@ export default function App() {
           onFindAlternative={destinationPoint ? handleFindAlternative : undefined}
           isSearchingAlternative={isSearchingAlternative}
           notice={navigationNotice}
+          segmentWarning={
+            upcomingSegmentWarning && (
+              <SegmentWarningPill
+                run={upcomingSegmentWarning.run}
+                distanceAheadMeters={upcomingSegmentWarning.aheadMeters}
+                onOpen={() => setOpenSegmentRunIndex(upcomingSegmentWarning.index)}
+              />
+            )
+          }
         />
+
+        {openSegmentRunIndex != null && activeScoredRoute.severity.runs[openSegmentRunIndex] && (
+          <SegmentDetailSheet
+            run={activeScoredRoute.severity.runs[openSegmentRunIndex]}
+            segments={activeScoredRoute.route.segments}
+            isSearchingAlternative={isSearchingAlternative}
+            onDismiss={() => setOpenSegmentRunIndex(null)}
+            onFindAlternative={() => {
+              setOpenSegmentRunIndex(null)
+              handleFindAlternative()
+            }}
+          />
+        )}
 
         {alternative && (
           <AlternativeSheet
+            current={activeScoredRoute}
             alternative={alternative.route}
             comparison={alternative.comparison}
             onAccept={handleAcceptAlternative}
@@ -697,16 +764,12 @@ export default function App() {
         <SearchBar onOpenSearch={() => setIsSearchOpen(true)} value={destinationText || null} />
 
         {!userPosition && (
-          <SearchPanel
+          <OriginFallbackCard
             originText={originText}
-            destinationText={destinationText}
             onOriginChange={handleOriginTextChange}
             onSelectOrigin={handleSelectOrigin}
-            onUseCurrentLocation={handleUseCurrentLocation}
-            onOpenSearch={() => setIsSearchOpen(true)}
-            onProfileClick={() => setActivePanel('profile')}
-            isCalculating={isCalculating}
-            warningMessage={statusMessage ?? warningMessage}
+            onRetryLocation={handleUseCurrentLocation}
+            message={statusMessage ?? warningMessage}
           />
         )}
 
@@ -782,7 +845,7 @@ export default function App() {
             <VehicleStatusBar
               bluetooth={vehicleBluetooth}
               preferences={preferences}
-              onOpen={() => setActivePanel('profile')}
+              onOpen={() => setIsVehicleSheetOpen(true)}
             />
             <BottomNavBar
               active={activePanel ?? 'explore'}
@@ -811,6 +874,27 @@ export default function App() {
           initialQuery={destinationText}
         />
       )}
+          {/*
+            Seletor de veículo sobre o mapa (handoff tela 06). Trocar de
+            veículo muda as regras de classificação, então a rota em tela é
+            recalculada — não basta gravar a preferência.
+          */}
+          {isVehicleSheetOpen && (
+            <VehicleSheet
+              preferences={preferences}
+              onDismiss={() => setIsVehicleSheetOpen(false)}
+              onSave={(patch) => {
+                updatePreferences(patch)
+                setIsVehicleSheetOpen(false)
+                setPreview(null)
+                if (routeResult && destinationPoint) {
+                  setRouteResult(null)
+                  setActiveRouteId(null)
+                  calculateRoute(undefined, { text: destinationText, point: destinationPoint })
+                }
+              }}
+            />
+          )}
         </>
       )}
     </div>

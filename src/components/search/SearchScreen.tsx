@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Chip, ListRow, SectionLabel } from '@/components/ui/primitives'
+import { ListRow, SectionLabel } from '@/components/ui/primitives'
 import type { LngLat } from '@/config/region'
 import { useAddressSuggestions } from '@/hooks/useAddressSuggestions'
 import type { GeocodingResult } from '@/services/geocoding'
@@ -39,21 +39,31 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
   return (
     <div className="pointer-events-auto absolute inset-0 z-40 flex flex-col bg-surface">
       {/* Cabeçalho recuado (surface-sunken), com o campo focado e a fila de categorias. */}
-      <div className="flex shrink-0 flex-col gap-card bg-surface-sunken px-gutter pb-card pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex items-center gap-2">
+      {/*
+        Cabeçalho da tela de busca (handoff tela 02): o campo mantém o MESMO
+        aspecto visual da tela 01 — branco, hairline, sombra —, com a seta de
+        voltar à esquerda e um botão circular de limpar. Trocar a aparência do
+        campo entre as duas telas quebraria a continuidade do gesto de tocar
+        nele e "entrar" na busca.
+      */}
+      <div className="flex shrink-0 flex-col gap-3 px-4 pb-3.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Voltar"
-            className="flex shrink-0 items-center p-2 text-content-primary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-card text-content-primary shadow-float transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
           >
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.2}>
+            <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2.2}>
               <path d="M19 12H5M11 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
 
-          <div className="flex h-[52px] flex-1 items-center gap-2.5 rounded-md border-2 border-brand-500 bg-surface-card px-3.5">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-pill bg-brand-500" />
+          <div className="flex h-[58px] flex-1 items-center gap-3 rounded-field border border-hairline/[.06] bg-surface-card pl-[18px] pr-2 shadow-field">
+            <svg viewBox="0 0 24 24" className="h-[22px] w-[22px] shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.6-3.6" />
+            </svg>
             <input
               ref={inputRef}
               value={query}
@@ -61,8 +71,8 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 setQuery(e.target.value)
                 setActiveCategory(null)
               }}
-              placeholder="Para onde?"
-              className="min-w-0 flex-1 bg-transparent text-[17px] font-bold text-content-primary placeholder:text-content-tertiary focus:outline-none"
+              placeholder="Para onde você quer ir?"
+              className="min-w-0 flex-1 bg-transparent text-field-text text-content-primary placeholder:text-content-tertiary focus:outline-none"
             />
             {/* Spinner NO CAMPO enquanto busca: é onde o olho já está, então o
                 usuário percebe na hora que o app está procurando. Some assim
@@ -70,7 +80,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
             {isLoading ? (
               <span
                 aria-label="Buscando"
-                className="h-[18px] w-[18px] shrink-0 animate-spin rounded-pill border-2 border-brand-500 border-t-transparent"
+                className="mr-3 h-[18px] w-[18px] shrink-0 animate-spin rounded-pill border-2 border-brand-500 border-t-transparent"
               />
             ) : (
               query && (
@@ -82,11 +92,10 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                     inputRef.current?.focus()
                   }}
                   aria-label="Limpar"
-                  className="shrink-0 text-content-tertiary transition-colors active:text-content-primary"
+                  className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-surface-tile-accent text-brand-500 transition-all duration-fast active:scale-[.97]"
                 >
-                  <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M9 9l6 6M15 9l-6 6" strokeLinecap="round" />
+                  <svg viewBox="0 0 24 24" className="h-[20px] w-[20px]" fill="none" stroke="currentColor" strokeWidth={2.4}>
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
                   </svg>
                 </button>
               )
@@ -94,12 +103,25 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
           </div>
         </div>
 
-        <div className="flex gap-stack overflow-x-auto">
-          {CATEGORIES.map((category) => (
-            <Chip key={category} selected={activeCategory === category} onClick={() => selectCategory(category)}>
-              {category}
-            </Chip>
-          ))}
+        {/* Chip ativo em #0F1729 com texto branco; inativos brancos com hairline. */}
+        <div className="flex gap-2 overflow-x-auto pb-0.5">
+          {CATEGORIES.map((category) => {
+            const selected = activeCategory === category
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => selectCategory(category)}
+                className={`shrink-0 rounded-pill px-4 py-2 text-[14px] font-bold transition-all duration-base ease-standard active:scale-[.97] ${
+                  selected
+                    ? 'bg-nav-surface text-white'
+                    : 'border border-hairline/[.08] bg-surface-card text-content-secondary'
+                }`}
+              >
+                {category}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -162,7 +184,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 a consulta corre, "RESULTADOS" quando ela termina. */}
             <div className="mb-1 flex items-baseline justify-between gap-2">
               <SectionLabel>
-                {isLoading ? <span className="text-brand-500">Buscando lugares…</span> : 'Resultados'}
+                {isLoading ? <span className="text-brand-500">Buscando lugares…</span> : 'Resultados próximos'}
               </SectionLabel>
               {/* A distância de cada linha é EM LINHA RETA (Haversine), não pela
                   rota — medido: um destino a 14,5 km em linha reta dá ~16,9 km

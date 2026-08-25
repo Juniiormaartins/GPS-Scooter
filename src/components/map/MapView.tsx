@@ -39,6 +39,8 @@ interface MapViewProps {
    * cor principal, usando `routeGeometry`.
    */
   routeSeveritySegments?: RouteSeveritySegment[]
+  /** Geometria da alternativa em comparação — desenhada pontilhada ao lado da atual. Vazia = nenhuma. */
+  comparisonGeometry?: LngLat[] | null
   /**
    * Trechos que o usuário pediu para EVITAR nas preferências e que mesmo
    * assim entraram na rota. Eixo diferente da severidade acima: severidade é
@@ -120,6 +122,14 @@ const ROUTE_OPTIONS_DASHED_LAYER_ID = 'gps-scooter-route-options-line-dashed'
  */
 const ROUTE_OPTIONS_HIT_LAYER_ID = 'gps-scooter-route-options-hit'
 /** Trechos inadequados DENTRO da rota selecionada — desenhados por cima dela. */
+/**
+ * Rota alternativa durante a COMPARAÇÃO (handoff tela 05): casing branco +
+ * traço cinza pontilhado. Camada própria porque ela coexiste com a rota
+ * ativa e precisa ler como "a outra opção", não como mais uma candidata.
+ */
+const COMPARE_SOURCE_ID = 'gps-scooter-compare'
+const COMPARE_CASING_LAYER_ID = 'gps-scooter-compare-casing'
+const COMPARE_LAYER_ID = 'gps-scooter-compare-line'
 const ROUTE_WARN_SOURCE_ID = 'gps-scooter-route-warn'
 const ROUTE_WARN_LAYER_ID = 'gps-scooter-route-warn-line'
 
@@ -360,6 +370,7 @@ export function MapView({
   routeGeometry,
   routeOptions = [],
   routeSeveritySegments = [],
+  comparisonGeometry = null,
   routeWarnings = [],
   isRoutePreview = false,
   isNavigating = false,
@@ -484,6 +495,22 @@ export function MapView({
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { ...optionsPaint(), 'line-dasharray': [2, 1.6] },
       })
+      map.addSource(COMPARE_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: COMPARE_CASING_LAYER_ID,
+        type: 'line',
+        source: COMPARE_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#FFFFFF', 'line-width': 14, 'line-opacity': 0.9 },
+      })
+      map.addLayer({
+        id: COMPARE_LAYER_ID,
+        type: 'line',
+        source: COMPARE_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#94A3B8', 'line-width': 8, 'line-dasharray': [2, 2.4] },
+      })
+
       map.addSource(ROUTE_WARN_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addLayer({
         id: ROUTE_WARN_LAYER_ID,
@@ -634,6 +661,21 @@ export function MapView({
     }
   }, [theme])
 
+  useEffect(() => {
+    const map = mapRef.current
+    const source = map?.getSource(COMPARE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (!map || !source) return
+
+    const coordinates = (comparisonGeometry ?? []).map((point) => [point.lng, point.lat] as [number, number])
+    source.setData({
+      type: 'FeatureCollection',
+      features:
+        coordinates.length >= 2
+          ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates } }]
+          : [],
+    })
+  }, [comparisonGeometry])
+
   // Preview vs. rota confirmada: mesma cor e mesma geometria real, só com
   // peso menor. A distinção forte entre os dois estados é estrutural — no
   // preview existe UMA linha, depois de "Traçar rota" existem as alternativas
@@ -731,7 +773,7 @@ export function MapView({
     }
 
     // Centraliza e enquadra a câmera na rota recém-calculada, com respiro para
-    // não ficar escondida atrás do SearchPanel (topo) e do RoutePanel (base).
+    // não ficar escondida atrás do cabeçalho de busca (topo) e do RoutePanel (base).
     // Durante a navegação a câmera pertence ao acompanhamento: enquadrar aqui
     // arrancaria a vista de cima do usuário no instante em que a rota muda
     // (aceitar uma alternativa, recalcular por desvio).

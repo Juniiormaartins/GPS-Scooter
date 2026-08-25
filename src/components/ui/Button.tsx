@@ -19,17 +19,21 @@ export interface ButtonProps {
 }
 
 const VARIANT: Record<NonNullable<ButtonProps['variant']>, string> = {
-  go: 'bg-success-500 text-content-on-accent',
-  primary: 'bg-brand-500 text-content-on-accent',
-  secondary: 'bg-surface-raised text-content-primary',
+  go: 'bg-success-500 text-content-on-accent shadow-go-btn',
+  primary: 'bg-brand-500 text-content-on-accent shadow-primary',
+  secondary: 'bg-surface-sunken text-content-primary',
   quiet: 'bg-brand-500/[.16] text-brand-500',
   ghost: 'bg-transparent text-brand-500',
   destructive: 'bg-surface-card text-danger-500',
 }
 
+/**
+ * Alturas do handoff (§4.3): botão primário 56px; par secundário/primário
+ * 52px; secundário raio 18px. O `lg` é o primário de sheet.
+ */
 const SIZE: Record<NonNullable<ButtonProps['size']>, string> = {
-  lg: 'h-14 text-[18px] rounded-lg px-6',
-  md: 'h-12 text-[16px] rounded-md px-5',
+  lg: 'h-14 text-btn-primary rounded-lg px-6',
+  md: 'h-[52px] text-btn-secondary rounded-lg px-5',
   sm: 'h-9 text-[14px] rounded-pill px-3.5',
 }
 
