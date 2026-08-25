@@ -9,6 +9,8 @@ import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet
 import { BottomNavBar } from '@/components/layout/BottomNavBar'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
+import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
+import { compareRoutes, pickAlternative, type RouteComparison } from '@/services/routing/alternatives'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
 import { ActivityPanel } from '@/components/panels/ActivityPanel'
@@ -26,7 +28,7 @@ import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
 import { recordSearch } from '@/services/storage/searchHistory'
-import type { RouteResult } from '@/types/routing'
+import type { RouteResult, ScoredRoute } from '@/types/routing'
 
 type ActivePanel = 'profile' | 'saved' | 'activity' | null
 
@@ -56,6 +58,10 @@ export default function App() {
   const [isCalculating, setIsCalculating] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
   const [isRecalculating, setIsRecalculating] = useState(false)
+  const [isSearchingAlternative, setIsSearchingAlternative] = useState(false)
+  const [navigationNotice, setNavigationNotice] = useState<string | null>(null)
+  /** Alternativa encontrada e ainda não decidida pelo usuário. */
+  const [alternative, setAlternative] = useState<{ route: ScoredRoute; comparison: RouteComparison } | null>(null)
   const [isFollowingUser, setIsFollowingUser] = useState(true)
   const [sheetSnap, setSheetSnap] = useState<SheetSnapPoint>('half')
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
@@ -354,6 +360,60 @@ export default function App() {
       )
     : false
 
+  /** Aviso que some sozinho: em movimento, ninguém vai tocar para dispensar. */
+  function showNavigationNotice(message: string) {
+    setNavigationNotice(message)
+    window.setTimeout(() => setNavigationNotice((current) => (current === message ? null : current)), 5000)
+  }
+
+  /**
+   * "Buscar alternativa" durante a navegação.
+   *
+   * Recalcula a partir da POSIÇÃO ATUAL, não da origem original: no meio do
+   * trajeto, as opções que existiam na partida já não são as mesmas. Passa
+   * pelo mesmo `planRoute`, então a alternativa respeita veículo, regras e
+   * preferências exatamente como a rota em uso.
+   *
+   * Nunca troca sozinha — o resultado vira uma sugestão que o usuário aceita
+   * ou descarta (ver AlternativeSheet). E se nenhuma candidata percorrer um
+   * caminho realmente diferente, avisa discretamente em vez de oferecer a
+   * mesma rota com outro nome.
+   */
+  async function handleFindAlternative() {
+    const from = navigationSession.gpsSample?.position ?? navigationSession.progress?.snappedPosition
+    if (!from || !destinationPoint || !activeScoredRoute || isSearchingAlternative) return
+
+    setIsSearchingAlternative(true)
+    setStatusMessage(null)
+    try {
+      const result = await planRoute({ origin: from, destination: destinationPoint })
+      const candidates = [result.selected, ...result.alternatives]
+      const picked = pickAlternative(activeScoredRoute, candidates)
+
+      if (!picked) {
+        showNavigationNotice('Nenhuma rota alternativa diferente desta foi encontrada agora.')
+        return
+      }
+
+      setAlternative({ route: picked, comparison: compareRoutes(activeScoredRoute, picked) })
+    } catch {
+      showNavigationNotice('Não foi possível buscar uma alternativa agora.')
+    } finally {
+      setIsSearchingAlternative(false)
+    }
+  }
+
+  /** Aceita a sugestão: a alternativa vira a rota ativa e a navegação continua sem interrupção. */
+  function handleAcceptAlternative() {
+    if (!alternative) return
+    setRouteResult({ selected: alternative.route, alternatives: [] })
+    setActiveRouteId(alternative.route.route.id)
+    setAlternative(null)
+    // O trajeto mudou: o que estava na fila de voz descreve manobras que não
+    // existem mais. `useVoiceGuidance` já limpa a fila ao ver outra rota.
+    navigationSession.acknowledgeRecalculation()
+  }
+
   function handleCenterOnUser() {
     if (isNavigating) {
       // Retoma o acompanhamento E pede a recentralização explícita. Os dois
@@ -541,8 +601,22 @@ export default function App() {
           onStop={() => {
             setIsNavigating(false)
             setIsFollowingUser(true)
+            setAlternative(null)
+            setNavigationNotice(null)
           }}
+          onFindAlternative={destinationPoint ? handleFindAlternative : undefined}
+          isSearchingAlternative={isSearchingAlternative}
+          notice={navigationNotice}
         />
+
+        {alternative && (
+          <AlternativeSheet
+            alternative={alternative.route}
+            comparison={alternative.comparison}
+            onAccept={handleAcceptAlternative}
+            onKeep={() => setAlternative(null)}
+          />
+        )}
       </div>
     )
   }

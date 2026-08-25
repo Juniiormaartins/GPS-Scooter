@@ -171,6 +171,72 @@ function navigationZoomForSpeed(speedKmh: number | null, currentZoom: number | n
 const NAVIGATION_PADDING = { top: 300, bottom: 32, left: 0, right: 0 }
 
 /**
+ * Inclinação da câmera na navegação, em graus.
+ *
+ * Fora da navegação o mapa continua reto (pitch 0): ali o usuário está
+ * lendo a cidade e comparando rotas, e perspectiva atrapalha essa leitura.
+ * Dentro da navegação a inclinação é o que dá a sensação de deslocamento e
+ * empurra o horizonte para longe, mostrando mais caminho à frente sem
+ * precisar afastar o zoom.
+ *
+ * 52° é o meio-termo: perto do que os GPS de referência usam, o suficiente
+ * para a perspectiva aparecer, e ainda abaixo do ponto em que as ruas ao
+ * fundo se achatam e os nomes ficam ilegíveis (a partir de ~60° o texto
+ * comprime demais).
+ */
+const NAVIGATION_PITCH = 52
+
+/**
+ * Largura da rota, por estado e por zoom.
+ *
+ * A rota era 5px FIXOS. Como as vias locais foram engrossadas para 6px no
+ * zoom de navegação e uma secundária chega a 9px, a rota ficava mais FINA que
+ * a rua sobre a qual ela é desenhada — dava para perder o traçado de relance,
+ * que é justamente quando ele precisa ser óbvio.
+ *
+ * Agora escala com o zoom (uma largura fixa fica grossa demais afastado e
+ * fina demais aproximado) e tem três pesos:
+ *
+ * - 'navigating': o mais grosso. É o único momento em que existe UMA rota e
+ *   a única pergunta na cabeça do usuário é "por onde eu sigo?".
+ * - 'confirmed': tela de escolha. Precisa se destacar, mas divide a tela com
+ *   as alternativas e com o mapa que o usuário está avaliando.
+ * - 'preview': ainda é uma sugestão, antes de "Traçar rota" — o peso menor
+ *   faz parte de comunicar isso.
+ *
+ * No zoom 17–18 da navegação a rota fica em ~11–13px contra 6px de uma rua
+ * local: aproximadamente o dobro, que é a proporção da referência.
+ */
+type RouteLineWeight = 'navigating' | 'confirmed' | 'preview'
+
+const ROUTE_WIDTH_BY_WEIGHT: Record<RouteLineWeight, [number, number, number]> = {
+  // [z14, z17, z20]
+  navigating: [6, 11, 18],
+  confirmed: [5, 8, 13],
+  preview: [4, 6.5, 10],
+}
+
+/** Contorno: sempre mais largo que a linha, é ele que separa a rota do asfalto embaixo. */
+const ROUTE_CASING_EXTRA_PX = 4.5
+
+/**
+ * `fitBounds` num mapa que ainda não tem tamanho produz NaN no transform e
+ * derruba o componente com "Invalid LngLat object: (NaN, -90)" — observado ao
+ * sair da navegação, quando o MapView é remontado e o efeito de enquadramento
+ * roda antes de o container ser medido.
+ */
+function canFrame(map: MapLibreMap): boolean {
+  const canvas = map.getCanvas()
+  return canvas.width > 0 && canvas.height > 0
+}
+
+function routeWidthExpression(weight: RouteLineWeight, casing = false): maplibregl.ExpressionSpecification {
+  const [z14, z17, z20] = ROUTE_WIDTH_BY_WEIGHT[weight]
+  const extra = casing ? ROUTE_CASING_EXTRA_PX : 0
+  return ['interpolate', ['linear'], ['zoom'], 14, z14 + extra, 17, z17 + extra, 20, z20 + extra]
+}
+
+/**
  * Cor da linha por severidade do trecho.
  *
  * Reaproveita as cores de elegibilidade que já existem na paleta em vez de
@@ -303,14 +369,22 @@ export function MapView({
         type: 'line',
         source: ROUTE_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': routePalette(themeRef.current).routeCasing, 'line-width': 9, 'line-opacity': 0.9 },
+        paint: {
+          'line-color': routePalette(themeRef.current).routeCasing,
+          'line-width': routeWidthExpression('confirmed', true),
+          'line-opacity': 0.9,
+        },
       })
       map.addLayer({
         id: ROUTE_LAYER_ID,
         type: 'line',
         source: ROUTE_SEGMENTS_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': severityColor(themeRef.current), 'line-width': 5, 'line-opacity': 0.95 },
+        paint: {
+          'line-color': severityColor(themeRef.current),
+          'line-width': routeWidthExpression('confirmed'),
+          'line-opacity': 0.95,
+        },
       })
 
       // Múltiplas candidatas simultâneas (tela de seleção). Precisa de DUAS camadas
@@ -445,7 +519,11 @@ export function MapView({
     const map = mapRef.current
     if (!map || isNavigating) return
     navigationZoomRef.current = null
-    if (map.getBearing() !== 0) map.easeTo({ bearing: 0, duration: 400 })
+    // Fora da navegação, mapa reto e ao norte — é o estado em que dá para
+    // comparar alternativas e entender a cidade.
+    if (map.getBearing() !== 0 || map.getPitch() !== 0) {
+      map.easeTo({ bearing: 0, pitch: 0, duration: 400 })
+    }
   }, [isNavigating])
 
   // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
@@ -496,12 +574,29 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.getLayer(ROUTE_LAYER_ID)) return
-    map.setPaintProperty(ROUTE_LAYER_ID, 'line-width', isRoutePreview ? 4 : 5)
-    map.setPaintProperty(ROUTE_LAYER_ID, 'line-opacity', isRoutePreview ? 0.75 : 0.95)
+
+    const weight: RouteLineWeight = isNavigating ? 'navigating' : isRoutePreview ? 'preview' : 'confirmed'
+    map.setPaintProperty(ROUTE_LAYER_ID, 'line-width', routeWidthExpression(weight))
+    map.setPaintProperty(ROUTE_LAYER_ID, 'line-opacity', weight === 'preview' ? 0.75 : 0.95)
     if (map.getLayer(ROUTE_CASING_LAYER_ID)) {
-      map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-width', isRoutePreview ? 7.5 : 9)
+      map.setPaintProperty(ROUTE_CASING_LAYER_ID, 'line-width', routeWidthExpression(weight, true))
     }
-  }, [isRoutePreview])
+    // O destaque dos trechos evitados acompanha a rota: fixo, ele sumiria
+    // dentro da linha grossa da navegação.
+    if (map.getLayer(ROUTE_WARN_LAYER_ID)) {
+      map.setPaintProperty(ROUTE_WARN_LAYER_ID, 'line-width', [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        14,
+        weight === 'navigating' ? 4 : 3,
+        17,
+        weight === 'navigating' ? 7 : 5,
+        20,
+        weight === 'navigating' ? 12 : 8,
+      ] as maplibregl.ExpressionSpecification)
+    }
+  }, [isRoutePreview, isNavigating])
 
   // Alterna visibilidade entre a camada de rota única (navegação) e a de
   // múltiplas candidatas (seleção) — nunca as duas ao mesmo tempo.
@@ -570,7 +665,7 @@ export function MapView({
 
     // Centraliza e enquadra a câmera na rota recém-calculada, com respiro para
     // não ficar escondida atrás do SearchPanel (topo) e do RoutePanel (base).
-    if (coordinates.length >= 2) {
+    if (coordinates.length >= 2 && canFrame(map)) {
       const bounds = coordinates.reduce(
         (acc, coord) => acc.extend(coord),
         new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
@@ -598,7 +693,7 @@ export function MapView({
     source.setData({ type: 'FeatureCollection', features })
 
     const allCoordinates = features.flatMap((feature) => feature.geometry.coordinates as [number, number][])
-    if (allCoordinates.length >= 2) {
+    if (allCoordinates.length >= 2 && canFrame(map)) {
       const bounds = allCoordinates.reduce(
         (acc, coord) => acc.extend(coord),
         new maplibregl.LngLatBounds(allCoordinates[0], allCoordinates[0]),
@@ -624,6 +719,8 @@ export function MapView({
     // decidir traçar a rota. Quando a rota chega, o enquadramento dela
     // (mais preciso, segue a geometria) assume — por isso a condição.
     if (!destinationPoint || routeGeometry || routeOptions.length > 0) return
+
+    if (!canFrame(map)) return
 
     const anchor = userPoint ?? originPoint
     if (!anchor) {
@@ -657,6 +754,7 @@ export function MapView({
       map.easeTo({
         center: [userPoint.lng, userPoint.lat],
         zoom,
+        pitch: NAVIGATION_PITCH,
         padding: NAVIGATION_PADDING,
         // Gira o mapa na direção do deslocamento. Sem heading conhecido,
         // mantém o ângulo atual em vez de forçar o norte — evita que o mapa
@@ -696,6 +794,10 @@ export function MapView({
       map.easeTo({
         center: [userPoint.lng, userPoint.lat],
         zoom,
+        // Recentralizar também restaura a perspectiva: se o usuário achatou o
+        // mapa com dois dedos, o toque devolve o enquadramento de navegação
+        // inteiro, não só a posição.
+        pitch: NAVIGATION_PITCH,
         padding: NAVIGATION_PADDING,
         // Sem heading confiável, preserva o ângulo atual em vez de forçar o
         // norte — girar o mapa para uma direção que não é a do movimento

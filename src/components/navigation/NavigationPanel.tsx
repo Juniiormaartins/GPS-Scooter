@@ -26,6 +26,18 @@ interface NavigationPanelProps {
   voiceEnabled: boolean
   onToggleVoice: () => void
   onStop: () => void
+  /** Procura uma alternativa a partir da posição atual. Ausente = ação indisponível (sem destino/GPS). */
+  onFindAlternative?: () => void
+  /** Busca em andamento — o botão vira estado de espera em vez de aceitar outro toque. */
+  isSearchingAlternative?: boolean
+  /**
+   * Aviso passageiro da navegação (ex.: "nenhuma alternativa diferente").
+   *
+   * Existe porque `statusMessage` do App só é renderizado no SearchPanel, que
+   * não está na tela durante a navegação — sem este slot, o retorno da busca
+   * por alternativa seria escrito num lugar invisível.
+   */
+  notice?: string | null
 }
 
 /**
@@ -49,6 +61,9 @@ export function NavigationPanel({
   voiceEnabled,
   onToggleVoice,
   onStop,
+  onFindAlternative,
+  isSearchingAlternative = false,
+  notice = null,
 }: NavigationPanelProps) {
   const { route, etaMinutes } = scoredRoute
 
@@ -99,6 +114,12 @@ export function NavigationPanel({
           </div>
         )}
 
+        {notice && (
+          <div className="pointer-events-auto rounded-lg border border-hairline/15 bg-surface-overlay px-card py-2.5 text-body text-content-secondary shadow-float backdrop-blur-xl">
+            {notice}
+          </div>
+        )}
+
         {progress && lowAccuracy && (
           <div className="pointer-events-auto rounded-lg border border-hairline/15 bg-surface-overlay px-card py-2 text-caption text-content-secondary shadow-float backdrop-blur-xl">
             Localização com baixa precisão (±{Math.round(gpsSample!.accuracyMeters)} m) — tente uma área aberta.
@@ -118,9 +139,49 @@ export function NavigationPanel({
           por trás. Quando houver telemetria de verdade, ela volta como
           `vehicleBattery` (a prop e o encanamento continuam existindo).
         */}
-        <div className="flex items-end justify-between">
+        {/*
+          VIA ATUAL. Vem de `progress.currentRoadName` — o passo cuja manobra já
+          foi passada, não `nextStep.roadName`, que é a via DEPOIS da próxima
+          manobra. Fica aqui embaixo, discreta, para responder "em que rua eu
+          estou?" sem competir com a instrução da próxima manobra lá em cima,
+          que é a informação prioritária. Some quando o provedor não nomeia a
+          via, em vez de mostrar um rótulo vazio.
+        */}
+        {progress?.currentRoadName && (
+          <div className="pointer-events-auto self-start rounded-pill border border-hairline/15 bg-surface-overlay px-3.5 py-1.5 shadow-float backdrop-blur-xl">
+            <p className="truncate text-[15px] font-bold text-content-primary">{progress.currentRoadName}</p>
+          </div>
+        )}
+
+        {/*
+          Controles do modo navegação agrupados numa linha só, na zona do
+          polegar. Antes o recentralizar flutuava sozinho; juntar as duas ações
+          evita botão espalhado pela tela e mantém o alvo de toque grande.
+        */}
+        <div className="flex items-end justify-between gap-3">
           <StatPill label="Velocidade" value={currentSpeedKmh != null ? `${currentSpeedKmh} km/h` : '—'} />
-          {recenterControl}
+          <div className="flex items-center gap-2">
+            {onFindAlternative && (
+              <button
+                type="button"
+                onClick={onFindAlternative}
+                disabled={isSearchingAlternative}
+                aria-label="Buscar rota alternativa"
+                className="pointer-events-auto flex h-12 items-center gap-2 rounded-pill border border-hairline/15 bg-surface-overlay px-4 text-[15px] font-bold text-content-primary shadow-float backdrop-blur-xl transition-all duration-fast active:scale-[.97] active:opacity-[.88] disabled:opacity-60"
+              >
+                {isSearchingAlternative ? (
+                  <span className="h-[18px] w-[18px] animate-spin rounded-pill border-2 border-brand-500 border-t-transparent" />
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-brand-500" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                    <path d="M4 7h5l3.5 10H20M4 17h5l1.6-4.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M17 4l3 3-3 3M17 14l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+                Alternativa
+              </button>
+            )}
+            {recenterControl}
+          </div>
         </div>
 
         <div className="pointer-events-auto grid grid-cols-3 gap-2 rounded-2xl border border-hairline/15 bg-surface-overlay px-3 py-card shadow-float backdrop-blur-xl">

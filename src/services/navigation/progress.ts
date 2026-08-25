@@ -27,6 +27,16 @@ export interface NavigationProgress {
   remainingDistanceMeters: number
   remainingDurationMinutes: number
   currentStepIndex: number
+  /**
+   * Nome da via em que o usuário está AGORA.
+   *
+   * Não é `nextStep.roadName` — esse é o nome da via DEPOIS da próxima
+   * manobra. A via atual é a do passo cuja manobra já foi passada, porque
+   * `RouteStep.roadName` descreve o trecho percorrido a partir daquela manobra
+   * até a seguinte. null quando o provedor não nomeia a via (comum em
+   * travessas e acessos).
+   */
+  currentRoadName: string | null
   nextStep: RouteStep | null
   distanceToNextManeuverMeters: number
   /** Distância perpendicular entre a posição bruta do GPS e a rota. */
@@ -51,12 +61,18 @@ export function computeNavigationProgress(
   const currentStepIndex = nextStep ? route.steps.indexOf(nextStep) : Math.max(0, route.steps.length - 1)
   const distanceToNextManeuverMeters = nextStep ? Math.max(0, nextStep.cumulativeDistanceMeters - distanceTraveledMeters) : 0
 
+  // Passo em curso: o anterior ao da próxima manobra. Sem manobra pendente
+  // (fim da rota), o último passo é o que descreve onde estamos.
+  const currentStep = route.steps[Math.max(0, currentStepIndex - 1)] ?? null
+  const currentRoadName = currentStep?.roadName ?? null
+
   return {
     snappedPosition: projection?.point ?? rawPosition,
     distanceTraveledMeters,
     remainingDistanceMeters,
     remainingDurationMinutes,
     currentStepIndex,
+    currentRoadName,
     nextStep,
     distanceToNextManeuverMeters,
     offRouteDistanceMeters,
