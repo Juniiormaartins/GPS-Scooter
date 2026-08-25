@@ -85,6 +85,14 @@ interface MapViewProps {
    * posição e a direção continuam vindo do GPS, não daqui.
    */
   speedKmh?: number | null
+  /**
+   * Incremente para devolver o mapa ao norte UMA vez (botão de bússola).
+   * Mesmo padrão de `centerRequestId`: um token, não um booleano, para que
+   * toques repetidos funcionem.
+   */
+  resetNorthRequestId?: number
+  /** Informa o rumo atual do mapa — a agulha da bússola precisa disso para girar. */
+  onBearingChange?: (bearingDeg: number) => void
   /** Tema atual — o mapa tem uma paleta própria para cada um (ver config/theme.ts). */
   theme?: 'dark' | 'light'
   onMapReady?: (map: MapLibreMap) => void
@@ -356,6 +364,8 @@ export function MapView({
   isRoutePreview = false,
   isNavigating = false,
   speedKmh = null,
+  resetNorthRequestId = 0,
+  onBearingChange,
   followUser = false,
   headingDeg = null,
   centerRequestId = 0,
@@ -832,6 +842,27 @@ export function MapView({
     }
   }, [userPoint, followUser, headingDeg, isNavigating, speedKmh])
 
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || resetNorthRequestId === 0) return
+    // Só o rumo volta ao norte. Zoom, centro e inclinação ficam como estão:
+    // a bússola responde "onde é o norte", não "reenquadre tudo".
+    map.easeTo({ bearing: 0, duration: 400, essential: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetNorthRequestId])
+
+  // Espelha o rumo do mapa para fora, para a agulha da bússola girar junto.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !onBearingChange) return
+    const report = () => onBearingChange(map.getBearing())
+    map.on('rotate', report)
+    report()
+    return () => {
+      map.off('rotate', report)
+    }
+  }, [onBearingChange])
+
   // Centralização de disparo único — dispara ao mudar `centerRequestId`, não a
   // cada atualização de `userPoint`, para não competir com o usuário
   // arrastando o mapa livremente.
@@ -1220,20 +1251,29 @@ function setVehicleHeadingVisibility(element: HTMLElement, hasHeading: boolean) 
  */
 function createUserDotElement(): HTMLElement {
   const el = document.createElement('div')
-  el.className = 'relative flex h-[44px] w-[44px] items-center justify-center'
+  el.className = 'relative flex h-[96px] w-[96px] items-center justify-center'
+  // `RiderPuck`, estado 2D (handoff §5.2): halo pulsante de 96px, disco branco
+  // de 40px com núcleo azul de 30px e glyph de RAIO — identidade de mobilidade
+  // elétrica, não o ponto azul genérico de mapa.
+  //
+  // O cone de direção do handoff não é desenhado aqui: fora da navegação não
+  // temos rumo confiável (o heading do GPS só é liberado acima de 3 km/h), e
+  // um cone apontando para um lado arbitrário afirmaria direção que não
+  // medimos. Ele aparece no marcador de navegação, onde há rumo.
   el.innerHTML = `
-    <svg viewBox="0 0 44 44" class="absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox="0 0 96 96" class="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
-        <linearGradient id="gs-dot" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#5CC8FF"/>
-          <stop offset="100%" stop-color="#1478D4"/>
-        </linearGradient>
-        <filter id="gs-dot-shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1.4" stdDeviation="2" flood-color="#04121F" flood-opacity=".4"/>
+        <filter id="gs-puck-shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F1729" flood-opacity=".22"/>
         </filter>
       </defs>
-      <circle cx="22" cy="22" r="20" fill="#35B7F7" fill-opacity=".18"/>
-      <circle cx="22" cy="22" r="9" fill="url(#gs-dot)" stroke="#FFFFFF" stroke-width="2.4" filter="url(#gs-dot-shadow)"/>
+      <circle cx="48" cy="48" r="48" fill="rgba(14,134,198,.16)">
+        <animate attributeName="r" values="41;70;70" dur="2.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values=".55;0;0" dur="2.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="48" cy="48" r="20" fill="#FFFFFF" filter="url(#gs-puck-shadow)"/>
+      <circle cx="48" cy="48" r="15" fill="#0E86C6"/>
+      <path d="M50.6 39.2 44.1 48.6h4.2l-2.9 8.2 6.5-9.4h-4.2z" fill="#FFFFFF"/>
     </svg>
   `
   return el

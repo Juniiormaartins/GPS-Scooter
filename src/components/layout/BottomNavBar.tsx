@@ -13,38 +13,38 @@ const TABS: { key: BottomNavTab; label: string }[] = [
 ]
 
 /**
- * Barra de abas flutuante em pílula, ancorada acima do home indicator.
- * Contrato de design/gps-scooter-ui/components/navigation/TabBar: superfície
- * translúcida com blur, altura 52px por item, e a aba ativa recebendo cápsula
- * azul 16% + ícone azul + label branco.
+ * Barra de abas flutuante (handoff §5.1 `TabBar`): raio 28px, cápsula
+ * `#EAF4FB` na aba ativa, rótulo 11.5/700 (800 no ativo).
  *
- * O handoff desenhou 3 abas com todos os rótulos visíveis. Com a quarta aba
- * (Perfil), os quatro rótulos não cabem: a 393px de largura sobram ~341px
- * para a barra, e só "Atividade" já ocupa ~105px com o ícone. Em vez de
- * encolher a fonte (quebraria a escala tipográfica do design), o rótulo
- * aparece apenas na aba ATIVA — que é justamente a que o handoff manda
- * destacar com cápsula azul + label branco. As inativas ficam só com o
- * ícone, mantendo a barra equilibrada e o alvo de toque acima dos 44px.
+ * Todos os quatro rótulos aparecem agora. Na versão anterior só o rótulo da
+ * aba ativa era exibido, porque a 16px os quatro não cabiam em 393px. O
+ * handoff fixa o rótulo de tab em 11.5px — nesse tamanho os quatro cabem com
+ * folga, e a hierarquia passa a vir da cápsula e do peso, não de esconder
+ * texto.
  */
 export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-hairline/15 bg-surface-overlay p-1.5 shadow-float backdrop-blur-xl">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-hairline/[.06] bg-surface-overlay p-2 shadow-float backdrop-blur-xl">
       {TABS.map((tab) => {
         const isActive = tab.key === active
         return (
           <button
             key={tab.key}
             type="button"
-            aria-label={tab.label}
             onClick={() => onSelect(tab.key)}
-            className={`flex h-[52px] items-center justify-center gap-2 rounded-2xl text-[16px] font-bold transition-all duration-base ease-standard ${
-              isActive ? 'flex-[2] bg-brand-500/[.16] text-content-primary' : 'flex-1 text-content-tertiary'
+            aria-current={isActive ? 'page' : undefined}
+            className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl py-2 transition-all duration-base ease-standard active:scale-[.97] ${
+              isActive ? 'bg-surface-tile-accent' : ''
             }`}
           >
             <span className={isActive ? 'text-brand-500' : 'text-content-tertiary'}>
               <TabIcon tabKey={tab.key} active={isActive} />
             </span>
-            {isActive && tab.label}
+            <span
+              className={`text-tab-label ${isActive ? 'font-extrabold text-brand-500' : 'text-content-tertiary'}`}
+            >
+              {tab.label}
+            </span>
           </button>
         )
       })}

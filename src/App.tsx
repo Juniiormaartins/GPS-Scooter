@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapView } from '@/components/map/MapView'
 import { SearchPanel } from '@/components/search/SearchPanel'
+import { LocationHeader, SearchBar } from '@/components/search/LocationHeader'
 import { SearchScreen } from '@/components/search/SearchScreen'
 import { PoiCard } from '@/components/search/PoiCard'
 import { MapControls } from '@/components/controls/MapControls'
@@ -83,6 +84,9 @@ export default function App() {
   const [followUserAsOrigin, setFollowUserAsOrigin] = useState(false)
   const [pendingCenter, setPendingCenter] = useState(false)
   const [centerToken, setCenterToken] = useState(0)
+  const [northToken, setNorthToken] = useState(0)
+  /** Rumo do mapa, espelhado do MapView só para a agulha da bússola girar. */
+  const [mapBearing, setMapBearing] = useState(0)
   const [pendingTraceDestination, setPendingTraceDestination] = useState<{ text: string; point: LngLat } | null>(null)
 
   // Localização automática ao abrir o app: o usuário não deveria precisar
@@ -574,6 +578,22 @@ export default function App() {
    * este projeto já bateu no limite de requisições do MapTiler. Agora é uma
    * instância só, que apenas muda de props.
    */
+  /**
+   * Via e bairro exibidos no cabeçalho.
+   *
+   * Reaproveitam o endereço que a geocodificação reversa JÁ resolveu para a
+   * origem quando ela é a posição atual — não há consulta nova. O rótulo vem
+   * como "Rua X, Bairro, Cidade": a primeira parte é a via, o resto é a área.
+   * Quando a origem foi digitada à mão, ela não descreve onde o usuário está,
+   * então o cabeçalho não afirma nada.
+   */
+  const [currentStreetLabel, currentAreaLabel] = (() => {
+    if (!followUserAsOrigin || !originText.trim() || originText === 'Localizando…') return [null, null]
+    const parts = originText.split(',').map((part) => part.trim()).filter(Boolean)
+    if (parts.length === 0) return [null, null]
+    return [parts[0], parts.slice(1).join(' · ') || null]
+  })()
+
   const isNavigationView = isNavigating && activeScoredRoute != null
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
@@ -601,6 +621,8 @@ export default function App() {
         onSelectRouteOption={setActiveRouteId}
         onUserInteraction={() => setIsFollowingUser(false)}
         centerRequestId={centerToken}
+        resetNorthRequestId={northToken}
+        onBearingChange={setMapBearing}
       />
 
       {isNavigationView ? (
@@ -626,6 +648,8 @@ export default function App() {
               onCenterOnUser={handleCenterOnUser}
               isLocating={navigationSession.isLocating}
               isFollowing={isFollowingUser}
+              onResetNorth={() => setNorthToken((current) => current + 1)}
+              bearingDeg={mapBearing}
             />
           }
           onStop={() => {
@@ -651,18 +675,46 @@ export default function App() {
       ) : (
         <>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <SearchPanel
-          originText={originText}
-          destinationText={destinationText}
-          onOriginChange={handleOriginTextChange}
-          onSelectOrigin={handleSelectOrigin}
-          onUseCurrentLocation={handleUseCurrentLocation}
-          onOpenSearch={() => setIsSearchOpen(true)}
+      {/*
+        Topo da tela de exploração (handoff tela 01): cabeçalho de localização
+        TRANSPARENTE + campo de busca de 58px, gutter de 16px.
+
+        O campo de ORIGEM some daqui. No handoff a origem é sempre a posição do
+        GPS, e editar origem é a exceção — por isso ele só reaparece abaixo
+        quando não temos posição (permissão negada, sinal ruim), que é o único
+        caso em que o usuário precisa digitar de onde está saindo. Sem esse
+        fallback, negar a localização deixaria o app inutilizável.
+      */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <LocationHeader
+          currentStreet={currentStreetLabel}
+          currentArea={currentAreaLabel}
+          isLocating={isLocating}
           onProfileClick={() => setActivePanel('profile')}
-          isCalculating={isCalculating}
-          warningMessage={statusMessage ?? warningMessage}
+          onMenuClick={() => setActivePanel('profile')}
         />
+
+        <SearchBar onOpenSearch={() => setIsSearchOpen(true)} value={destinationText || null} />
+
+        {!userPosition && (
+          <SearchPanel
+            originText={originText}
+            destinationText={destinationText}
+            onOriginChange={handleOriginTextChange}
+            onSelectOrigin={handleSelectOrigin}
+            onUseCurrentLocation={handleUseCurrentLocation}
+            onOpenSearch={() => setIsSearchOpen(true)}
+            onProfileClick={() => setActivePanel('profile')}
+            isCalculating={isCalculating}
+            warningMessage={statusMessage ?? warningMessage}
+          />
+        )}
+
+        {userPosition && (statusMessage ?? warningMessage) && (
+          <div className="pointer-events-auto rounded-xl border border-hairline/[.06] bg-surface-overlay px-card py-2.5 text-caption font-semibold text-warning-text shadow-float backdrop-blur-xl">
+            {statusMessage ?? warningMessage}
+          </div>
+        )}
       </div>
 
 
@@ -720,9 +772,20 @@ export default function App() {
                 parte do bloco de informações — o respiro extra deixa essa
                 separação explícita em vez de parecer um card colado no outro. */}
             <div className="mb-3 flex justify-end">
-              <MapControls onCenterOnUser={handleCenterOnUser} isLocating={isLocating} />
+              <MapControls
+                onCenterOnUser={handleCenterOnUser}
+                isLocating={isLocating}
+                // Fora da navegação a bússola só aparece com o mapa girado —
+                // com o norte para cima ela não teria o que fazer.
+                onResetNorth={Math.abs(mapBearing) > 1 ? () => setNorthToken((c) => c + 1) : undefined}
+                bearingDeg={mapBearing}
+              />
             </div>
-            <VehicleStatusBar bluetooth={vehicleBluetooth} preferences={preferences} />
+            <VehicleStatusBar
+              bluetooth={vehicleBluetooth}
+              preferences={preferences}
+              onOpen={() => setActivePanel('profile')}
+            />
             <BottomNavBar
               active={activePanel ?? 'explore'}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
