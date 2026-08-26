@@ -3,7 +3,7 @@ import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
-import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM } from '@/config/theme'
+import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM, SEVERITY_SHEEN } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
 import { DESTINATION_ASSETS, DESTINATION_SIZES } from '@/components/map/poiLibrary'
@@ -502,6 +502,45 @@ function severityRimColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecifi
   ]
 }
 
+/**
+ * Cor do brilho central, por severidade — ver SEVERITY_SHEEN.
+ *
+ * Precisa acompanhar a severidade pelo mesmo motivo do contorno: uma camada
+ * clara FIXA por cima do miolo tinge o que está embaixo. Azul sobre vermelho
+ * dá marrom, e o trecho não recomendado deixava de parecer não recomendado.
+ */
+function severitySheenColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecification {
+  return [
+    'match',
+    ['get', 'severity'],
+    'critical',
+    SEVERITY_SHEEN.critical,
+    'attention',
+    SEVERITY_SHEEN.attention,
+    ribbon(theme).sheen,
+  ]
+}
+
+/**
+ * Cor do halo, por severidade.
+ *
+ * O halo era azul mesmo em volta de um trecho vermelho — um contorno luminoso
+ * da cor errada em torno do aviso. Passou a sair da fonte SEGMENTADA para
+ * poder acompanhar; o desfoque de 5–10px cobre qualquer emenda entre trechos.
+ */
+function severityGlowColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecification {
+  const palette = routePalette(theme)
+  return [
+    'match',
+    ['get', 'severity'],
+    'critical',
+    palette.routeByEligibility['not-allowed'],
+    'attention',
+    palette.routeByEligibility.discouraged,
+    ribbon(theme).glow,
+  ]
+}
+
 /** Paleta de rota do tema atual — o mapa claro precisa de tons mais escuros para ter contraste. */
 function routePalette(theme: 'dark' | 'light') {
   return theme === 'light' ? MAP_COLORS_LIGHT : MAP_COLORS
@@ -803,10 +842,10 @@ export function MapView({
       map.addLayer({
         id: ROUTE_GLOW_OUTER_LAYER_ID,
         type: 'line',
-        source: ROUTE_SOURCE_ID,
+        source: ROUTE_SEGMENTS_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': ribbon(themeRef.current).glow,
+          'line-color': severityGlowColor(themeRef.current),
           'line-width': routeGlowWidth('confirmed', 2.8),
           'line-opacity': 0.18,
           'line-blur': 10,
@@ -815,10 +854,10 @@ export function MapView({
       map.addLayer({
         id: ROUTE_GLOW_INNER_LAYER_ID,
         type: 'line',
-        source: ROUTE_SOURCE_ID,
+        source: ROUTE_SEGMENTS_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': ribbon(themeRef.current).glow,
+          'line-color': severityGlowColor(themeRef.current),
           'line-width': routeGlowWidth('confirmed', 1.75),
           'line-opacity': 0.28,
           'line-blur': 5,
@@ -885,7 +924,7 @@ export function MapView({
         source: ROUTE_SEGMENTS_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': ribbon(themeRef.current).sheen,
+          'line-color': severitySheenColor(themeRef.current),
           'line-width': routeGlowWidth('confirmed', ROUTE_SHEEN_FACTOR),
           'line-opacity': 0.34,
           'line-blur': 1.5,
@@ -1071,11 +1110,11 @@ export function MapView({
         if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-color', color)
       }
       const skin = ribbon(theme)
-      repaint(ROUTE_GLOW_OUTER_LAYER_ID, skin.glow)
-      repaint(ROUTE_GLOW_INNER_LAYER_ID, skin.glow)
+      repaint(ROUTE_GLOW_OUTER_LAYER_ID, severityGlowColor(theme))
+      repaint(ROUTE_GLOW_INNER_LAYER_ID, severityGlowColor(theme))
       repaint(ROUTE_CASING_LAYER_ID, skin.separator)
       repaint(ROUTE_RIM_LAYER_ID, severityRimColor(theme))
-      repaint(ROUTE_SHEEN_LAYER_ID, skin.sheen)
+      repaint(ROUTE_SHEEN_LAYER_ID, severitySheenColor(theme))
       repaint(ROUTE_APPROACH_LAYER_ID, skin.core)
       repaint(ROUTE_LAYER_ID, severityColor(theme))
       repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
@@ -1172,7 +1211,7 @@ export function MapView({
       if (!map.getLayer(id)) continue
       map.setPaintProperty(id, 'line-width', routeGlowWidth(weight, factor))
       map.setPaintProperty(id, 'line-opacity', opacity * glowScale)
-      map.setPaintProperty(id, 'line-color', skin.glow)
+      map.setPaintProperty(id, 'line-color', severityGlowColor(themeRef.current))
     }
 
     map.setPaintProperty(ROUTE_LAYER_ID, 'line-width', routeWidthExpression(weight))

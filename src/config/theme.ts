@@ -97,6 +97,24 @@ export const SEVERITY_RIM = {
   critical: '#7C1414',
 } as const
 
+/**
+ * Brilho central por severidade.
+ *
+ * BUG QUE ISTO CONSERTA. O brilho era o azul-claro da fita, fixo, aplicado a
+ * 34% SOBRE o miolo. Sobre um trecho azul funcionava; sobre um trecho
+ * VERMELHO, azul claro por cima dessatura o vermelho e o puxa para marrom —
+ * era exatamente o relato: "BR aparecendo com preenchimento marrom e apenas
+ * um contorno vermelho". O contorno continuava vermelho porque ele é a única
+ * camada que já seguia a severidade.
+ *
+ * Cada severidade passa a ter o clareamento da PRÓPRIA cor, então o brilho
+ * volta a ser volume e não uma tinta por cima.
+ */
+export const SEVERITY_SHEEN = {
+  attention: '#FFE0A3',
+  critical: '#FFC2C2',
+} as const
+
 export const MAP_COLORS_LIGHT = {
   /**
    * MEDIDO, não escolhido no olho. A versão anterior usava fundo #EEF1F7 com
