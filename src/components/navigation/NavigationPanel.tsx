@@ -5,6 +5,7 @@ import { SuitabilityBar } from '@/components/route/SuitabilityBar'
 import { remainingSeverity } from '@/services/routing/segmentSeverity'
 import type { ManeuverType, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
+import { TopScrim } from '@/components/ui/TopScrim'
 
 interface NavigationPanelProps {
   scoredRoute: ScoredRoute
@@ -86,7 +87,8 @@ export function NavigationPanel({
 
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-gutter pt-[max(1rem,env(safe-area-inset-top))]">
+      <TopScrim />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-gutter pt-[max(1rem,env(safe-area-inset-top))]">
         {progress?.nextStep ? (
           /*
             `GuidanceBanner` (handoff §5.1): card ESCURO #0F1729 de raio 28px,

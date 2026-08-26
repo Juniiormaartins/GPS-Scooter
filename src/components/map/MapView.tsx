@@ -6,6 +6,7 @@ import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
+import { RiderAnimator, type RiderFrame } from '@/components/map/riderAnimator'
 import {
   hasRiderSprites,
   MIN_LEGIBLE_SPRITE_PX,
@@ -302,6 +303,15 @@ const ROUTE_RIM_EXTRA_PX = 5
 /** Brilho central, como fração do miolo. */
 const ROUTE_SHEEN_FACTOR = 0.3
 
+/**
+ * Fração do erro que zoom e inclinação eliminam por quadro.
+ *
+ * 0,08 a 60 Hz converge em ~0,6 s — rápido o bastante para não parecer
+ * preguiçoso ao entrar na navegação, lento o bastante para a troca de faixa de
+ * zoom não ser percebida como solavanco.
+ */
+const CAMERA_CHASE = 0.08
+
 const ZERO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 }
 
 interface FramePadding {
@@ -490,6 +500,34 @@ export function MapView({
   const navigationZoomRef = useRef<number | null>(null)
   /** Há candidatas na tela? Decide visibilidade das camadas e intensidade do halo. */
   const showingOptions = routeOptions.length > 0
+
+  /**
+   * Interpolador do deslocamento. Ver riderAnimator.ts.
+   *
+   * Uma instância por montagem do mapa. Marcador e câmera são atualizados a
+   * partir dele, no MESMO quadro — é isso que garante que a câmera não fique
+   * atrás do marcador.
+   */
+  const riderRef = useRef<RiderAnimator | null>(null)
+  if (!riderRef.current) riderRef.current = new RiderAnimator()
+
+  /**
+   * Valores lidos DENTRO do laço de quadro.
+   *
+   * Precisam ser refs e não dependências: se o efeito que liga o laço
+   * dependesse de `followUser`, `speedKmh` ou do veículo, o laço seria
+   * derrubado e recriado a cada amostra de velocidade — e a interpolação
+   * recomeçaria do zero, reintroduzindo exatamente o pulo que ela existe para
+   * eliminar.
+   */
+  const followUserRef = useRef(followUser)
+  followUserRef.current = followUser
+  const speedKmhRef = useRef(speedKmh)
+  speedKmhRef.current = speedKmh
+  const vehicleRef = useRef(vehicleModelId)
+  vehicleRef.current = vehicleModelId
+  /** Zoom e inclinação exibidos — perseguem o alvo por quadro, ver cameraRef. */
+  const cameraRef = useRef<{ zoom: number | null; pitch: number }>({ zoom: null, pitch: 0 })
 
   /**
    * Descobre UMA vez se os sprites de alta fidelidade foram entregues.
@@ -1130,41 +1168,84 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinationPoint])
 
+  /**
+   * ENTRADA: cada amostra de GPS vira um alvo para o interpolador.
+   *
+   * Só registra o alvo. Quem desenha é o laço de quadro abaixo — separar as
+   * duas coisas é o que permite o marcador continuar deslizando entre
+   * amostras em vez de esperar a próxima para se mexer.
+   */
+  useEffect(() => {
+    const rider = riderRef.current
+    if (!rider) return
+    if (!userPoint) {
+      rider.reset()
+      return
+    }
+    rider.push({ lng: userPoint.lng, lat: userPoint.lat, headingDeg })
+  }, [userPoint, headingDeg])
+
+  /**
+   * SAÍDA: um laço de quadro move marcador e câmera juntos.
+   *
+   * A câmera usa `jumpTo`, não `easeTo`. Isso parece contraintuitivo, mas é o
+   * que produz movimento suave aqui: a suavidade vem da interpolação, que já
+   * roda a 60 Hz, e `easeTo` só acrescentaria uma SEGUNDA animação por cima —
+   * era o encadeamento dessas animações de 1100 ms, cada uma cancelando a
+   * anterior no meio, que deixava a câmera atrás do marcador nas curvas.
+   *
+   * As dependências são deliberadamente mínimas: recriar o laço interrompe a
+   * interpolação em curso.
+   */
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
-    // Sprite do veículo escolhido no perfil. Fora da navegação ele também
-    // aparece (menor), porque o rumo vem da rota quando o GPS ainda não tem —
-    // ver routeBearingDeg em progress.ts.
-    updateUserMarker(userMarkerRef, map, userPoint, headingDeg, isNavigating, vehicleModelId)
+    const rider = riderRef.current
+    if (!map || !rider) return
 
-    if (followUser && userPoint) {
-      const zoom = navigationZoomForSpeed(speedKmh, navigationZoomRef.current)
-      navigationZoomRef.current = zoom
-      map.easeTo({
-        center: [userPoint.lng, userPoint.lat],
-        zoom,
-        pitch: NAVIGATION_PITCH,
+    if (!userPoint) {
+      userMarkerRef.current?.remove()
+      userMarkerRef.current = null
+      cameraRef.current = { zoom: null, pitch: 0 }
+      return
+    }
+
+    const draw = (frame: RiderFrame) => {
+      updateUserMarker(
+        userMarkerRef,
+        map,
+        { lng: frame.lng, lat: frame.lat },
+        frame.headingDeg,
+        isNavigatingRef.current,
+        vehicleRef.current,
+      )
+
+      if (!followUserRef.current) return
+
+      const targetZoom = navigationZoomForSpeed(speedKmhRef.current, navigationZoomRef.current)
+      navigationZoomRef.current = targetZoom
+
+      // Zoom e inclinação perseguem o alvo em vez de saltar. Sem isto, entrar
+      // na navegação inclinaria o mapa de 0° para 52° num único quadro, e
+      // trocar de faixa de velocidade daria um solavanco de zoom.
+      const camera = cameraRef.current
+      camera.zoom = camera.zoom == null ? targetZoom : camera.zoom + (targetZoom - camera.zoom) * CAMERA_CHASE
+      camera.pitch = camera.pitch + (NAVIGATION_PITCH - camera.pitch) * CAMERA_CHASE
+
+      map.jumpTo({
+        center: [frame.lng, frame.lat],
+        zoom: camera.zoom,
+        pitch: camera.pitch,
         padding: NAVIGATION_PADDING,
-        // Gira o mapa na direção do deslocamento. Sem heading conhecido,
-        // mantém o ângulo atual em vez de forçar o norte — evita que o mapa
-        // "pule" de volta toda vez que o GPS perde a direção momentaneamente.
-        bearing: headingDeg ?? map.getBearing(),
-        // Um pouco acima do intervalo típico entre amostras de GPS (~1 s): a
-        // animação ainda está correndo quando a próxima chega, então o
-        // movimento é contínuo em vez de avançar-parar a cada segundo.
-        duration: 1100,
-        // Linear de propósito. O ease-in-out padrão desacelera no fim de cada
-        // animação; encadeadas a 1 Hz, isso vira um "soluço" visível a cada
-        // amostra. Linear encadeado dá deslocamento de velocidade constante.
-        easing: (t) => t,
-        // Mantém o acompanhamento mesmo com "reduzir movimento" ligado no
-        // sistema: aqui a animação não é enfeite, é a função do modo navegação.
-        essential: true,
+        // Sem rumo conhecido, mantém o ângulo atual em vez de forçar o norte —
+        // evita o mapa "pular" de volta toda vez que o GPS perde a direção.
+        bearing: frame.headingDeg ?? map.getBearing(),
       })
     }
+
+    rider.start(draw)
+    return () => rider.stop()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userPoint, followUser, headingDeg, isNavigating, speedKmh, spriteTick, vehicleModelId])
+  }, [userPoint == null, spriteTick])
 
   useEffect(() => {
     const map = mapRef.current
@@ -1179,7 +1260,21 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !onBearingChange) return
-    const report = () => onBearingChange(map.getBearing())
+    /**
+     * Só reporta quando o rumo muda de fato.
+     *
+     * A câmera da navegação é reposicionada por quadro, e cada
+     * reposicionamento dispara `rotate`. Sem este filtro seriam 60 atualizações
+     * de estado por segundo no React, re-renderizando o app inteiro para girar
+     * uma agulha que muda meio grau. 1° é a resolução visível da bússola.
+     */
+    let lastReported: number | null = null
+    const report = () => {
+      const bearing = map.getBearing()
+      if (lastReported != null && Math.abs(((bearing - lastReported + 540) % 360) - 180) < 1) return
+      lastReported = bearing
+      onBearingChange(bearing)
+    }
     map.on('rotate', report)
     report()
     return () => {
@@ -1276,7 +1371,12 @@ function updateMarker(
     ref.current = new maplibregl.Marker({ element: el })
   }
 
-  ref.current.setLngLat([point.lng, point.lat]).addTo(map)
+  ref.current.setLngLat([point.lng, point.lat])
+  // `addTo` NÃO é idempotente: ele remove o elemento do DOM e o reinsere. Como
+  // isto agora roda a cada quadro, chamá-lo sempre significaria 60
+  // remoções/inserções por segundo — e reiniciaria a transição CSS do cone a
+  // cada quadro, congelando a animação dele no primeiro instante.
+  if (!ref.current.getElement().isConnected) ref.current.addTo(map)
 }
 
 /**
@@ -1336,7 +1436,24 @@ function updateUserMarker(
   ref.current.setLngLat([point.lng, point.lat]).addTo(map)
 
   if (useSprite) {
-    applySpriteHeading(ref.current.getElement(), vehicle, headingDeg, isNavigating)
+    /**
+     * RUMO NA TELA, não rumo da bússola.
+     *
+     * O elemento do marcador é DOM com `rotationAlignment: 'viewport'`: ele
+     * vive no referencial da tela, e a tela gira com a câmera. Passar o rumo
+     * do mundo direto para ele fazia o veículo aparecer atravessado sempre que
+     * a câmera não estava apontada para o norte — ou seja, durante toda a
+     * navegação, que é justamente quando o mapa gira para a direção do
+     * deslocamento. Numa reta rumo ao leste, o mapa girava 90° e o sprite
+     * também: dois giros somados, e o veículo ficava de perfil sobre a via.
+     *
+     * Subtraindo o bearing da câmera, o resultado é o ângulo entre "para onde
+     * vou" e "para onde a tela aponta". Em navegação isso é ~0 e o veículo
+     * aparece de trás, alinhado com a rua. Com o mapa travado ao norte, é o
+     * próprio rumo. Com o usuário girando o mapa com dois dedos, acompanha.
+     */
+    const screenHeading = headingDeg == null ? null : headingDeg - map.getBearing()
+    applySpriteHeading(ref.current.getElement(), vehicle, screenHeading, isNavigating)
   }
 }
 
@@ -1402,12 +1519,15 @@ function createFallbackPuckElement(): HTMLElement {
 function applySpriteHeading(
   element: HTMLElement,
   vehicle: VehicleModelId,
-  headingDeg: number | null,
+  screenHeadingDeg: number | null,
   isNavigating: boolean,
 ) {
   const vehicleImage = element.querySelector('[data-role="vehicle"]') as HTMLImageElement | null
   if (vehicleImage) {
-    const url = riderSpriteUrl(vehicle, headingDeg ?? 0)
+    // Sem rumo, 0 na tela = veículo visto de trás, apontando para cima. É a
+    // apresentação em repouso e não afirma direção nenhuma; o que some sem
+    // rumo é o cone, abaixo.
+    const url = riderSpriteUrl(vehicle, screenHeadingDeg ?? 0)
     if (vehicleImage.getAttribute('src') !== url) vehicleImage.setAttribute('src', url)
   }
 
@@ -1415,8 +1535,9 @@ function applySpriteHeading(
   if (cone) {
     // O cone só aparece em navegação ativa E com rumo conhecido: ele é o
     // elemento que aponta, então sem rumo ele afirmaria uma direção inexistente.
-    cone.style.opacity = isNavigating && headingDeg != null ? '1' : '0'
-    cone.style.transform = `rotate(${headingDeg ?? 0}deg)`
+    cone.style.opacity = isNavigating && screenHeadingDeg != null ? '1' : '0'
+    // O cone é DOM como o sprite: mesmo referencial de tela, mesmo ângulo.
+    cone.style.transform = `rotate(${screenHeadingDeg ?? 0}deg)`
     cone.style.transition = 'transform 240ms cubic-bezier(.4,0,.2,1)'
   }
 
@@ -1584,7 +1705,7 @@ function refineCartography(map: MapLibreMap, theme: 'dark' | 'light') {
     0,
     C.building,
     60,
-    theme === 'light' ? '#E9EEF6' : '#243449',
+    theme === 'light' ? '#F2F5F9' : '#26374E',
   ])
 
   // Água e verde são os únicos pontos de cor do mapa — é o que evita o cinza
@@ -1626,7 +1747,7 @@ function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
         // tom — impossível ver por onde a rua passa.
         setPaint(layer.id, 'fill-color', C.building)
       } else if (id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('landcover')) {
-        setPaint(layer.id, 'fill-color', theme === 'light' ? '#C3DCC3' : '#12251A')
+        setPaint(layer.id, 'fill-color', C.greenArea)
       } else setPaint(layer.id, 'fill-color', C.background)
       continue
     }

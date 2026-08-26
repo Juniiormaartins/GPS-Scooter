@@ -33,6 +33,7 @@ import { recordActivity, type ActivityEntry } from '@/services/storage/activityH
 import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult, ScoredRoute } from '@/types/routing'
 import type { SeverityRun } from '@/services/routing/segmentSeverity'
+import { TopScrim } from '@/components/ui/TopScrim'
 
 type ActivePanel = 'profile' | 'saved' | 'activity' | null
 
@@ -708,12 +709,32 @@ export default function App() {
   const isNavigationView = isNavigating && activeScoredRoute != null
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
+  /**
+   * Posição entregue ao mapa.
+   *
+   * A condição é `isNavigating`, NÃO `isNavigationView`. A diferença importa:
+   * `isNavigationView` também exige `activeScoredRoute`, que fica nulo por um
+   * ou dois quadros a cada RECÁLCULO de rota. Nesses quadros a expressão caía
+   * em `userPosition` — que é a leitura pontual de `locate()`, feita uma vez
+   * na abertura do app e nunca mais atualizada enquanto a navegação usa o seu
+   * próprio rastreamento.
+   *
+   * Medido em teste: o marcador recebia, alternadamente, a posição real e uma
+   * posição fixa 250 m atrás. Cada alternância era um salto — e a câmera ia
+   * junto. Era isto que fazia a câmera "não acompanhar" e o marcador dar
+   * pulos, e piorava exatamente onde mais incomoda: durante um recálculo.
+   *
+   * Navegando, só a posição da navegação vale; `userPosition` fica como último
+   * recurso para o instante entre iniciar e a primeira amostra chegar.
+   */
+  const mapUserPoint = isNavigating ? (navPosition ?? userPosition) : userPosition
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-surface">
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}
-        userPoint={isNavigationView ? navPosition : userPosition}
+        userPoint={mapUserPoint}
         routeGeometry={activeScoredRoute?.route.geometry ?? preview?.result.selected.route.geometry ?? null}
         // Na navegação existe UMA rota; as candidatas simultâneas são da tela
         // de escolha e sumiriam de qualquer forma pela visibilidade das camadas.
@@ -824,7 +845,8 @@ export default function App() {
         caso em que o usuário precisa digitar de onde está saindo. Sem esse
         fallback, negar a localização deixaria o app inutilizável.
       */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <TopScrim />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <LocationHeader
           currentStreet={currentStreetLabel}
           currentArea={currentAreaLabel}

@@ -11,8 +11,8 @@ import type { VehicleModelId } from '@/config/userPreferences'
  *
  * CONVENÇÕES DO PACOTE, seguidas à risca:
  *
- * - 0° = veículo visto de FRENTE, crescendo no sentido horário como o heading
- *   da bússola. Índice = `Math.round(heading / 45) % 8`.
+ * - O nome do arquivo NÃO é o rumo da bússola. Medido olhando os oito PNGs de
+ *   cada veículo (ver ORIENTAÇÃO-BASE abaixo).
  * - O PNG NUNCA é rotacionado. Girar uma vista em perspectiva não produz outro
  *   ângulo, produz a mesma vista tombando — por isso existem os oito arquivos.
  *   Só o halo e o cone de direção acompanham o rumo continuamente.
@@ -60,14 +60,64 @@ export const SPRITE_ANCHOR_Y = 0.68
 /** Abaixo deste tamanho na tela, o veículo não é mais legível — usar o puck 2D. */
 export const MIN_LEGIBLE_SPRITE_PX = 40
 
-export function spriteIndexForHeading(headingDeg: number): number {
-  const normalized = ((headingDeg % 360) + 360) % 360
+/**
+ * ORIENTAÇÃO-BASE DOS ASSETS — medida, não suposta.
+ *
+ * Abri os oito PNGs de cada veículo e anotei para que lado da TELA o guidão
+ * aponta em cada arquivo:
+ *
+ *   marker_180_sul       → aponta para CIMA   (vista traseira: lanterna visível)
+ *   marker_0_norte       → aponta para BAIXO  (vista frontal)
+ *   marker_270_oeste     → aponta para ESQUERDA
+ *   marker_45_nordeste   → aponta para BAIXO-DIREITA
+ *
+ * Ou seja: `direçãoNaTela = (180 − ânguloDoArquivo) mod 360`. O nome do
+ * arquivo é o espelho do rumo, não o rumo — e é por isso que a versão
+ * anterior (`índice = heading / 45`) mostrava o veículo de lado numa reta.
+ *
+ * Invertendo: `ânguloDoArquivo = (180 − direçãoNaTela) mod 360`.
+ */
+const SCREEN_TO_FILE_OFFSET_DEG = 180
+
+/**
+ * Correção por veículo, em graus, caso um pacote futuro traga um asset com
+ * outra orientação-base.
+ *
+ * Os três atuais foram CONFERIDOS um a um e têm exatamente a mesma base — em
+ * `marker_45_nordeste` scooter, patinete e bicicleta apontam todos para
+ * baixo-direita. Por isso os três são 0. A tabela existe para que corrigir um
+ * asset divergente seja mudar um número aqui, e não mexer na trigonometria.
+ */
+const SPRITE_BASE_OFFSET_DEG: Record<VehicleModelId, number> = {
+  'scooter-32': 0,
+  'scooter-25': 0,
+  'ebike-25': 0,
+  custom: 0,
+}
+
+/**
+ * Índice do sprite a partir da direção NA TELA (não da bússola).
+ *
+ * `screenHeadingDeg` é o rumo do deslocamento MENOS o bearing da câmera. Essa
+ * subtração é o coração do conserto: o marcador é um elemento DOM alinhado ao
+ * viewport (`rotationAlignment: 'viewport'`), então ele vive no referencial da
+ * tela, enquanto o rumo é do mundo. Durante a navegação a câmera gira junto
+ * com o deslocamento, então a rua sempre aponta para cima da tela e o
+ * resultado da subtração é ~0 — o veículo aparece de trás, alinhado com a via,
+ * que é o comportamento esperado. Sem a subtração, ir para o leste rodava o
+ * mapa para o leste E trocava o sprite para a vista lateral, e o veículo
+ * aparecia atravessado numa reta.
+ */
+export function spriteIndexForScreenHeading(screenHeadingDeg: number, vehicle: VehicleModelId): number {
+  const offset = SPRITE_BASE_OFFSET_DEG[vehicle] ?? 0
+  const fileAngle = SCREEN_TO_FILE_OFFSET_DEG - screenHeadingDeg + offset
+  const normalized = ((fileAngle % 360) + 360) % 360
   return Math.round(normalized / 45) % 8
 }
 
-export function riderSpriteUrl(vehicle: VehicleModelId, headingDeg: number): string {
+export function riderSpriteUrl(vehicle: VehicleModelId, screenHeadingDeg: number): string {
   const folder = SPRITE_FOLDER[vehicle] ?? SPRITE_FOLDER['scooter-32']
-  return `${BASE_PATH}/${folder}/${ANGLE_FILES[spriteIndexForHeading(headingDeg)]}.png`
+  return `${BASE_PATH}/${folder}/${ANGLE_FILES[spriteIndexForScreenHeading(screenHeadingDeg, vehicle)]}.png`
 }
 
 /** Todos os 8 ângulos de um veículo — usado para pré-carregar e evitar piscada na curva. */

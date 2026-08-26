@@ -82,9 +82,36 @@
 
   /* Bordas/realces: claros sobre fundo escuro. */
   --hairline: 255 255 255;
+
+  /*
+   * Degradê de leitura no topo (handoff tokens/elevation.css: --scrim-top).
+   *
+   * No escuro ele NÃO é branco: clarear o topo destruiria o contraste dos
+   * textos claros que ele deveria proteger. Aqui a proteção vem de aproximar o
+   * fundo da cor do próprio app — o texto claro ganha um campo escuro atrás.
+   *
+   * Três paradas em vez de duas: `linear-gradient` interpola em espaço de cor
+   * reto, e duas paradas com alfa produzem um meio termo perceptivelmente
+   * abrupto. A parada intermediária puxa a curva para perto do decaimento que
+   * o olho lê como suave.
+   */
+  --scrim-top: linear-gradient(
+    180deg,
+    rgba(10, 14, 26, 0.92) 0%,
+    rgba(10, 14, 26, 0.55) 45%,
+    rgba(10, 14, 26, 0) 100%
+  );
 }
 
 :root[data-theme='light'] {
+  /* Branco no claro, mesmo princípio: o topo se aproxima do fundo do chrome. */
+  --scrim-top: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.62) 45%,
+    rgba(255, 255, 255, 0) 100%
+  );
+
   /*
    * Paleta do redesenho (handoff "Redesenho GPS Mobilidade Elétrica", §4.1).
    * Tema CLARO é o tema do produto; o chrome escuro aparece exclusivamente na
@@ -144,6 +171,16 @@
  * (§4.1, §7) determina que a navegação ativa é escura independentemente do
  * tema escolhido, para imersão. São os únicos tokens do app que não invertem.
  */
+/*
+ * Altura do degradê do topo. Soma a área segura (notch) ao espaço ocupado pelo
+ * cabeçalho e pelo campo de busca, mais uma folga para o degradê ter onde
+ * decair — sem ela o fim do degradê cairia em cima do próprio texto que ele
+ * protege.
+ */
+:root {
+  --scrim-top-height: calc(env(safe-area-inset-top, 0px) + 200px);
+}
+
 :root {
   --nav-surface: #0f1729;
   --nav-content: #ffffff;

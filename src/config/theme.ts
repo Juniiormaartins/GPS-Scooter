@@ -107,22 +107,40 @@ export const MAP_COLORS_LIGHT = {
    * figura e a malha viária como fundo: exatamente o inverso do que um GPS
    * precisa. Escurecer o fundo é o que faz a rua branca aparecer.
    */
-  background: '#D3DCEA',
-  water: '#A8C6E0',
+  background: '#E9EDF2',
+  water: '#A5CFF0',
   /** Vias brancas: o elemento mais claro do mapa, por decisão. */
   roadMajor: '#FFFFFF',
   roadMinor: '#FFFFFF',
   /** Expressas/rodovias em âmbar — no nosso caso isso é informação, não enfeite: é o que o app recomenda evitar. */
-  roadHighway: '#F5C87A',
-  /** Contorno das vias. É ele que separa duas ruas paralelas e dá definição ao traçado. */
-  roadCasing: '#A9B9D1',
+  roadHighway: '#F7CE7E',
+  /**
+   * Contorno das vias — o elemento que MAIS mudou.
+   *
+   * Era #A9B9D1 sobre fundo #D3DCEA: pouco mais escuro que o próprio fundo,
+   * então a rua branca aparecia por diferença de preenchimento e o mapa
+   * inteiro dependia do fundo ser escuro para funcionar. É por isso que ele
+   * era escuro, e é por isso que o mapa parecia apagado.
+   *
+   * Aqui o contorno é que desenha a via. Com ele nítido dá para clarear o
+   * fundo sem a malha sumir — que é como um mapa claro moderno resolve: fundo
+   * quase branco, rua branca, e a definição vindo da borda.
+   */
+  roadCasing: '#BCC7D6',
   /** Prédios DELIBERADAMENTE discretos — quase o fundo. Eles não são a informação. */
-  building: '#C6D1E2',
-  rail: '#B4C1D4',
+  building: '#DCE3EC',
+  rail: '#C3CCD9',
   /** Trilhas/calçadões em tom quente, para não serem confundidos com rua. */
-  path: '#E0D3B8',
+  path: '#E6D8BC',
   poi: '#AFBDD2',
-  label: '#2B3A52',
+  /**
+   * Áreas verdes com presença de verdade. O tom anterior (#C3DCC3) era um
+   * cinza levemente esverdeado que sumia contra o fundo; este é um verde
+   * reconhecível de relance, que é a função de praça e parque num mapa —
+   * servir de referência de orientação.
+   */
+  greenArea: '#B4DFB0',
+  label: '#33404F',
 
   /**
    * Rotas no tema claro: tons mais escuros/saturados que os do tema escuro.
@@ -146,14 +164,21 @@ export const MAP_COLORS = {
    * ainda dava só 1,23:1; este dá ~1,9:1, na mesma faixa das vias — água é
    * referência de orientação, precisa ser reconhecível de relance.
    */
-  water: '#17395E',
-  roadMajor: '#4A5D82',
+  /**
+   * Azul mais saturado que o #17395E anterior. O escuro não precisa ser
+   * apagado: água e verde são os únicos pontos de cor do mapa noturno, e é
+   * neles que o olho se apoia para se localizar.
+   */
+  water: '#1B4C7E',
+  roadMajor: '#546890',
   /** Expressas/rodovias em âmbar apagado — mesma função informativa do tema claro. */
   roadHighway: '#7A6437',
   roadCasing: '#0B111F',
   building: '#131B2D',
   rail: '#2B3752',
-  path: '#2F4038',
+  path: '#33453B',
+  /** Verde noturno — mais vivo que o #12251A anterior, pelo mesmo motivo da água. */
+  greenArea: '#163A26',
   /**
    * DESVIO CONSCIENTE do handoff, documentado: ele especifica #131C2E
    * (--ink-850) para vias secundárias, mas contra o fundo #0E1424 isso dá
