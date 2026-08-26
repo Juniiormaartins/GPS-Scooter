@@ -574,6 +574,16 @@ export function MapView({
   const showingOptions = routeOptions.length > 0
 
   /**
+   * O destino está em zoom compacto?
+   *
+   * O pacote pede que abaixo de ~14 o pino dê lugar ao ponto: um pino de 56px
+   * num enquadramento de cidade inteira cobre quarteirões e deixa de indicar
+   * um lugar. Guardado como BOOLEANO, não como o zoom: assim o efeito só
+   * re-renderiza na travessia do limiar, e não a cada fração de zoom.
+   */
+  const [destinationCompact, setDestinationCompact] = useState(false)
+
+  /**
    * Interpolador do deslocamento. Ver riderAnimator.ts.
    *
    * Uma instância por montagem do mapa. Marcador e câmera são atualizados a
@@ -694,6 +704,11 @@ export function MapView({
     // endireitando tudo no quadro seguinte.
     map.on('rotatestart', notifyUserInteraction)
     map.on('pitchstart', notifyUserInteraction)
+
+    // Só dispara estado quando CRUZA o limiar — ver destinationCompact.
+    const watchZoom = () => setDestinationCompact(map.getZoom() < DESTINATION_SIZES.compactBelowZoom)
+    map.on('zoom', watchZoom)
+    watchZoom()
 
     /**
      * Enquanto o dedo (ou o botão do mouse) está no mapa, a câmera automática
@@ -978,6 +993,7 @@ export function MapView({
 
     mapRef.current = map
     return () => {
+      map.off('zoom', watchZoom)
       for (const evento of fins) window.removeEventListener(evento, endGesture)
       if (wheelTimer) clearTimeout(wheelTimer)
       map.remove()
@@ -1350,7 +1366,14 @@ export function MapView({
     const map = mapRef.current
     if (!map) return
     const arrival = arrivalPointFor(routeGeometry ?? [], destinationPoint)
-    updateDestination(destinationMarkerRef, arrivalCapRef, map, destinationPoint, arrival)
+    updateDestination(destinationMarkerRef, arrivalCapRef, map, destinationPoint, arrival, {
+      compact: destinationCompact,
+      // "Em foco" é o destino escolhido antes de a navegação começar — o
+      // momento em que o usuário está decidindo se vai. Durante a navegação o
+      // halo pulsante disputaria atenção com o marcador do veículo, que é o
+      // elemento que precisa dela.
+      focused: !isNavigating,
+    })
 
     const approach = map.getSource(ROUTE_APPROACH_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
     if (approach) {
@@ -1379,7 +1402,7 @@ export function MapView({
           : [],
       })
     }
-  }, [destinationPoint, routeGeometry])
+  }, [destinationPoint, routeGeometry, destinationCompact, isNavigating])
 
   useEffect(() => {
     const map = mapRef.current
@@ -1623,6 +1646,7 @@ function updateDestination(
   point: LngLat | null,
   /** Onde o traçado termina. Igual ao destino quando a rota o alcança. */
   arrivalPoint: LngLat | null,
+  options: { compact: boolean; focused: boolean },
 ) {
   if (!point) {
     capRef.current?.remove()
@@ -1632,6 +1656,8 @@ function updateDestination(
     return
   }
 
+  // A tampa é criada e adicionada PRIMEIRO: marcador do MapLibre respeita a
+  // ordem de inserção no DOM, então ela fica sob o pino e sobre a rota.
   if (!capRef.current) {
     const cap = document.createElement('div')
     cap.className = 'pointer-events-none'
@@ -1644,17 +1670,71 @@ function updateDestination(
   capRef.current.setLngLat([cap.lng, cap.lat])
   if (!capRef.current.getElement().isConnected) capRef.current.addTo(map)
 
-  if (!markerRef.current) {
-    const pin = document.createElement('div')
-    pin.className = 'pointer-events-none'
-    const width = DESTINATION_SIZES.markerPx
-    // O arquivo é 96×100: a altura acompanha a proporção para a ponta cair
-    // exatamente na coordenada.
-    pin.style.width = `${width}px`
-    pin.style.height = `${Math.round((width * 100) / 96)}px`
-    pin.innerHTML = `<img src="${DESTINATION_ASSETS.marker}" alt="" aria-hidden="true" draggable="false" class="h-full w-full select-none" />`
-    markerRef.current = new maplibregl.Marker({ element: pin, anchor: 'bottom' })
+  /**
+   * TRÊS VARIANTES do marcador, cada uma com âncora própria:
+   *
+   * - `dot` em zoom baixo: um pino de 56px num enquadramento de cidade cobre
+   *   quarteirões inteiros e deixa de apontar um lugar;
+   * - `active` quando o destino está em foco: halo e anel pulsante, o estado
+   *   que o pacote desenhou para "escolhi este lugar, estou decidindo";
+   * - `marker` durante a navegação: sem halo, para não disputar atenção com o
+   *   marcador do veículo.
+   *
+   * A troca RECRIA o marcador porque a âncora muda entre elas — o pino ancora
+   * na ponta, o ativo na base do halo, o ponto no centro. `dataset.variant`
+   * guarda qual está montado para não recriar a cada atualização.
+   */
+  const variant: 'dot' | 'active' | 'marker' = options.compact ? 'dot' : options.focused ? 'active' : 'marker'
+
+  if (markerRef.current && markerRef.current.getElement().dataset.variant !== variant) {
+    markerRef.current.remove()
+    markerRef.current = null
   }
+
+  if (!markerRef.current) {
+    const element = document.createElement('div')
+    element.className = 'pointer-events-none'
+    element.dataset.variant = variant
+
+    let src: string
+    let width: number
+    let ratio: number
+    let anchor: 'bottom' | 'center'
+
+    if (variant === 'dot') {
+      src = DESTINATION_ASSETS.dot
+      width = DESTINATION_SIZES.dotPx
+      ratio = 1 // 40×40
+      anchor = 'center'
+    } else if (variant === 'active') {
+      src = DESTINATION_ASSETS.markerActive
+      // O arquivo ativo é 200×200 e o pino dentro dele ocupa cerca de um terço
+      // da largura; para o PINO sair no mesmo tamanho da variante normal, o
+      // elemento inteiro precisa ser proporcionalmente maior.
+      width = Math.round(DESTINATION_SIZES.markerPx * 2.6)
+      ratio = 1
+      // Âncora na base do halo (70% da altura), conforme o pacote.
+      anchor = 'center'
+    } else {
+      src = DESTINATION_ASSETS.marker
+      width = DESTINATION_SIZES.markerPx
+      ratio = 100 / 96 // arquivo 96×100
+      anchor = 'bottom'
+    }
+
+    element.style.width = `${width}px`
+    element.style.height = `${Math.round(width * ratio)}px`
+    element.innerHTML = `<img src="${src}" alt="" aria-hidden="true" draggable="false" class="h-full w-full select-none" />`
+
+    markerRef.current = new maplibregl.Marker({
+      element,
+      anchor,
+      // A variante ativa é quadrada com o pino no meio-alto: o deslocamento
+      // leva a PONTA do pino até a coordenada, como nas outras duas.
+      offset: variant === 'active' ? [0, -Math.round(width * 0.2)] : [0, 0],
+    })
+  }
+
   markerRef.current.setLngLat([point.lng, point.lat])
   if (!markerRef.current.getElement().isConnected) markerRef.current.addTo(map)
 }

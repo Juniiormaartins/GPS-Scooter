@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/Button'
+import { pinUrl } from '@/components/map/poiLibrary'
 import { SuitabilityBar, SuitabilitySummary } from '@/components/route/SuitabilityBar'
 import type { LngLat } from '@/config/region'
 import type { GeocodingResult } from '@/services/geocoding'
@@ -57,6 +58,23 @@ export function PoiCard({
       <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-surface-handle" />
 
       <div className="flex items-start justify-between gap-3">
+        {/*
+          O PIN da categoria — a variante que o pacote reserva para "local
+          selecionado". Aqui ele cabe (a ficha tem altura), enquanto na LISTA
+          de resultados o badge é melhor: pin tem cauda e desalinha linhas de
+          altura fixa.
+
+          Só aparece com categoria conhecida; endereço não é ponto de
+          interesse, e um pino de categoria ali afirmaria o contrário.
+        */}
+        {poi.poiCategory && (
+          <img
+            src={pinUrl(poi.poiCategory)}
+            alt=""
+            aria-hidden="true"
+            className="mt-0.5 h-11 w-[42px] shrink-0 select-none"
+          />
+        )}
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sheet-title text-content-primary">{poi.label}</h2>
           {poi.secondaryLabel && (

@@ -561,7 +561,15 @@ export const DESTINATION_ASSETS = {
   markerActive: `${POI_ASSET_BASE}/destino/destino_marcador_ativo.svg`,
   /** Tampa onde o traçado termina (72×72). Âncora no centro. */
   routeCap: `${POI_ASSET_BASE}/destino/destino_chegada_rota.svg`,
-  /** Halo e sombra isolados (200×100). */
+  /**
+   * Halo e sombra isolados (200×100).
+   *
+   * NÃO USADO, e de propósito: o pacote o oferece para quem quiser compor o
+   * halo por conta própria, mas `markerActive` já traz halo e anel pulsante
+   * no mesmo arquivo. Usar os dois empilharia dois halos. Fica catalogado
+   * porque é a peça a usar se o estado ativo um dia precisar do halo separado
+   * do pino — por exemplo, para animá-los em ritmos diferentes.
+   */
   base: `${POI_ASSET_BASE}/destino/destino_base.svg`,
   /** Versão compacta para zoom baixo (40×40). */
   dot: `${POI_ASSET_BASE}/destino/destino_dot.svg`,
