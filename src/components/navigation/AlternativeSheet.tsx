@@ -105,7 +105,7 @@ export function AlternativeSheet({
         dedo. Fechar é papel do botão explícito abaixo.
       */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,env(safe-area-inset-top))] transition-all duration-slow ease-ease-out-soft ${
+        className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,var(--safe-top))] transition-all duration-slow ease-ease-out-soft ${
           leaving ? '-translate-y-3 opacity-0' : 'translate-y-0 opacity-100'
         }`}
       >

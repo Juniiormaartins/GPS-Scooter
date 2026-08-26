@@ -1217,7 +1217,7 @@ export default function App() {
         fallback, negar a localização deixaria o app inutilizável.
       */}
       <TopScrim />
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,var(--safe-top))]">
         <LocationHeader
           avatarDataUrl={preferences.avatarDataUrl}
           currentStreet={currentStreetLabel}
@@ -1288,7 +1288,7 @@ export default function App() {
         </BottomSheet>
       ) : (
         !selectedPoi && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
             {/*
               ESPAÇO ABAIXO DA BARRA DE ABAS (o `pb` acima).
 
@@ -1299,9 +1299,13 @@ export default function App() {
               nenhuma folga própria, e ficava parecendo empurrada para fora da
               tela.
 
-              Somar em vez de escolher: a safe area afasta do indicador e os
-              12px continuam sendo o respiro entre a barra e essa área. Onde
-              não há recorte (`env` vale 0) o resultado é os mesmos 12px.
+              Somar em vez de escolher: a safe area afasta do indicador e o
+              respiro é o que separa a barra dessa área.
+
+              O respiro é de 6px, não 12px: com 12 a barra subia demais e
+              passava a ocupar espaço de mapa. 6px sobre a safe area de um
+              iPhone dão 40px — acima do indicador de gesto, sem folga
+              exagerada. Onde não há recorte (`env` vale 0) sobram os 6px.
             */}
             {/*
               O botão de recentralizar faz parte desta MESMA pilha, alinhado à

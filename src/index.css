@@ -210,7 +210,46 @@
    * que é a metade da tela em que o usuário procura referência visual. 116px
    * cobrem a linha do endereço com folga e devolvem o mapa logo abaixo dela.
    */
-  --scrim-top-height: calc(env(safe-area-inset-top, 0px) + 116px);
+  /*
+   * ALTURA SEGURA DO TOPO — o inset do aparelho, com piso em modo standalone.
+   *
+   * BUG DO iOS que isto contorna, e ele e conhecido: com
+   * `apple-mobile-web-app-status-bar-style: black-translucent`, a pagina passa a
+   * se estender por baixo da barra de status (que e o que a torna transparente)
+   * MAS `env(safe-area-inset-top)` volta ZERO em varias versoes do iOS. O
+   * sistema entende que o app assumiu o desenho daquela area e para de reportar
+   * o recuo.
+   *
+   * Resultado: `max(0.75rem, env(...))` vira 12px, e o cabecalho sobe para
+   * debaixo do relogio e da bateria. Foi exatamente o que aconteceu ao trocar a
+   * barra opaca pela transparente: um problema trocou pelo outro.
+   *
+   * O piso de 54px so vale em STANDALONE (icone na tela de inicio), que e o
+   * unico modo em que a pagina fica sob a barra. No Safari comum o recuo nao
+   * existe porque a barra e do navegador, e ali o valor continua sendo o do
+   * aparelho. Quando `env` funciona, `max` escolhe o valor real e este piso nao
+   * atrapalha.
+   */
+  --safe-top: env(safe-area-inset-top, 0px);
+
+  --scrim-top-height: calc(var(--safe-top) + 116px);
+}
+
+/*
+  O PISO, aplicado só com o app aberto pelo ícone da tela de início.
+
+  `display-mode: standalone` cobre Android e o iOS moderno; `navigator.standalone`
+  cobre o iOS antigo e é ligado por main.tsx no atributo `data-standalone`. As
+  duas condições existem porque nenhuma sozinha pega todos os aparelhos.
+*/
+@media (display-mode: standalone) {
+  :root {
+    --safe-top: max(env(safe-area-inset-top, 0px), 54px);
+  }
+}
+
+:root[data-standalone='true'] {
+  --safe-top: max(env(safe-area-inset-top, 0px), 54px);
 }
 
 :root {

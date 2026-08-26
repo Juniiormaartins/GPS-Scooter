@@ -103,7 +103,7 @@ export function NavigationPanel({
   return (
     <>
       <TopScrim />
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-gutter pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-gutter pt-[max(1rem,var(--safe-top))]">
         {progress?.nextStep ? (
           /*
             `GuidanceBanner` (handoff §5.1): card ESCURO #0F1729 de raio 28px,

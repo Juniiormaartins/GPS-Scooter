@@ -47,7 +47,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
         campo entre as duas telas quebraria a continuidade do gesto de tocar
         nele e "entrar" na busca.
       */}
-      <div className="flex shrink-0 flex-col gap-3 px-4 pb-3.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="flex shrink-0 flex-col gap-3 px-4 pb-3.5 pt-[max(0.75rem,var(--safe-top))]">
         <div className="flex items-center gap-2.5">
           <button
             type="button"

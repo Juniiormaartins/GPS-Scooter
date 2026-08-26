@@ -30,7 +30,7 @@ export function Panel({ title, onClose, action, children }: PanelProps) {
         isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
       }`}
     >
-      <div className="flex min-h-[56px] shrink-0 items-center justify-between gap-4 px-gutter pb-2 pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="flex min-h-[56px] shrink-0 items-center justify-between gap-4 px-gutter pb-2 pt-[max(1rem,var(--safe-top))]">
         <h1 className="text-screen-title text-content-primary">{title}</h1>
         <div className="flex shrink-0 items-center gap-2">
           {action}
