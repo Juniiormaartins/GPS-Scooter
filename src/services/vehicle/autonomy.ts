@@ -1,5 +1,5 @@
 import { mobilityProfile } from '@/config/mobilityProfiles'
-import type { UserPreferences } from '@/config/userPreferences'
+import type { ConsumptionSample, UserPreferences } from '@/config/userPreferences'
 
 /**
  * AUTONOMIA — a fonte única de "quanto o veículo ainda anda".
@@ -55,6 +55,115 @@ function batteryConfidence(updatedAt: number | null, now = Date.now()): BatteryC
   return 'stale'
 }
 
+/**
+ * AUTONOMIA APRENDIDA — a estimativa deixa de depender do catálogo.
+ *
+ * O catálogo é o número do fabricante em condição ideal: piloto leve, plano,
+ * sem vento, bateria nova. Ninguém pilota em condição ideal, e a diferença
+ * entre "40 km de catálogo" e os 26 km que a moto realmente faz é a diferença
+ * entre chegar e empurrar.
+ *
+ * O app tem como medir isso sem falar com o veículo: entre duas informações de
+ * bateria ele sabe quantos metros VIU o usuário percorrer e quantos pontos
+ * percentuais caíram. Cada intervalo desses é uma medição de eficiência real.
+ *
+ * O QUE ISTO NÃO CONSERTA, e é honesto dizer: o modelo continua linear e
+ * continua cego ao que acontece com o app fechado. Subida forte, vento e
+ * pilotagem agressiva vão continuar gastando mais do que a conta prevê dentro
+ * de um mesmo trajeto. O que muda é a BASE: em vez de partir de um número que
+ * nunca foi verdade para este usuário, parte da média do que ele de fato faz.
+ * Precisão em tempo real só existe com telemetria do controlador.
+ */
+
+/** Intervalo curto demais para medir eficiência: o erro do próprio percentual domina. */
+const MIN_LEARN_METERS = 3000
+/** Sem queda de bateria não há o que dividir; quedas de 1 ponto são ruído de arredondamento. */
+const MIN_LEARN_PERCENT_DROP = 3
+
+/**
+ * Faixa de plausibilidade, como múltiplo da autonomia de catálogo.
+ *
+ * É a defesa contra o caso que o próprio usuário levantou: rodar com o app
+ * FECHADO. Nesse intervalo o app viu 2 km e a bateria caiu 40% — o que daria
+ * uma eficiência absurdamente ruim e envenenaria o modelo. Uma amostra fora de
+ * [0,35× ; 2,5×] do catálogo é descartada em vez de aprendida: é muito mais
+ * provável que o app tenha estado cego do que a moto ter mudado de física.
+ */
+const PLAUSIBLE_MIN_FACTOR = 0.35
+const PLAUSIBLE_MAX_FACTOR = 2.5
+
+/** Amostras guardadas. Poucas, e as mais recentes — bateria envelhece e o uso muda. */
+const MAX_SAMPLES = 8
+
+/**
+ * Decide se um intervalo vira amostra. A maioria não vira, e isso é o desenho:
+ * é melhor aprender devagar com dado bom do que rápido com dado ruim.
+ */
+export function buildConsumptionSample(
+  meters: number,
+  previousPercent: number,
+  newPercent: number,
+  catalogRangeKm: number,
+): ConsumptionSample | null {
+  const percentDrop = previousPercent - newPercent
+  if (meters < MIN_LEARN_METERS) return null
+  if (percentDrop < MIN_LEARN_PERCENT_DROP) return null
+
+  const impliedRangeKm = (meters / 1000 / percentDrop) * 100
+  if (catalogRangeKm > 0) {
+    if (impliedRangeKm < catalogRangeKm * PLAUSIBLE_MIN_FACTOR) return null
+    if (impliedRangeKm > catalogRangeKm * PLAUSIBLE_MAX_FACTOR) return null
+  }
+
+  return { meters, percentDrop, at: Date.now() }
+}
+
+export function appendConsumptionSample(
+  samples: ConsumptionSample[],
+  sample: ConsumptionSample,
+): ConsumptionSample[] {
+  return [sample, ...samples].slice(0, MAX_SAMPLES)
+}
+
+/**
+ * Autonomia que as amostras indicam, em km. null enquanto não houver amostra.
+ *
+ * MEDIANA e não média: uma única saída atípica (um dia de serra, um dia de
+ * vento) puxaria a média e mudaria a estimativa de todos os outros dias. A
+ * mediana ignora o extremo sem precisar decidir o que é extremo.
+ */
+export function observedRangeKm(samples: ConsumptionSample[]): number | null {
+  if (samples.length === 0) return null
+  const valores = samples
+    .map((sample) => (sample.meters / 1000 / sample.percentDrop) * 100)
+    .sort((a, b) => a - b)
+  const meio = Math.floor(valores.length / 2)
+  return valores.length % 2 === 1 ? valores[meio] : (valores[meio - 1] + valores[meio]) / 2
+}
+
+export type RangeSource = 'catalog' | 'blend' | 'observed'
+
+/**
+ * A autonomia que o app usa de fato — mistura de catálogo e observação, com o
+ * peso da observação crescendo com o número de amostras.
+ *
+ * NÃO SALTA para o valor observado na primeira amostra. Uma amostra é um dia; o
+ * usuário veria a autonomia do app mudar de 40 para 26 km da noite para o dia
+ * por causa de um único trajeto na chuva. A transição gradual chega no mesmo
+ * lugar sem esse susto, e três amostras já pesam mais que o catálogo.
+ */
+export function effectiveRange(preferences: UserPreferences): { km: number; source: RangeSource; samples: number } {
+  const catalogo = Math.max(0, preferences.rangeKm)
+  const amostras = preferences.consumptionSamples ?? []
+  const observado = observedRangeKm(amostras)
+
+  if (observado == null) return { km: catalogo, source: 'catalog', samples: 0 }
+
+  const peso = Math.min(1, amostras.length / 4)
+  const km = catalogo * (1 - peso) + observado * peso
+  return { km, source: peso >= 1 ? 'observed' : 'blend', samples: amostras.length }
+}
+
 export interface AutonomyState {
   /** Autonomia máxima do veículo configurado, em km. */
   rangeKm: number
@@ -70,10 +179,17 @@ export interface AutonomyState {
   confidence: BatteryConfidence
   /** True quando a estimativa mudou desde o valor informado — a UI diz "estimado" em vez de repetir o número do usuário. */
   hasDecayed: boolean
+  /** De onde saiu `rangeKm`: catálogo, mistura, ou o consumo observado deste usuário. */
+  rangeSource: RangeSource
+  /** Quantos intervalos reais já foram aprendidos. */
+  rangeSamples: number
 }
 
 export function autonomyState(preferences: UserPreferences, now = Date.now()): AutonomyState {
-  const rangeKm = Math.max(0, preferences.rangeKm)
+  // A autonomia usada em TODA conta é a efetiva, não a de catálogo: é ela que
+  // reflete o que este usuário realmente consegue.
+  const efetiva = effectiveRange(preferences)
+  const rangeKm = efetiva.km
   const informedPercent = preferences.batteryPercent
   const informedAt = preferences.batteryUpdatedAt
   const distanceSinceInformedMeters = Math.max(0, preferences.batteryDistanceSinceUpdateMeters)
@@ -88,6 +204,8 @@ export function autonomyState(preferences: UserPreferences, now = Date.now()): A
       remainingKm: null,
       confidence: 'unknown',
       hasDecayed: false,
+      rangeSource: efetiva.source,
+      rangeSamples: efetiva.samples,
     }
   }
 
@@ -103,6 +221,8 @@ export function autonomyState(preferences: UserPreferences, now = Date.now()): A
     remainingKm: (estimatedPercent / 100) * rangeKm,
     confidence: batteryConfidence(informedAt, now),
     hasDecayed: consumedPercent >= 1,
+    rangeSource: efetiva.source,
+    rangeSamples: efetiva.samples,
   }
 }
 
@@ -214,10 +334,32 @@ function formatKm(km: number): string {
   return `${km.toFixed(km < 10 ? 1 : 0)} km`
 }
 
-/** Texto curto de ressalva pela idade do dado — null quando não há o que ressalvar. */
+/**
+ * Ressalva pela IDADE do dado — null quando o dado é recente.
+ *
+ * Não confundir com a ressalva de ORIGEM ("o app não lê o veículo"), que vale
+ * sempre e é responsabilidade de quem exibe o número. Esta aqui é sobre o
+ * dado ter envelhecido; aquela é sobre ele nunca ter vindo do veículo.
+ */
+/**
+ * De onde vem a autonomia — frase para a interface.
+ *
+ * Existe porque "40 km" e "26 km" dizem coisas diferentes conforme a origem, e
+ * o usuário merece saber quando o número passou a ser DELE. É também o que
+ * torna visível que o app está aprendendo, em vez de o número mudar sozinho
+ * sem explicação.
+ */
+export function rangeSourceLabel(state: AutonomyState): string | null {
+  if (state.rangeSource === 'catalog') return null
+  if (state.rangeSource === 'blend') {
+    return `Ajustando ao seu consumo real (${state.rangeSamples} ${state.rangeSamples === 1 ? 'trajeto medido' : 'trajetos medidos'}).`
+  }
+  return 'Autonomia calculada pelo seu consumo real, não pelo catálogo.'
+}
+
 export function confidenceCaveat(confidence: BatteryConfidence): string | null {
   if (confidence === 'fresh') return null
-  if (confidence === 'aging') return 'Estimativa baseada na última atualização.'
-  if (confidence === 'stale') return 'Bateria informada há bastante tempo — vale conferir.'
+  if (confidence === 'aging') return 'Estimativa da última vez que você informou a bateria.'
+  if (confidence === 'stale') return 'Bateria informada há bastante tempo — vale conferir antes de sair.'
   return 'Bateria não informada.'
 }

@@ -12,6 +12,8 @@ import { BottomNavBar } from '@/components/layout/BottomNavBar'
 import { SegmentAlertBanner } from '@/components/navigation/SegmentAlertBanner'
 import { SuitabilityLegend } from '@/components/map/SuitabilityLegend'
 import { ExploreSheet } from '@/components/explore/ExploreSheet'
+import { BatteryCheckIn } from '@/components/vehicle/BatteryCheckIn'
+import { useBatteryCheckIn } from '@/hooks/useBatteryCheckIn'
 import { exploreRadiusKm } from '@/services/vehicle/autonomy'
 import { frequentPlaces } from '@/services/storage/travelPatterns'
 import { listActivity } from '@/services/storage/activityHistory'
@@ -20,7 +22,12 @@ import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
 import { runKey } from '@/services/navigation/segmentAlerts'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
-import { assessRouteAutonomy, autonomyState } from '@/services/vehicle/autonomy'
+import {
+  appendConsumptionSample,
+  assessRouteAutonomy,
+  autonomyState,
+  buildConsumptionSample,
+} from '@/services/vehicle/autonomy'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
 import { ArrivalSheet } from '@/components/navigation/ArrivalSheet'
@@ -596,6 +603,45 @@ export default function App() {
    * ou percorre distância — que são exatamente os três eventos que a mudam.
    */
   const autonomy = useMemo(() => autonomyState(preferences), [preferences])
+
+  /**
+   * Confirmação de bateria na abertura — ver useBatteryCheckIn.
+   *
+   * Existe porque o odômetro só enxerga o que aconteceu com o app ABERTO:
+   * quem roda com o GPS fechado deixa o app cego, e cego ele superestima.
+   */
+  const batteryCheckIn = useBatteryCheckIn(autonomy)
+
+  /**
+   * Confirma a bateria E APRENDE com o intervalo que se fecha aqui.
+   *
+   * Este é o único momento em que o app tem os dois lados da conta ao mesmo
+   * tempo: quantos metros ele mediu desde a última informação, e quanto a
+   * bateria de fato caiu. É daqui que sai a autonomia real deste usuário, em
+   * vez da de catálogo (ver buildConsumptionSample — a maioria dos intervalos é
+   * descartada por não ser medição confiável).
+   */
+  const confirmarBateria = (percent: number) => {
+    const anterior = preferences.batteryPercent
+    const percorrido = preferences.batteryDistanceSinceUpdateMeters
+
+    const amostra =
+      anterior != null
+        ? buildConsumptionSample(percorrido, anterior, percent, preferences.rangeKm)
+        : null
+
+    updatePreferences({
+      batteryPercent: percent,
+      batteryUpdatedAt: Date.now(),
+      // Zera o odômetro: o número novo já vale para agora, e o que foi rodado
+      // antes dele (visto ou não pelo app) está embutido nele.
+      batteryDistanceSinceUpdateMeters: 0,
+      ...(amostra
+        ? { consumptionSamples: appendConsumptionSample(preferences.consumptionSamples ?? [], amostra) }
+        : {}),
+    })
+    batteryCheckIn.dispensar()
+  }
 
   const allRoutes = routeResult ? [routeResult.selected, ...routeResult.alternatives] : []
 
@@ -1249,6 +1295,27 @@ export default function App() {
             )}
 
             {/*
+              A CONFIRMAÇÃO VEM PRIMEIRO na pilha, acima de tudo.
+
+              Ela é a única coisa aqui que pode estar ERRADA sem o usuário
+              saber, e todo o resto que fala de alcance (o número na barra do
+              veículo, o raio do modo explorar, o veredito de cada rota) depende
+              dela. Confirmar antes de olhar os outros números é a ordem certa.
+            */}
+            {batteryCheckIn.precisaConfirmar && autonomy.estimatedPercent != null && (
+              <div className="mb-1">
+                <BatteryCheckIn
+                  percent={autonomy.estimatedPercent}
+                  rangeKm={autonomy.rangeKm}
+                  // "Sim" reafirma o MESMO valor: o que muda é a data, e é ela
+                  // que devolve a confiança ao dado.
+                  onConfirm={() => confirmarBateria(autonomy.estimatedPercent!)}
+                  onUpdate={confirmarBateria}
+                />
+              </div>
+            )}
+
+            {/*
               ENTRADA DO MODO EXPLORAR.
 
               Botão próprio e não um toque escondido na barra do veículo: o modo
@@ -1299,7 +1366,15 @@ export default function App() {
         )
       )}
 
-      {activePanel === 'profile' && <ProfilePanel onClose={() => setActivePanel(null)} vehicleBluetooth={vehicleBluetooth} preferences={preferences} onUpdatePreferences={updatePreferences} />}
+      {activePanel === 'profile' && (
+        <ProfilePanel
+          onClose={() => setActivePanel(null)}
+          vehicleBluetooth={vehicleBluetooth}
+          preferences={preferences}
+          onUpdatePreferences={updatePreferences}
+          onUpdateBattery={confirmarBateria}
+        />
+      )}
       {activePanel === 'saved' && (
         <SavedPanel
           onClose={() => setActivePanel(null)}
@@ -1328,15 +1403,11 @@ export default function App() {
             setSearchSeed(query)
             setIsSearchOpen(true)
           }}
-          onUpdateBattery={(percent) =>
-            updatePreferences({
-              batteryPercent: percent,
-              batteryUpdatedAt: Date.now(),
-              // Informar a bateria ZERA o odômetro: o número novo já reflete
-              // tudo que foi percorrido até agora.
-              batteryDistanceSinceUpdateMeters: 0,
-            })
-          }
+          // Mesmo caminho da confirmação de abertura: informar bateria em
+          // QUALQUER lugar do app fecha um intervalo e alimenta o aprendizado.
+          // Três caminhos gravando bateria e só um aprendendo faria o modelo
+          // depender de por onde o usuário passou.
+          onUpdateBattery={confirmarBateria}
           onClose={() => setIsExploreOpen(false)}
         />
       )}

@@ -173,6 +173,30 @@ export interface UserPreferences {
 
   /** Camada de adequação das vias ligada no mapa (ver MapView). Preferência de visualização, não de roteamento. */
   suitabilityLayerEnabled: boolean
+
+  /**
+   * CONSUMO OBSERVADO — o único dado real de eficiência que este app consegue
+   * obter sem falar com o veículo.
+   *
+   * Cada amostra é um par medido: quantos metros o app VIU o usuário percorrer
+   * entre duas informações de bateria, e quantos pontos percentuais caíram
+   * nesse intervalo. Disso sai km por ponto percentual — para este piloto,
+   * nesta moto, neste relevo.
+   *
+   * É melhor que a autonomia de catálogo por um motivo simples: catálogo é o
+   * número do fabricante em condição ideal, e ninguém pilota em condição ideal.
+   * Ver `observedRangeKm` em services/vehicle/autonomy.ts para as regras que
+   * decidem quais intervalos viram amostra — a maioria não vira.
+   */
+  consumptionSamples: ConsumptionSample[]
+}
+
+export interface ConsumptionSample {
+  /** Metros que o app efetivamente mediu no intervalo. */
+  meters: number
+  /** Pontos percentuais de queda no mesmo intervalo. */
+  percentDrop: number
+  at: number
 }
 
 const STORAGE_KEY = 'gps-scooter:preferences'
@@ -194,6 +218,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   batteryUpdatedAt: null,
   batteryDistanceSinceUpdateMeters: 0,
   suitabilityLayerEnabled: false,
+  consumptionSamples: [],
 }
 
 export function getUserPreferences(): UserPreferences {

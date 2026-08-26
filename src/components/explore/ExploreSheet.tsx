@@ -1,6 +1,6 @@
 import { BatteryDial, useDeferredPercent } from '@/components/vehicle/BatteryDial'
 import { Chip, SectionLabel } from '@/components/ui/primitives'
-import { confidenceCaveat, exploreRadiusKm, type AutonomyState } from '@/services/vehicle/autonomy'
+import { confidenceCaveat, exploreRadiusKm, rangeSourceLabel, type AutonomyState } from '@/services/vehicle/autonomy'
 import { haversineDistanceMeters } from '@/utils/geo'
 import type { LngLat } from '@/config/region'
 import type { SavedPlace } from '@/services/storage/savedPlaces'
@@ -60,6 +60,7 @@ export function ExploreSheet({
   const radiusKm = exploreRadiusKm(autonomy)
   const [battery, setBattery] = useDeferredPercent(autonomy.estimatedPercent ?? 80, onUpdateBattery)
   const caveat = confidenceCaveat(autonomy.confidence)
+  const origem = rangeSourceLabel(autonomy)
 
   /**
    * Filtro por DISTÂNCIA EM LINHA RETA, e a interface diz isso.
@@ -110,7 +111,18 @@ export function ExploreSheet({
                 Informe a bateria abaixo para o app calcular seu raio de alcance.
               </p>
             )}
-            {caveat && <p className="mt-1 text-[12.5px] font-bold text-content-tertiary">{caveat}</p>}
+            {/*
+              A RESSALVA DE ORIGEM aparece SEMPRE, não só quando o dado está
+              velho. O raio desenhado no mapa parece medição — é uma forma
+              geográfica, precisa, com contorno. Sem esta linha, alguém decide
+              se vai e volta de um lugar confiando num número que saiu do
+              proprio dedo dele meia hora antes.
+            */}
+            <p className="mt-1 text-[12.5px] font-bold text-content-tertiary">
+              {caveat ?? 'Estimativa a partir da bateria que você informou — o app não lê o veículo.'}
+            </p>
+            {/* Quando o app já aprendeu com trajetos reais, ele diz. */}
+            {origem && <p className="mt-0.5 text-[12.5px] font-bold text-success-600">{origem}</p>}
           </div>
 
           <button

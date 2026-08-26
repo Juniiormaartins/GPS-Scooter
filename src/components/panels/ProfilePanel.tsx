@@ -21,6 +21,12 @@ interface ProfilePanelProps {
   vehicleBluetooth: ReturnType<typeof useVehicleBluetooth>
   preferences: UserPreferences
   onUpdatePreferences: (patch: Partial<UserPreferences>) => void
+  /**
+   * Informa a bateria. SEPARADO de `onUpdatePreferences` porque não é só
+   * gravar um campo: fecha um intervalo de consumo e alimenta o aprendizado de
+   * autonomia (ver confirmarBateria em App.tsx).
+   */
+  onUpdateBattery: (percent: number) => void
 }
 
 /**
@@ -66,17 +72,19 @@ type PickerId = 'vehicle' | 'speed' | 'range' | 'battery' | 'routePreference' | 
  * inexistente. A foto é diferente — é uma preferência local do aparelho, como
  * o tema, e não pressupõe conta nenhuma.
  */
-export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences, onUpdatePreferences }: ProfilePanelProps) {
+export function ProfilePanel({
+  onClose,
+  vehicleBluetooth: bluetooth,
+  preferences,
+  onUpdatePreferences,
+  onUpdateBattery,
+}: ProfilePanelProps) {
   const [openPicker, setOpenPicker] = useState<PickerId | null>(null)
 
   const autonomy = autonomyState(preferences)
-  const [battery, setBattery] = useDeferredPercent(autonomy.estimatedPercent ?? 80, (percent) =>
-    onUpdatePreferences({
-      batteryPercent: percent,
-      batteryUpdatedAt: Date.now(),
-      batteryDistanceSinceUpdateMeters: 0,
-    }),
-  )
+  // Delega em vez de montar o patch: informar bateria fecha um intervalo de
+  // consumo e alimenta o aprendizado de autonomia, e essa regra mora em App.
+  const [battery, setBattery] = useDeferredPercent(autonomy.estimatedPercent ?? 80, onUpdateBattery)
 
   const currentVehicle = VEHICLE_PRESETS.find((preset) => preset.id === preferences.vehicleModelId)
   const vehicleLabel = currentVehicle?.label ?? 'Personalizado'
