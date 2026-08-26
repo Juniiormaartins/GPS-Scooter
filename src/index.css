@@ -113,14 +113,25 @@
    * atual, e o topo inteiro da tela lia como papel em vez de mapa. O relato
    * foi exatamente esse — "sombra branca forte invadindo a área do endereço".
    *
-   * O que ele precisa fazer é só um: dar campo suficiente para os ícones da
-   * barra de status e o texto do cabeçalho sobre uma rua branca. 0,5 na borda
-   * já resolve isso, e a 42% da altura o mapa volta praticamente limpo.
+   * TERCEIRA PASSADA, e desta vez a conclusão é que ele quase não tem função
+   * AQUI. No tema claro o que ele protegeria é o cabeçalho de localização, que
+   * é TEXTO ESCURO sobre um mapa claro — contraste já alto por natureza. Branco
+   * por cima de preto-sobre-claro não melhora leitura nenhuma; só embranquece o
+   * mapa. Foi o que produziu a "tarja" branca embaixo da barra de status.
+   *
+   * Fica quase transparente: 0,16 na borda é o suficiente para segurar os
+   * ícones da barra de status contra uma área clara do mapa, e some depressa. A
+   * barra de status volta a ser transparente de fato, com o mapa aparecendo
+   * atrás dela.
+   *
+   * No tema ESCURO o cálculo é o oposto e o degradê continua valendo: lá o
+   * cabeçalho é texto claro sobre mapa escuro, e o scrim escurece — por isso
+   * aquele não foi mexido.
    */
   --scrim-top: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.18) 42%,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.05) 45%,
     rgba(255, 255, 255, 0) 100%
   );
 

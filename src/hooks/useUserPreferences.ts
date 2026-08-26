@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { MAP_COLORS, MAP_COLORS_LIGHT } from '@/config/theme'
 import { getUserPreferences, setUserPreferences, type UserPreferences } from '@/config/userPreferences'
 import { setPreferredVoice } from '@/services/navigation/voiceGuidance'
 
@@ -17,8 +18,20 @@ export function useUserPreferences() {
   // telas de uma vez, inclusive as que não recebem estas props.
   useEffect(() => {
     document.documentElement.dataset.theme = preferences.theme
-    // Mantém a barra de status do iOS/Android coerente com o tema escolhido.
-    const themeColor = preferences.theme === 'dark' ? '#0A0E1A' : '#F4F6FB'
+    /*
+      `theme-color` acompanha a cor do MAPA, não a do chrome do app.
+      
+      Onde ele é usado, a tela por baixo é sempre o mapa: é a faixa da barra de
+      status no Safari e no PWA Android. Pintá-la com a cor das superfícies do
+      app (`#F4F6FB`, quase branco) criava uma tarja visivelmente mais clara que
+      a cartografia logo abaixo — que é a faixa branca relatada. Com a cor do
+      próprio mapa, a faixa deixa de ter borda perceptível.
+      
+      Isto NÃO afeta o iOS em modo standalone, onde `black-translucent` faz a
+      página se estender por baixo da barra e nenhuma cor é pintada. Vale para
+      Safari e Android.
+    */
+    const themeColor = preferences.theme === 'dark' ? MAP_COLORS.background : MAP_COLORS_LIGHT.background
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor)
   }, [preferences.theme])
 

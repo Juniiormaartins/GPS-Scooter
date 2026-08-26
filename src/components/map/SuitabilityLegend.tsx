@@ -3,8 +3,16 @@ import { SUITABILITY_LEGEND } from '@/components/map/suitabilityLayer'
 /**
  * Legenda da camada de adequação.
  *
- * Aparece SÓ com a camada ligada, e some junto. Uma legenda permanente ocuparia
- * espaço de mapa para explicar cores que na maior parte do tempo não estão lá.
+ * ELA OCUPA O LUGAR DA BARRA DO VEÍCULO enquanto a camada está ligada (ver
+ * App.tsx), em vez de flutuar como um card a mais. Por isso o formato imita o
+ * daquela barra: mesma largura, mesmo raio, mesma superfície, altura parecida.
+ * Um elemento que substitui outro precisa parecer que herdou o lugar, não que
+ * caiu por cima.
+ *
+ * O LAYOUT É EM DUAS COLUNAS de duas linhas, e não uma lista solta que quebra
+ * onde der. Com quebra automática, "Não recomendada" às vezes ficava sozinha
+ * numa linha e às vezes não, e a legenda mudava de altura conforme o nome do
+ * veículo — a pilha inteira pulava. Grade fixa mantém a altura constante.
  *
  * A RESSALVA no rodapé não é letra miúda de praxe — é a diferença entre esta
  * camada e a classificação de uma rota. Aqui só entra o TIPO da via, que é o
@@ -15,26 +23,26 @@ import { SUITABILITY_LEGEND } from '@/components/map/suitabilityLayer'
  */
 export function SuitabilityLegend({ vehicleLabel }: { vehicleLabel: string }) {
   return (
-    <div className="pointer-events-auto rounded-2xl border border-hairline/[.08] bg-surface-overlay px-3.5 py-3 shadow-float backdrop-blur-xl">
-      <p className="text-[11.5px] font-extrabold uppercase tracking-wide text-content-tertiary">
+    <div className="pointer-events-auto w-full rounded-2xl border border-hairline/[.06] bg-surface-overlay px-4 py-3 shadow-field backdrop-blur-xl">
+      <p className="truncate text-[10.5px] font-extrabold uppercase tracking-[0.6px] text-content-quaternary">
         Vias para {vehicleLabel}
       </p>
 
-      <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1.5">
+      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
         {SUITABILITY_LEGEND.map((entry) => (
-          <span key={entry.tier} className="flex items-center gap-1.5">
+          <span key={entry.tier} className="flex min-w-0 items-center gap-1.5">
             <span
-              className="h-[3px] w-4 shrink-0 rounded-pill"
+              className="h-[3px] w-3.5 shrink-0 rounded-pill"
               style={{ backgroundColor: entry.color }}
               aria-hidden="true"
             />
-            <span className="text-[12.5px] font-bold text-content-secondary">{entry.label}</span>
+            <span className="truncate text-[12.5px] font-bold text-content-secondary">{entry.label}</span>
           </span>
         ))}
       </div>
 
-      <p className="mt-2 text-[11.5px] font-semibold leading-snug text-content-tertiary">
-        Pelo tipo da via. Piso e tráfego entram só ao traçar a rota.
+      <p className="mt-1.5 truncate text-[11px] font-semibold text-content-tertiary">
+        Pelo tipo da via — piso e tráfego entram ao traçar a rota.
       </p>
     </div>
   )

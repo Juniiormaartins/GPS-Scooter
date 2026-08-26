@@ -1313,12 +1313,6 @@ export default function App() {
             {/* `mb-3` além do gap da pilha: o botão é um controle do MAPA, não
                 parte do bloco de informações — o respiro extra deixa essa
                 separação explícita em vez de parecer um card colado no outro. */}
-            {preferences.suitabilityLayerEnabled && (
-              <div className="mb-1">
-                <SuitabilityLegend vehicleLabel={mobilityProfile(preferences.vehicleModelId).label.toLowerCase()} />
-              </div>
-            )}
-
             {/*
               A CONFIRMAÇÃO VEM PRIMEIRO na pilha, acima de tudo.
 
@@ -1377,12 +1371,29 @@ export default function App() {
                 bearingDeg={mapBearing}
               />
             </div>
-            <VehicleStatusBar
-              bluetooth={vehicleBluetooth}
-              preferences={preferences}
-              autonomy={autonomy}
-              onOpen={() => setIsVehicleSheetOpen(true)}
-            />
+            {/*
+              A LEGENDA OCUPA O LUGAR DA BARRA DO VEÍCULO, não se soma a ela.
+
+              Flutuando como um card a mais, a legenda empurrava a pilha inteira
+              para o meio da tela e ficava boiando sobre o mapa, longe do que
+              explica. Aqui ela herda a posição, a largura e o formato de um
+              elemento que já existe — e a troca faz sentido de conteúdo, não só
+              de espaço: as duas falam do MESMO veículo. Com a camada ligada, o
+              que interessa saber sobre ele é em que vias ele anda; com a camada
+              desligada, é quanto ele ainda anda.
+
+              A barra volta assim que a camada é desligada, no mesmo lugar.
+            */}
+            {preferences.suitabilityLayerEnabled ? (
+              <SuitabilityLegend vehicleLabel={mobilityProfile(preferences.vehicleModelId).label.toLowerCase()} />
+            ) : (
+              <VehicleStatusBar
+                bluetooth={vehicleBluetooth}
+                preferences={preferences}
+                autonomy={autonomy}
+                onOpen={() => setIsVehicleSheetOpen(true)}
+              />
+            )}
             <BottomNavBar
               active={activePanel ?? 'explore'}
               onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
