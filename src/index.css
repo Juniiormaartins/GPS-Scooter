@@ -297,7 +297,8 @@ html {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
-  background-color: var(--surface-map);
+  /* TESTE TEMPORÁRIO — ver DIAGNOSTICO-CORES.md. Volta a var(--surface-map). */
+  background-color: #ff00ff;
 }
 
 /*
@@ -377,7 +378,8 @@ body {
     a cor certa para o que fica atrás dele é a do próprio mapa — `--surface` é a
     cor de card, que nunca deveria estar visível ali.
   */
-  background-color: var(--surface-map);
+  /* TESTE TEMPORÁRIO — volta a var(--surface-map). */
+  background-color: #00ffff;
   -webkit-tap-highlight-color: transparent;
 }
 

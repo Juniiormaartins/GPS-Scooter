@@ -1061,7 +1061,7 @@ export default function App() {
     exatamente a área visível, qualquer que seja ela.
   */
   return (
-    <div className="relative h-full w-full overflow-hidden bg-surface-map">
+    <div className="relative h-full w-full overflow-hidden bg-surface-map" style={{ backgroundColor: '#00ff00' }}>
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}
