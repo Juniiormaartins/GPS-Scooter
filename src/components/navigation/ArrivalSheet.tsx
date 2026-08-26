@@ -87,7 +87,7 @@ export function ArrivalSheet({ destinationLabel, distanceMeters, durationMinutes
       <div
         role="dialog"
         aria-label="Percurso concluído"
-        className={`pointer-events-auto absolute inset-x-3 bottom-0 z-50 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-6 shadow-sheet transition-all duration-slow ease-ease-out-soft ${
+        className={`pointer-events-auto absolute inset-x-3 bottom-0 z-50 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,var(--safe-bottom))] pt-6 shadow-sheet transition-all duration-slow ease-ease-out-soft ${
           visible && !leaving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
         }`}
       >

@@ -67,7 +67,7 @@ export function VehicleSheet({ preferences, onSave, onDismiss }: VehicleSheetPro
         className="pointer-events-auto absolute inset-0 z-30 bg-[rgba(15,23,41,.28)] backdrop-blur-[2px]"
       />
 
-      <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet-over-scrim">
+      <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,var(--safe-bottom))] pt-[18px] shadow-sheet-over-scrim">
         <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-surface-handle" />
 
         <h2 className="text-sheet-title-sm text-content-primary">Meu veículo</h2>

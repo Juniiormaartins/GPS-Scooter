@@ -47,7 +47,7 @@ export function Panel({ title, onClose, action, children }: PanelProps) {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">{children}</div>
+      <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,var(--safe-bottom))] pt-2">{children}</div>
     </div>
   )
 }

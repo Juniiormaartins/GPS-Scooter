@@ -1301,11 +1301,11 @@ export default function App() {
         </BottomSheet>
       ) : (
         !selectedPoi && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[calc(var(--safe-bottom)+0.375rem)]">
             {/*
               ESPAÇO ABAIXO DA BARRA DE ABAS (o `pb` acima).
 
-              Era `max(0.75rem, env(safe-area-inset-bottom))`, e o `max` é o
+              Era `max(0.75rem, var(--safe-bottom))`, e o `max` é o
               erro: num iPhone a safe area vale 34px e VENCE os 12px de
               respiro, então o resultado é 34px — exatamente a altura do
               indicador de gesto do sistema. A barra encostava nele, sem

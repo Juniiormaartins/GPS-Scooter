@@ -307,6 +307,7 @@ export function ProfilePanel({
           checked={preferences.theme === 'dark'}
           onChange={(next) => onUpdatePreferences({ theme: next ? 'dark' : 'light' })}
         />
+
       </SettingsGroup>
 
       <p className="mt-group px-1 text-caption text-content-tertiary">

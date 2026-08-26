@@ -29,6 +29,23 @@ import { useEffect, useState } from 'react'
  */
 const CHAVE = 'gps-scooter:diag'
 
+/**
+ * Liga/desliga e recarrega.
+ *
+ * Recarregar é deliberado: o painel lê medidas no momento em que monta, e
+ * ligá-lo no meio de uma sessão daria números já influenciados pelo estado da
+ * tela naquele instante. Uma abertura limpa é o que se quer reportar.
+ */
+export function setDiagnosticsEnabled(ligado: boolean): void {
+  try {
+    if (ligado) localStorage.setItem(CHAVE, '1')
+    else localStorage.removeItem(CHAVE)
+  } catch {
+    // Sem armazenamento não há o que alternar; o parâmetro de URL ainda serve.
+  }
+  window.location.reload()
+}
+
 export function diagnosticsEnabled(): boolean {
   const parametro = new URLSearchParams(window.location.search).get('diag')
   try {

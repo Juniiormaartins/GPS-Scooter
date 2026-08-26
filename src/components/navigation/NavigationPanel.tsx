@@ -172,7 +172,7 @@ export function NavigationPanel({
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-gutter pb-[max(1.5rem,var(--safe-bottom))]">
         {/*
           Faixa inferior: velocidade real do GPS à esquerda e o botão de
           recentralizar à direita — este é o único lugar da navegação onde ele
@@ -229,7 +229,7 @@ export function NavigationPanel({
           handoff a desenha assim para o painel fechar a tela, com o home
           indicator sobre o próprio escuro.
         */}
-        <div className="pointer-events-auto -mx-gutter -mb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center gap-3 rounded-t-2xl bg-nav-surface px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 shadow-nav-panel">
+        <div className="pointer-events-auto -mx-gutter -mb-[max(1.5rem,var(--safe-bottom))] flex items-center gap-3 rounded-t-2xl bg-nav-surface px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4 shadow-nav-panel">
           <div className="min-w-0 flex-1">
             <p className="text-eta text-success-400">{formatEta(remainingDurationMinutes)}</p>
             <p className="mt-1 truncate text-[14px] font-semibold text-nav-content-secondary">

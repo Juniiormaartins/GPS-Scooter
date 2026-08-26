@@ -54,7 +54,7 @@ export function PoiCard({
   const hasScore = score != null && previewRoute?.severity.isReliable === true
 
   return (
-    <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-20 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet">
+    <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-20 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,var(--safe-bottom))] pt-[18px] shadow-sheet">
       <div className="mx-auto mb-4 h-[5px] w-11 rounded-pill bg-surface-handle" />
 
       <div className="flex items-start justify-between gap-3">

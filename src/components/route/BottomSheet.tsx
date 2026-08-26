@@ -86,11 +86,11 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
       </div>
 
       {snap === 'collapsed' ? (
-        <div className="px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">{collapsedContent}</div>
+        <div className="px-gutter pb-[max(1.5rem,var(--safe-bottom))]">{collapsedContent}</div>
       ) : (
         // `min-h-0` é necessário para que o filho com `flex-1 overflow-y-auto`
         // (a lista de rotas) role de verdade em vez de esticar o container.
-        <div className="flex min-h-0 flex-1 flex-col px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col px-gutter pb-[max(1.5rem,var(--safe-bottom))]">{children}</div>
       )}
     </div>
   )

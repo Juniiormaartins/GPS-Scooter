@@ -91,7 +91,7 @@ export function ExploreSheet({
       */}
       <div className="pointer-events-auto absolute inset-0 z-30 bg-[rgba(15,23,41,.12)]" onClick={onClose} />
 
-      <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 max-h-[62%] overflow-y-auto rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet">
+      <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 max-h-[62%] overflow-y-auto rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,var(--safe-bottom))] pt-[18px] shadow-sheet">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-sheet-title text-content-primary">Até onde dá para ir</h2>

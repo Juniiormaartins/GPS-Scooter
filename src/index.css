@@ -132,10 +132,12 @@
    * cabeçalho é texto claro sobre mapa escuro, e o scrim escurece — por isso
    * aquele não foi mexido.
    */
+  --map-backdrop: #e9edf2;
+
   --scrim-top: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.34) 0%,
-    rgba(255, 255, 255, 0.12) 45%,
+    rgba(255, 255, 255, 0.48) 0%,
+    rgba(255, 255, 255, 0.15) 35%,
     rgba(255, 255, 255, 0) 100%
   );
 
@@ -234,7 +236,24 @@
    * aparelho. Quando `env` funciona, `max` escolhe o valor real e este piso nao
    * atrapalha.
    */
+  /** Cor do mapa, para o que aparece fora da área desenhada. Ver a regra de `html`. */
+  --map-backdrop: #0b111f;
+
   --safe-top: env(safe-area-inset-top, 0px);
+
+  /*
+   * MESMA HISTÓRIA DO TOPO, na outra ponta — e o erro que eu deixei passar.
+   *
+   * Tratei o `env(safe-area-inset-top)` que volta zero em tela cheia com um
+   * piso, e esqueci que `env(safe-area-inset-bottom)` volta zero pelo mesmo
+   * motivo. Medido no aparelho: os dois vieram `0px`.
+   *
+   * Consequência: a barra de abas era posicionada em `0 + 6px`, ou seja
+   * praticamente colada na borda inferior, por cima do indicador de gesto. Os
+   * 34px são a altura do indicador nos iPhones com recorte, e é o que a safe
+   * area DEVERIA estar reportando.
+   */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   --scrim-top-height: calc(var(--safe-top) + 116px);
 }
@@ -249,11 +268,13 @@
 @media (display-mode: standalone) {
   :root {
     --safe-top: max(env(safe-area-inset-top, 0px), 54px);
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
   }
 }
 
 :root[data-standalone='true'] {
   --safe-top: max(env(safe-area-inset-top, 0px), 54px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
 }
 
 :root {
@@ -264,10 +285,24 @@
   --nav-control: rgba(255, 255, 255, 0.1);
 }
 
+/*
+ * O FUNDO DO DOCUMENTO É A COR DO MAPA, não a das superfícies do app.
+ *
+ * É o que sobra visível quando a área física da tela é MAIOR que a viewport
+ * que o iOS reporta — e é a origem da faixa clara embaixo do mapa. Nenhuma
+ * medição minha pegava isso porque tudo que eu media (innerHeight, body,
+ * #root, canvas) concordava entre si: os quatro paravam no mesmo lugar, e a
+ * faixa estava ABAIXO de todos eles.
+ *
+ * Não dá para mandar o iOS reportar outra altura. Dá para fazer com que essa
+ * sobra tenha a cor do mapa em vez de branco — aí ela deixa de ser uma faixa e
+ * passa a ser continuação do mapa.
+ */
 html {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
+  background-color: var(--map-backdrop);
 }
 
 /*

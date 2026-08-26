@@ -94,7 +94,7 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
   }
 
   return (
-    <div className="absolute inset-0 z-[60] flex flex-col bg-surface px-gutter pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-[max(2rem,var(--safe-top))]">
+    <div className="absolute inset-0 z-[60] flex flex-col bg-surface px-gutter pb-[calc(var(--safe-bottom)+1.25rem)] pt-[max(2rem,var(--safe-top))]">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {step === 'vehicle' ? (
           <VehicleStep

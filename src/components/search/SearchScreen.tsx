@@ -127,7 +127,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
       </div>
 
       {/* Corpo: eyebrow "RESULTADOS" e as linhas em variante divider. */}
-      <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-gutter">
+      <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,var(--safe-bottom))] pt-gutter">
         {query.trim().length < 3 ? (
           // Sem busca ativa: mostra o histórico, para voltar a um destino recorrente sem digitar.
           history.length > 0 ? (
