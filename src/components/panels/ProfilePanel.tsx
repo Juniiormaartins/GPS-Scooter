@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
-import { SectionLabel } from '@/components/ui/primitives'
+import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
 import {
   AVOIDANCE_OPTIONS,
@@ -20,29 +20,58 @@ interface ProfilePanelProps {
   onUpdatePreferences: (patch: Partial<UserPreferences>) => void
 }
 
-const ROUTE_PREFERENCE_OPTIONS: { key: RoutePreference; label: string }[] = [
-  { key: 'tranquil', label: 'Priorizar rotas tranquilas' },
-  { key: 'balanced', label: 'Equilibrar tempo e adequação' },
-  { key: 'fast', label: 'Priorizar rotas rápidas' },
+/**
+ * Como o app decide entre rotas.
+ *
+ * É UMA ESCOLHA, e a apresentação agora diz isso. Antes eram três
+ * interruptores independentes em que ligar um desligava os outros — um
+ * interruptor comunica "posso ter os três", e o comportamento real
+ * contradizia a forma. Agora é uma lista de escolha única, o mesmo padrão do
+ * veículo, da velocidade e da voz.
+ *
+ * As descrições saíram de "priorizar X" para o que a escolha significa na
+ * prática, porque "equilibrar tempo e adequação" não diz ao usuário o que ele
+ * vai receber.
+ */
+const ROUTE_PREFERENCE_OPTIONS: { key: RoutePreference; label: string; hint: string }[] = [
+  { key: 'tranquil', label: 'Mais tranquila', hint: 'Aceita alongar o trajeto para fugir de via movimentada' },
+  { key: 'balanced', label: 'Equilibrada', hint: 'Pesa tempo e adequação da via na mesma medida' },
+  { key: 'fast', label: 'Mais rápida', hint: 'Prioriza o menor tempo, ainda respeitando as regras do veículo' },
 ]
 
 const SPEED_OPTIONS = [20, 25, 32, 40, 45]
 const RANGE_OPTIONS = [20, 30, 40, 60, 80]
 
+type PickerId = 'vehicle' | 'speed' | 'range' | 'routePreference' | 'voice'
+
 /**
- * Perfil: grupos rotulados por eyebrow, como no handoff. Todas as
- * configurações aqui têm EFEITO REAL — velocidade de referência alimenta o
- * cálculo de ETA, autonomia alimenta a estimativa de alcance, e o tema
- * repinta o app inteiro. Nada é rótulo decorativo.
+ * Perfil — preferências do usuário, agrupadas por assunto.
  *
- * Não há avatar/nome/e-mail nem "Sair da Conta": o app não tem sistema de
- * conta, e exibir isso seria inventar uma funcionalidade inexistente.
+ * ORDEM, e o porquê dela: veículo primeiro porque é o que muda TODO o resto
+ * (regras de via, ETA, alcance, marcador no mapa); depois como traçar a rota e
+ * o que evitar, que são as duas decisões que o usuário revisita; voz e
+ * aparência por último, que se ajusta uma vez e não se toca mais.
+ *
+ * Todas as opções aqui têm EFEITO REAL — velocidade de referência alimenta o
+ * cálculo de ETA, autonomia alimenta a estimativa de alcance, o tema repinta o
+ * app e o veículo troca o sprite do marcador. Nada é rótulo decorativo, e a
+ * linha "Unidades — Kilômetros" que existia foi REMOVIDA por ser exatamente
+ * isso: um controle que não controlava nada.
+ *
+ * Não há avatar, nome, e-mail nem "Sair da conta": o app não tem sistema de
+ * conta, e exibir isso seria inventar funcionalidade inexistente.
  */
 export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences, onUpdatePreferences }: ProfilePanelProps) {
-  const [openPicker, setOpenPicker] = useState<'vehicle' | 'speed' | 'range' | null>(null)
+  const [openPicker, setOpenPicker] = useState<PickerId | null>(null)
 
   const currentVehicle = VEHICLE_PRESETS.find((preset) => preset.id === preferences.vehicleModelId)
   const vehicleLabel = currentVehicle?.label ?? 'Personalizado'
+  const routePreference =
+    ROUTE_PREFERENCE_OPTIONS.find((option) => option.key === preferences.routePreference) ?? ROUTE_PREFERENCE_OPTIONS[1]
+
+  const activeAvoidances = preferences.avoidances.length
+
+  const toggle = (id: PickerId) => setOpenPicker((current) => (current === id ? null : id))
 
   function toggleAvoidance(id: AvoidanceId, next: boolean) {
     const current = preferences.avoidances
@@ -62,17 +91,23 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
 
   return (
     <Panel title="Perfil" onClose={onClose}>
-      <SectionLabel className="mb-stack">Meu veículo</SectionLabel>
-      <div className="flex flex-col gap-stack">
+      <SettingsGroup
+        title="Meu veículo"
+        footnote="A velocidade de referência alimenta o tempo estimado das rotas; a autonomia, a estimativa de alcance. Nenhuma das duas autoriza vias inadequadas — as regras de circulação continuam avaliando cada via."
+      >
         <SettingsRow
+          inGroup
           label={vehicleLabel}
+          description={`${preferences.referenceSpeedKmh} km/h · ≈${preferences.rangeKm} km de autonomia`}
           icon={<ScooterIcon />}
           control="action"
           action="Alterar"
-          onClick={() => setOpenPicker(openPicker === 'vehicle' ? null : 'vehicle')}
+          expanded={openPicker === 'vehicle'}
+          onClick={() => toggle('vehicle')}
         />
         {openPicker === 'vehicle' && (
           <OptionList
+            label="Modelo do veículo"
             options={VEHICLE_PRESETS.map((preset) => ({
               key: preset.id,
               label: preset.label,
@@ -84,13 +119,16 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         )}
 
         <SettingsRow
+          inGroup
           label="Velocidade de referência"
           control="value"
           value={`${preferences.referenceSpeedKmh} km/h`}
-          onClick={() => setOpenPicker(openPicker === 'speed' ? null : 'speed')}
+          expanded={openPicker === 'speed'}
+          onClick={() => toggle('speed')}
         />
         {openPicker === 'speed' && (
           <OptionList
+            label="Velocidade de referência"
             options={SPEED_OPTIONS.map((speed) => ({
               key: String(speed),
               label: `${speed} km/h`,
@@ -104,13 +142,16 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         )}
 
         <SettingsRow
+          inGroup
           label="Autonomia estimada"
           control="value"
           value={`≈${preferences.rangeKm} km`}
-          onClick={() => setOpenPicker(openPicker === 'range' ? null : 'range')}
+          expanded={openPicker === 'range'}
+          onClick={() => toggle('range')}
         />
         {openPicker === 'range' && (
           <OptionList
+            label="Autonomia estimada"
             options={RANGE_OPTIONS.map((range) => ({
               key: String(range),
               label: `≈${range} km`,
@@ -124,90 +165,104 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         )}
 
         <BluetoothRow bluetooth={bluetooth} />
-      </div>
-      <p className="mt-3 text-caption text-content-tertiary">
-        A velocidade de referência é usada no cálculo do tempo estimado das rotas. Ela não autoriza vias inadequadas —
-        as regras de circulação continuam avaliando cada via.
-      </p>
+      </SettingsGroup>
 
-      <SectionLabel className="mb-stack mt-group">Preferências de rota</SectionLabel>
-      <p className="mb-stack text-caption text-content-tertiary">
-        Priorize trajetos mais adequados ao seu veículo e às suas preferências.
-      </p>
-      <div className="flex flex-col gap-stack">
-        {ROUTE_PREFERENCE_OPTIONS.map((option) => (
+      <SettingsGroup title="Como traçar rotas">
+        <SettingsRow
+          inGroup
+          label="Prioridade do trajeto"
+          description={routePreference.hint}
+          control="value"
+          value={routePreference.label}
+          expanded={openPicker === 'routePreference'}
+          onClick={() => toggle('routePreference')}
+        />
+        {openPicker === 'routePreference' && (
+          <OptionList
+            label="Prioridade do trajeto"
+            options={ROUTE_PREFERENCE_OPTIONS.map((option) => ({
+              key: option.key,
+              label: option.label,
+              hint: option.hint,
+              selected: option.key === preferences.routePreference,
+            }))}
+            onSelect={(key) => {
+              onUpdatePreferences({ routePreference: key as RoutePreference })
+              setOpenPicker(null)
+            }}
+          />
+        )}
+      </SettingsGroup>
+
+      <SettingsGroup
+        title={activeAvoidances > 0 ? `Evitar quando possível · ${activeAvoidances}` : 'Evitar quando possível'}
+        footnote="São preferências, não proibições: o app procura alternativas e só usa um trecho evitado quando ele é inevitável — e nesse caso o trecho aparece destacado na rota."
+      >
+        {AVOIDANCE_OPTIONS.map((option) => (
           <SettingsRow
-            key={option.key}
+            key={option.id}
+            inGroup
             label={option.label}
+            // A fonte do dado fica dentro da própria opção: é o que separa uma
+            // preferência sustentada por dado real de um botão bonito.
+            description={option.description}
             control="toggle"
-            checked={preferences.routePreference === option.key}
-            onChange={() => onUpdatePreferences({ routePreference: option.key })}
+            checked={preferences.avoidances.includes(option.id)}
+            onChange={(next) => toggleAvoidance(option.id, next)}
           />
         ))}
-      </div>
+      </SettingsGroup>
 
-      <SectionLabel className="mb-stack mt-group">Evitar quando possível</SectionLabel>
-      <div className="flex flex-col gap-stack">
-        {AVOIDANCE_OPTIONS.map((option) => (
-          <div key={option.id}>
-            <SettingsRow
-              label={option.label}
-              control="toggle"
-              checked={preferences.avoidances.includes(option.id)}
-              onChange={(next) => toggleAvoidance(option.id, next)}
-            />
-            {/* A fonte do dado fica visível na própria opção: é o que separa
-                uma preferência sustentada por dado real de um botão bonito. */}
-            <p className="mt-1 px-card text-caption text-content-tertiary">{option.description}</p>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-caption text-content-tertiary">
-        Estas são preferências, não proibições: o app procura alternativas e só usa um trecho evitado quando ele é
-        inevitável ou quando contorná-lo resultaria numa rota desproporcionalmente pior — nesse caso, o trecho aparece
-        destacado na rota. As regras obrigatórias do veículo continuam valendo independentemente do que estiver marcado
-        aqui.
-      </p>
-
-      <SectionLabel className="mb-stack mt-group">Voz das instruções</SectionLabel>
-      <VoiceSelector
+      <VoiceGroup
         selectedUri={preferences.voiceUri}
-        onSelect={(voiceUri) => onUpdatePreferences({ voiceUri })}
+        isOpen={openPicker === 'voice'}
+        onToggle={() => toggle('voice')}
+        onSelect={(voiceUri) => {
+          onUpdatePreferences({ voiceUri })
+          setOpenPicker(null)
+        }}
       />
 
-      <SectionLabel className="mb-stack mt-group">Aparência & unidades</SectionLabel>
-      <div className="flex flex-col gap-stack">
+      <SettingsGroup title="Aparência">
         <SettingsRow
+          inGroup
           label="Tema escuro"
+          description="Recomendado para conduzir à noite"
           control="toggle"
           checked={preferences.theme === 'dark'}
           onChange={(next) => onUpdatePreferences({ theme: next ? 'dark' : 'light' })}
         />
-        <SettingsRow label="Unidades métricas" control="value" value="Kilômetros (km)" />
-      </div>
+      </SettingsGroup>
+
+      <p className="mt-group px-1 text-caption text-content-tertiary">
+        Distâncias e velocidades em quilômetros. Dados de via do OpenStreetMap; mapa do MapTiler.
+      </p>
     </Panel>
   )
 }
 
 /**
- * Escolha da voz. Lista SOMENTE o que `speechSynthesis.getVoices()` reporta
- * neste aparelho — nenhum nome de voz é inventado, e o conjunto muda mesmo
- * entre um iPhone e um Android. Três estados possíveis, todos reais:
+ * Voz das instruções — agora recolhida atrás de uma linha, como as demais.
  *
- * - navegador sem Web Speech API: diz isso e não oferece controle;
- * - vozes em português carregadas: lista com opção "Automática" no topo;
- * - nenhuma voz em português: informa que o aparelho não tem, em vez de
- *   listar vozes de outro idioma que leriam a instrução errado.
+ * Antes a lista de TODAS as vozes do aparelho ficava permanentemente aberta no
+ * meio do Perfil. Era a maior massa visual da tela, dedicada ao ajuste que
+ * menos se mexe, e usava um padrão de apresentação diferente do resto —
+ * enquanto veículo, velocidade e autonomia abriam ao toque.
  *
- * A lista chega de forma assíncrona no Chrome/Safari, por isso o
- * `voiceschanged`: sem ele, o primeiro render pega o array vazio e o usuário
- * veria "nenhuma voz" num aparelho que tem várias.
+ * Lista SOMENTE o que `speechSynthesis.getVoices()` reporta neste aparelho.
+ * Três estados possíveis, todos reais: sem Web Speech API, com vozes em
+ * português, ou sem nenhuma voz em português (informa, em vez de listar vozes
+ * de outro idioma que leriam a instrução errado).
  */
-function VoiceSelector({
+function VoiceGroup({
   selectedUri,
+  isOpen,
+  onToggle,
   onSelect,
 }: {
   selectedUri: string | null
+  isOpen: boolean
+  onToggle: () => void
   onSelect: (voiceUri: string | null) => void
 }) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => listPortugueseVoices())
@@ -215,62 +270,97 @@ function VoiceSelector({
   useEffect(() => {
     if (!isSpeechSupported) return
     setVoices(listPortugueseVoices())
+    // A lista chega de forma assíncrona no Chrome/Safari: sem isto, o primeiro
+    // render pega o array vazio e o usuário veria "nenhuma voz" num aparelho
+    // que tem várias.
     return onVoicesChanged(() => setVoices(listPortugueseVoices()))
   }, [])
 
   if (!isSpeechSupported) {
-    return <SettingsRow label="Voz" control="value" value="Indisponível neste navegador" />
+    return (
+      <SettingsGroup title="Navegação por voz">
+        <SettingsRow inGroup label="Voz" control="value" value="Indisponível neste navegador" />
+      </SettingsGroup>
+    )
   }
 
   if (voices.length === 0) {
     return (
-      <>
-        <SettingsRow label="Voz" control="value" value="Nenhuma voz em português" />
-        <p className="mt-1 px-card text-caption text-content-tertiary">
-          Este aparelho não tem voz em português instalada. As instruções continuam aparecendo na tela.
-        </p>
-      </>
+      <SettingsGroup
+        title="Navegação por voz"
+        footnote="Este aparelho não tem voz em português instalada. As instruções continuam aparecendo na tela. Para ouvi-las, instale uma voz em português nas configurações do sistema."
+      >
+        <SettingsRow inGroup label="Voz" control="value" value="Nenhuma voz em português" />
+      </SettingsGroup>
     )
   }
 
+  const selected = voices.find((voice) => voice.voiceURI === selectedUri)
+
   return (
-    <>
-      <OptionList
-        options={[
-          { key: '', label: 'Automática', hint: 'Deixa o app escolher a melhor voz em português', selected: selectedUri == null },
-          ...voices.map((voice) => ({
-            key: voice.voiceURI,
-            label: voice.name,
-            hint: voice.lang + (voice.localService ? ' · no aparelho' : ' · online'),
-            selected: voice.voiceURI === selectedUri,
-          })),
-        ]}
-        onSelect={(key) => onSelect(key === '' ? null : key)}
+    <SettingsGroup
+      title="Navegação por voz"
+      footnote="Só aparecem as vozes já instaladas neste aparelho. Para ter outras opções, instale vozes em português nas configurações do sistema."
+    >
+      <SettingsRow
+        inGroup
+        label="Voz das instruções"
+        control="value"
+        value={selected ? selected.name : 'Automática'}
+        expanded={isOpen}
+        onClick={onToggle}
       />
-      <p className="mt-2 text-caption text-content-tertiary">
-        As vozes acima são as que este aparelho tem instaladas. Para ter outras opções, instale vozes em português nas
-        configurações do sistema.
-      </p>
-    </>
+      {isOpen && (
+        <OptionList
+          label="Voz das instruções"
+          options={[
+            {
+              key: '',
+              label: 'Automática',
+              hint: 'Deixa o app escolher a melhor voz em português',
+              selected: selectedUri == null,
+            },
+            ...voices.map((voice) => ({
+              key: voice.voiceURI,
+              label: voice.name,
+              hint: voice.lang + (voice.localService ? ' · no aparelho' : ' · online'),
+              selected: voice.voiceURI === selectedUri,
+            })),
+          ]}
+          onSelect={(key) => onSelect(key === '' ? null : key)}
+        />
+      )}
+    </SettingsGroup>
   )
 }
 
-/** Lista de escolha inline, aberta abaixo da linha que a acionou. */
+/**
+ * Lista de escolha ÚNICA, aberta dentro do grupo, abaixo da linha que a
+ * acionou.
+ *
+ * `role="radiogroup"` e não uma lista de botões soltos: é uma escolha entre
+ * alternativas mutuamente exclusivas, e o leitor de tela precisa anunciar
+ * "opção 2 de 5", não cinco botões sem relação.
+ */
 function OptionList({
+  label,
   options,
   onSelect,
 }: {
+  label: string
   options: { key: string; label: string; hint?: string; selected: boolean }[]
   onSelect: (key: string) => void
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-hairline/10 bg-surface-sunken p-1.5">
+    <div role="radiogroup" aria-label={label} className="flex flex-col gap-1 bg-surface-sunken p-1.5">
       {options.map((option) => (
         <button
           key={option.key}
           type="button"
+          role="radio"
+          aria-checked={option.selected}
           onClick={() => onSelect(option.key)}
-          className={`flex items-center justify-between rounded-md px-3 py-3 text-left transition-all duration-fast active:scale-[.97] ${
+          className={`flex items-center justify-between gap-3 rounded-md px-3 py-3 text-left transition-all duration-fast active:scale-[.97] ${
             option.selected ? 'bg-brand-500/[.16]' : 'active:bg-hairline/5'
           }`}
         >
@@ -298,13 +388,23 @@ function OptionList({
  */
 function BluetoothRow({ bluetooth }: { bluetooth: ReturnType<typeof useVehicleBluetooth> }) {
   if (bluetooth.status === 'unsupported') {
-    return <SettingsRow label="Conexão Bluetooth" control="value" value="Indisponível neste navegador" />
+    return (
+      <SettingsRow
+        inGroup
+        label="Conexão Bluetooth"
+        icon={<BluetoothIcon />}
+        control="value"
+        value="Indisponível neste navegador"
+      />
+    )
   }
 
   if (bluetooth.status === 'connected') {
     return (
       <SettingsRow
+        inGroup
         label={bluetooth.deviceName ? `Conectado · ${bluetooth.deviceName}` : 'Conectado via Bluetooth'}
+        description="Toque para desconectar"
         icon={<BluetoothIcon />}
         control="value"
         value={bluetooth.batteryPercent != null ? `${bluetooth.batteryPercent}%` : 'Sem telemetria'}
@@ -315,7 +415,9 @@ function BluetoothRow({ bluetooth }: { bluetooth: ReturnType<typeof useVehicleBl
 
   return (
     <SettingsRow
+      inGroup
       label={bluetooth.status === 'connecting' ? 'Conectando…' : 'Conectar veículo'}
+      description="Lê a bateria do veículo, quando ele expõe o serviço padrão"
       icon={<BluetoothIcon />}
       control="action"
       action="Conectar"
