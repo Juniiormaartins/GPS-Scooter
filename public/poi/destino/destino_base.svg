@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100" role="img" aria-label="Base do destino">
+  <defs><radialGradient id="bh" cx="100" cy="58" r="60" gradientUnits="userSpaceOnUse"><stop offset=".4" stop-color="#35B7F7" stop-opacity=".34"></stop><stop offset="1" stop-color="#35B7F7" stop-opacity="0"></stop></radialGradient></defs>
+  <ellipse cx="100" cy="58" rx="58" ry="22" fill="url(#bh)"></ellipse>
+  <ellipse cx="100" cy="58" rx="34" ry="12.4" fill="none" stroke="#35B7F7" stroke-opacity=".55" stroke-width="3"></ellipse>
+  <ellipse cx="100" cy="58" rx="14" ry="4.6" fill="#0F1729" fill-opacity=".2"></ellipse>
+</svg>

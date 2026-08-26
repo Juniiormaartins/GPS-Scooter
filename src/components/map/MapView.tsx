@@ -6,6 +6,7 @@ import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
+import { DESTINATION_ASSETS, DESTINATION_SIZES } from '@/components/map/poiLibrary'
 import { RiderAnimator, type RiderFrame } from '@/components/map/riderAnimator'
 import {
   hasRiderSprites,
@@ -176,6 +177,24 @@ const ROUTE_OPTIONS_HIT_LAYER_ID = 'gps-scooter-route-options-hit'
 const COMPARE_SOURCE_ID = 'gps-scooter-compare'
 const COMPARE_CASING_LAYER_ID = 'gps-scooter-compare-casing'
 const COMPARE_LAYER_ID = 'gps-scooter-compare-line'
+/**
+ * ÚLTIMO TRECHO até o destino, tracejado.
+ *
+ * O roteador chega à VIA mais próxima do destino; quando o destino é o centro
+ * de uma praça, de um campus ou de um shopping, isso pode ser mais de cem
+ * metros antes. Medido: "Praça Cívica" fica a 133 m do fim do traçado.
+ *
+ * Sem nada ali, a rota simplesmente para e o pino fica solto do outro lado —
+ * a leitura de "aproximação → chegada" se perde. Emendar com linha cheia
+ * seria pior: afirmaria um caminho que não foi roteado e que pode atravessar
+ * quarteirão.
+ *
+ * Tracejado é a convenção que resolve os dois: liga visualmente e diz que
+ * aquele pedaço não é rota calculada, e sim os últimos metros por conta do
+ * usuário.
+ */
+const ROUTE_APPROACH_SOURCE_ID = 'gps-scooter-route-approach'
+const ROUTE_APPROACH_LAYER_ID = 'gps-scooter-route-approach-line'
 const ROUTE_WARN_SOURCE_ID = 'gps-scooter-route-warn'
 const ROUTE_WARN_LAYER_ID = 'gps-scooter-route-warn-line'
 
@@ -390,6 +409,49 @@ function routeWidthExpression(weight: RouteLineWeight, extra = 0): maplibregl.Ex
   return ['interpolate', ['linear'], ['zoom'], 14, z14 + extra, 17, z17 + extra, 20, z20 + extra]
 }
 
+/**
+ * Distância máxima para EMENDAR o fim da rota ao destino.
+ *
+ * O provedor traça até o ponto da VIA mais próximo do destino, que fica a
+ * alguns metros da porta. Sem emendar, a linha para antes e o pino aparece
+ * solto ao lado dela — a leitura vira "bolinha jogada sobre o mapa", que é o
+ * que o pacote pede para evitar.
+ *
+ * 80 m é o limite do que ainda são "os últimos metros". Além disso a emenda
+ * deixaria de descrever um acesso e passaria a inventar um caminho reto
+ * atravessando quarteirão, então nesse caso a linha termina onde a via
+ * termina e a tampa vai para lá — o pino continua marcando o lugar.
+ */
+const ARRIVAL_JOIN_METERS = 80
+
+function metersBetween(a: LngLat, b: LngLat): number {
+  const R = 6371000
+  const toRad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * toRad
+  const dLng = (b.lng - a.lng) * toRad
+  const lat1 = a.lat * toRad
+  const lat2 = b.lat * toRad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/** Geometria com o último ponto emendado ao destino, quando ele está por perto. */
+function joinToDestination(points: LngLat[], destination: LngLat | null): LngLat[] {
+  if (!destination || points.length < 2) return points
+  const last = points[points.length - 1]
+  const gap = metersBetween(last, destination)
+  if (gap < 1 || gap > ARRIVAL_JOIN_METERS) return points
+  return [...points, destination]
+}
+
+/** Onde a tampa de chegada deve ficar: no destino se a rota o alcança, senão no fim da via. */
+function arrivalPointFor(points: LngLat[], destination: LngLat | null): LngLat | null {
+  if (!destination) return null
+  if (points.length < 2) return destination
+  const last = points[points.length - 1]
+  return metersBetween(last, destination) > ARRIVAL_JOIN_METERS ? last : destination
+}
+
 /** Paleta da fita no tema atual. */
 function ribbon(theme: 'dark' | 'light') {
   return theme === 'light' ? ROUTE_RIBBON.light : ROUTE_RIBBON.dark
@@ -495,6 +557,16 @@ export function MapView({
   const mapRef = useRef<MapLibreMap | null>(null)
   const originMarkerRef = useRef<Marker | null>(null)
   const destinationMarkerRef = useRef<Marker | null>(null)
+  /**
+   * Tampa de chegada — o disco onde o traçado termina.
+   *
+   * É um marcador SEPARADO do pino, e não um enfeite dentro dele, porque a
+   * ordem de empilhamento é o ponto todo: rota → tampa → pino. Com um
+   * elemento só, a linha da rota passaria por baixo do pino e a chegada leria
+   * como "uma bolinha jogada sobre a linha", que é exatamente o que o pacote
+   * pede para evitar.
+   */
+  const arrivalCapRef = useRef<Marker | null>(null)
   const userMarkerRef = useRef<Marker | null>(null)
   /** Zoom de navegação em vigor — entrada da histerese entre faixas de velocidade. */
   const navigationZoomRef = useRef<number | null>(null)
@@ -749,6 +821,22 @@ export function MapView({
           'line-opacity': 0.85,
         },
       })
+      map.addSource(ROUTE_APPROACH_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: ROUTE_APPROACH_LAYER_ID,
+        type: 'line',
+        source: ROUTE_APPROACH_SOURCE_ID,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ribbon(themeRef.current).core,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 14, 3, 17, 5, 20, 7],
+          'line-opacity': 0.85,
+          // Tracejado curto e espaçado: lê como "trecho não roteado" à
+          // primeira vista, sem competir com a fita cheia da rota.
+          'line-dasharray': [1.4, 1.6],
+        },
+      })
+
       // Contorno de profundidade, POR TRECHO. Entra entre o vinco e o miolo.
       map.addLayer({
         id: ROUTE_RIM_LAYER_ID,
@@ -972,6 +1060,7 @@ export function MapView({
       repaint(ROUTE_CASING_LAYER_ID, skin.separator)
       repaint(ROUTE_RIM_LAYER_ID, severityRimColor(theme))
       repaint(ROUTE_SHEEN_LAYER_ID, skin.sheen)
+      repaint(ROUTE_APPROACH_LAYER_ID, skin.core)
       repaint(ROUTE_LAYER_ID, severityColor(theme))
       repaint(ROUTE_OPTIONS_LAYER_ID, routeOptionsColor(theme))
       repaint(ROUTE_OPTIONS_DASHED_LAYER_ID, routeOptionsColor(theme))
@@ -1129,7 +1218,11 @@ export function MapView({
     const source = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
     if (!source || routeOptions.length > 0) return
 
-    const coordinates: [number, number][] = (routeGeometry ?? []).map((point) => [point.lng, point.lat])
+    // Emendado ao destino: sem isto o traçado para no ponto da via e o pino
+    // fica solto ao lado dele (ver joinToDestination).
+    const coordinates: [number, number][] = joinToDestination(routeGeometry ?? [], destinationPoint).map(
+      (point) => [point.lng, point.lat],
+    )
 
     // O casing continua sendo UMA linha contínua: quebrado por trecho, ele
     // deixaria emendas visíveis em cada junção.
@@ -1175,7 +1268,9 @@ export function MapView({
     if (!map || !segmentSource) return
 
     const usable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
-    const fallback: [number, number][] = (routeGeometry ?? []).map((point) => [point.lng, point.lat])
+    const fallback: [number, number][] = joinToDestination(routeGeometry ?? [], destinationPoint).map(
+      (point) => [point.lng, point.lat],
+    )
 
     segmentSource.setData({
       type: 'FeatureCollection',
@@ -1185,12 +1280,17 @@ export function MapView({
       // que o painel diz explicitamente que a classificação não está
       // disponível em vez de a cor afirmar sozinha.
       features: usable.length
-        ? usable.map((segment) => ({
+        ? usable.map((segment, index) => ({
             type: 'Feature' as const,
             properties: { severity: segment.severity },
             geometry: {
               type: 'LineString' as const,
-              coordinates: segment.path.map((point) => [point.lng, point.lat]),
+              // Só o ÚLTIMO trecho é emendado: emendar todos ligaria o fim de
+              // cada um ao destino, desenhando um leque de linhas até o pino.
+              coordinates: (index === usable.length - 1
+                ? joinToDestination(segment.path, destinationPoint)
+                : segment.path
+              ).map((point) => [point.lng, point.lat]),
             },
           }))
         : fallback.length >= 2
@@ -1237,10 +1337,53 @@ export function MapView({
     updateMarker(originMarkerRef, map, originPoint, 'origin')
   }, [originPoint])
 
+  /**
+   * Conjunto do destino. Efeito PRÓPRIO, dependendo TAMBÉM da geometria.
+   *
+   * A rota chega depois do destino (o usuário escolhe o lugar, o traçado vem
+   * segundos depois). Com dependência só em `destinationPoint`, a tampa de
+   * chegada ficaria posicionada com a informação de antes da rota existir — e
+   * quando a rota terminasse longe do ponto, a tampa continuaria sobre o
+   * destino, sem linha nenhuma embaixo dela.
+   */
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    updateMarker(destinationMarkerRef, map, destinationPoint, 'destination')
+    const arrival = arrivalPointFor(routeGeometry ?? [], destinationPoint)
+    updateDestination(destinationMarkerRef, arrivalCapRef, map, destinationPoint, arrival)
+
+    const approach = map.getSource(ROUTE_APPROACH_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+    if (approach) {
+      // Só existe quando o fim da rota NÃO é o destino — ou seja, quando a
+      // emenda foi recusada por distância (ver joinToDestination).
+      const needsApproach =
+        destinationPoint != null &&
+        arrival != null &&
+        (arrival.lng !== destinationPoint.lng || arrival.lat !== destinationPoint.lat)
+      approach.setData({
+        type: 'FeatureCollection',
+        features: needsApproach
+          ? [
+              {
+                type: 'Feature' as const,
+                properties: {},
+                geometry: {
+                  type: 'LineString' as const,
+                  coordinates: [
+                    [arrival.lng, arrival.lat],
+                    [destinationPoint.lng, destinationPoint.lat],
+                  ],
+                },
+              },
+            ]
+          : [],
+      })
+    }
+  }, [destinationPoint, routeGeometry])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
 
     // Destino escolhido mas rota ainda NÃO calculada: enquadra origem e
     // destino juntos para o usuário entender onde fica o lugar antes de
@@ -1459,6 +1602,61 @@ export function MapView({
       />
     </div>
   )
+}
+
+/**
+ * Conjunto do DESTINO: tampa de chegada + pino.
+ *
+ * A tampa é adicionada ao mapa ANTES do pino, e marcador do MapLibre respeita
+ * a ordem de inserção no DOM — então a tampa fica sob o pino e sobre a rota.
+ * As duas âncoras caem no MESMO ponto (a tampa no centro, o pino na ponta
+ * inferior), então o pino "nasce" da chegada em vez de flutuar ao lado dela.
+ *
+ * O pino não gira, não muda de cor por categoria e não é substituído por um
+ * POI — se o destino também for um POI conhecido, o POI continua desenhado
+ * pela camada do mapa, atrás.
+ */
+function updateDestination(
+  markerRef: React.MutableRefObject<Marker | null>,
+  capRef: React.MutableRefObject<Marker | null>,
+  map: MapLibreMap,
+  point: LngLat | null,
+  /** Onde o traçado termina. Igual ao destino quando a rota o alcança. */
+  arrivalPoint: LngLat | null,
+) {
+  if (!point) {
+    capRef.current?.remove()
+    capRef.current = null
+    markerRef.current?.remove()
+    markerRef.current = null
+    return
+  }
+
+  if (!capRef.current) {
+    const cap = document.createElement('div')
+    cap.className = 'pointer-events-none'
+    cap.style.width = `${DESTINATION_SIZES.routeCapPx}px`
+    cap.style.height = `${DESTINATION_SIZES.routeCapPx}px`
+    cap.innerHTML = `<img src="${DESTINATION_ASSETS.routeCap}" alt="" aria-hidden="true" draggable="false" class="h-full w-full select-none" />`
+    capRef.current = new maplibregl.Marker({ element: cap, anchor: 'center' })
+  }
+  const cap = arrivalPoint ?? point
+  capRef.current.setLngLat([cap.lng, cap.lat])
+  if (!capRef.current.getElement().isConnected) capRef.current.addTo(map)
+
+  if (!markerRef.current) {
+    const pin = document.createElement('div')
+    pin.className = 'pointer-events-none'
+    const width = DESTINATION_SIZES.markerPx
+    // O arquivo é 96×100: a altura acompanha a proporção para a ponta cair
+    // exatamente na coordenada.
+    pin.style.width = `${width}px`
+    pin.style.height = `${Math.round((width * 100) / 96)}px`
+    pin.innerHTML = `<img src="${DESTINATION_ASSETS.marker}" alt="" aria-hidden="true" draggable="false" class="h-full w-full select-none" />`
+    markerRef.current = new maplibregl.Marker({ element: pin, anchor: 'bottom' })
+  }
+  markerRef.current.setLngLat([point.lng, point.lat])
+  if (!markerRef.current.getElement().isConnected) markerRef.current.addTo(map)
 }
 
 function updateMarker(

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Veterinários e pet shops">
+  <defs><linearGradient id="d_veterinario" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F0525F"></stop><stop offset="1" stop-color="#D62436"></stop></linearGradient>
+  <filter id="ds_veterinario" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_veterinario)" filter="url(#ds_veterinario)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.4" cy="9.6" r="2.1"></circle><circle cx="11.2" cy="6.6" r="2.1"></circle><circle cx="16.4" cy="8.4" r="2.1"></circle><path d="M18.4 15.4c0 3-2.6 5.4-5.8 5.4s-5.8-2.4-5.8-5.4c0-2.4 2.6-3.6 5.8-3.6s5.8 1.2 5.8 3.6Z"></path></g>
+</svg>

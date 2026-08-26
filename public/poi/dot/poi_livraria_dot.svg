@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Livrarias e bibliotecas">
+  <defs><linearGradient id="d_livraria" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A87B4E"></stop><stop offset="1" stop-color="#875C31"></stop></linearGradient>
+  <filter id="ds_livraria" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_livraria)" filter="url(#ds_livraria)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.6C9.8 4.8 6.8 4.2 3.6 4.6v13.2c3.2-.4 6.2.2 8.4 2 2.2-1.8 5.2-2.4 8.4-2V4.6c-3.2-.4-6.2.2-8.4 2Z"></path><path d="M12 6.6v13.2"></path></g>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Lanchonetes e fast-food">
+  <defs><linearGradient id="d_lanchonete" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F0784A"></stop><stop offset="1" stop-color="#D94E1E"></stop></linearGradient>
+  <filter id="ds_lanchonete" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_lanchonete)" filter="url(#ds_lanchonete)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 9.4a8.4 8.4 0 0 1 16.8 0"></path><path d="M3.2 13h17.6"></path><path d="M4.6 16.4h14.8a2.6 2.6 0 0 1-2.6 3.4H7.2a2.6 2.6 0 0 1-2.6-3.4Z"></path></g>
+</svg>

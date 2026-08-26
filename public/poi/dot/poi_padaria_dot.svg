@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Padarias">
+  <defs><linearGradient id="d_padaria" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#D08A3A"></stop><stop offset="1" stop-color="#B4661A"></stop></linearGradient>
+  <filter id="ds_padaria" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_padaria)" filter="url(#ds_padaria)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 12.8c0-3.3 2.3-5.6 5-5.6 1.4 0 2.6.5 3.6 1.4 1-.9 2.2-1.4 3.6-1.4 2.7 0 5 2.3 5 5.6 0 2.6-1.4 4-2.6 4H6c-1.2 0-2.6-1.4-2.6-4Z"></path><path d="M9 11.2v4.2"></path><path d="M12.6 10.6v4.8"></path><path d="M16.2 11.2v4.2"></path></g>
+</svg>

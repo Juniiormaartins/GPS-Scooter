@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Mirantes e vistas">
+  <defs><linearGradient id="d_mirante" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A87B4E"></stop><stop offset="1" stop-color="#875C31"></stop></linearGradient>
+  <filter id="ds_mirante" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_mirante)" filter="url(#ds_mirante)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.6" cy="14.6" r="3.4"></circle><circle cx="17.4" cy="14.6" r="3.4"></circle><path d="M10 14.6h4"></path><path d="M5.4 11.2 7 5.6h3.2l.6 5.6"></path><path d="M18.6 11.2 17 5.6h-3.2l-.6 5.6"></path></g>
+</svg>

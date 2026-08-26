@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Restaurantes e alimentação">
-  <defs><linearGradient id="dalimentacao" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F0784A"></stop><stop offset="1" stop-color="#D94E1E"></stop></linearGradient>
-  <filter id="dsalimentacao" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
-  <circle cx="16" cy="16" r="11" fill="url(#dalimentacao)" filter="url(#dsalimentacao)"></circle>
+  <defs><linearGradient id="d_alimentacao" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F0784A"></stop><stop offset="1" stop-color="#D94E1E"></stop></linearGradient>
+  <filter id="ds_alimentacao" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_alimentacao)" filter="url(#ds_alimentacao)"></circle>
   <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
   <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5.5a2.5 2.5 0 0 0 5 0V3"></path><path d="M8.5 11v10"></path><path d="M16.2 3c1.9 1.9 2.7 4.3 2.7 6.6 0 1.7-1.1 2.9-2.7 3.3V21"></path></g>
 </svg>

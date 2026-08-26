@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Aeroportos">
+  <defs><linearGradient id="d_aeroporto" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2E9FD8"></stop><stop offset="1" stop-color="#0E86C6"></stop></linearGradient>
+  <filter id="ds_aeroporto" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_aeroporto)" filter="url(#ds_aeroporto)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 3.4a1.6 1.6 0 0 1 3.2 0v5.4l7.4 4.2v2.6l-7.4-2.2v3.8l2.6 2v1.4L12 19.4l-4.2 1.2v-1.4l2.6-2v-3.8L3 15.6V13l7.4-4.2V3.4Z"></path></g>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Floriculturas e presentes">
+  <defs><linearGradient id="d_floricultura" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#EA6293"></stop><stop offset="1" stop-color="#D23A72"></stop></linearGradient>
+  <filter id="ds_floricultura" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_floricultura)" filter="url(#ds_floricultura)"></circle>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
+  <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.4" r="2.6"></circle><path d="M12 5.8c0-2 1.4-3 2.8-2.6 1.4.4 1.6 2.2.4 3.2"></path><path d="M12 5.8c0-2-1.4-3-2.8-2.6-1.4.4-1.6 2.2-.4 3.2"></path><path d="M14.6 8.4c2-.6 3.4.6 3.2 2-.2 1.4-2 1.8-3.2.8"></path><path d="M9.4 8.4c-2-.6-3.4.6-3.2 2 .2 1.4 2 1.8 3.2.8"></path><path d="M12 11v10"></path></g>
+</svg>

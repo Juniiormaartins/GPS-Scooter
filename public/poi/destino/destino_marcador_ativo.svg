@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" role="img" aria-label="Destino ativo">
+  <defs>
+    <linearGradient id="ab" x1="100" y1="42" x2="100" y2="124" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1B2B47"></stop><stop offset="1" stop-color="#0A1220"></stop></linearGradient>
+    <radialGradient id="ah" cx="100" cy="140" r="58" gradientUnits="userSpaceOnUse"><stop offset=".45" stop-color="#35B7F7" stop-opacity=".34"></stop><stop offset="1" stop-color="#35B7F7" stop-opacity="0"></stop></radialGradient>
+    <filter id="asf" x="-45%" y="-30%" width="190%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0F1729" flood-opacity=".42"></feDropShadow></filter>
+  </defs>
+  <ellipse cx="100" cy="140" rx="56" ry="21" fill="url(#ah)"></ellipse>
+  <ellipse cx="100" cy="140" rx="30" ry="11" fill="none" stroke="#35B7F7" stroke-opacity=".65" stroke-width="3">
+    
+    
+    
+  </ellipse>
+  <ellipse cx="100" cy="140" rx="13" ry="4.2" fill="#0F1729" fill-opacity=".2"></ellipse>
+  <g transform="translate(52 34)">
+    <g filter="url(#asf)"><path d="M48 8c22.4 0 32 9.6 32 32 0 19.4-7.2 29.4-24.2 31.6L48 90 40.2 71.6C23.2 69.4 16 59.4 16 40 16 17.6 25.6 8 48 8Z" fill="url(#ab)"></path></g>
+    <path d="M48 8c22.4 0 32 9.6 32 32 0 19.4-7.2 29.4-24.2 31.6L48 90 40.2 71.6C23.2 69.4 16 59.4 16 40 16 17.6 25.6 8 48 8Z" fill="none" stroke="#FFFFFF" stroke-opacity=".96" stroke-width="3.6" stroke-linejoin="round"></path>
+    <path d="M48 10.6c19.2 0 28.2 8 29.3 25.8C74.3 24 64.8 17.8 48 17.8S21.7 24 18.7 36.4C19.8 18.6 28.8 10.6 48 10.6Z" fill="#FFFFFF" fill-opacity=".13"></path>
+  <circle cx="48" cy="40" r="21" fill="none" stroke="#35B7F7" stroke-opacity=".28" stroke-width="3"></circle>
+  <circle cx="48" cy="40" r="13.6" fill="none" stroke="#35B7F7" stroke-width="4"></circle>
+  <circle cx="48" cy="40" r="6" fill="#FFFFFF"></circle>
+  </g>
+</svg>

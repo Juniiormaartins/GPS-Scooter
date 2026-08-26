@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Serviços públicos e órgãos">
+  <defs><linearGradient id="g_servico_publico" x1="48" y1="8" x2="48" y2="72" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3C5A8A"></stop><stop offset="1" stop-color="#22406E"></stop></linearGradient><filter id="s_servico_publico" x="-40%" y="-30%" width="180%" height="190%"><feDropShadow dx="0" dy="2.6" stdDeviation="3.2" flood-color="#0F1729" flood-opacity=".34"></feDropShadow></filter></defs>
+  <g filter="url(#s_servico_publico)"><path d="M48 8c22.4 0 32 9.6 32 32s-9.6 32-32 32S16 62.4 16 40 25.6 8 48 8Z" fill="url(#g_servico_publico)"></path></g>
+  <path d="M48 8c22.4 0 32 9.6 32 32s-9.6 32-32 32S16 62.4 16 40 25.6 8 48 8Z" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="3.4"></path>
+  <path d="M48 10.4c19.6 0 28.6 8.2 29.5 26.4C74.6 24 65 17.6 48 17.6S21.4 24 18.5 36.8C19.4 18.6 28.4 10.4 48 10.4Z" fill="#FFFFFF" fill-opacity=".16"></path>
+  <g transform="translate(25.2 25.2) scale(1.9)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 9.4 12 4l9.2 5.4"></path><path d="M5 9.6v9.8"></path><path d="M10.4 9.6v9.8"></path><path d="M13.6 9.6v9.8"></path><path d="M19 9.6v9.8"></path><path d="M2.6 21.4h18.8"></path><path d="M12 4V1.8"></path></g>
+</svg>

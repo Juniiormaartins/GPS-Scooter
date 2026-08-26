@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="Chegada da rota">
+  <defs><linearGradient id="cb" x1="36" y1="10" x2="36" y2="62" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1B2B47"></stop><stop offset="1" stop-color="#0A1220"></stop></linearGradient>
+  <filter id="csf" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#0F1729" flood-opacity=".38"></feDropShadow></filter></defs>
+  <circle cx="36" cy="36" r="24" fill="url(#cb)" filter="url(#csf)"></circle>
+  <circle cx="36" cy="36" r="24" fill="none" stroke="#FFFFFF" stroke-opacity=".96" stroke-width="4"></circle>
+  <circle cx="36" cy="36" r="13" fill="none" stroke="#35B7F7" stroke-width="4"></circle>
+  <circle cx="36" cy="36" r="5" fill="#FFFFFF"></circle>
+</svg>

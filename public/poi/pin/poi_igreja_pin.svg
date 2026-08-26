@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="100" viewBox="0 0 96 100" role="img" aria-label="Igrejas e templos">
+  <defs><linearGradient id="gp_igreja" x1="48" y1="8" x2="48" y2="90" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A87B4E"></stop><stop offset="1" stop-color="#875C31"></stop></linearGradient><filter id="sp_igreja" x="-40%" y="-30%" width="180%" height="190%"><feDropShadow dx="0" dy="2.6" stdDeviation="3.4" flood-color="#0F1729" flood-opacity=".34"></feDropShadow></filter></defs>
+  <ellipse cx="48" cy="92" rx="11" ry="3.4" fill="#0F1729" fill-opacity=".16"></ellipse>
+  <g filter="url(#sp_igreja)"><path d="M48 8c22.4 0 32 9.6 32 32 0 19.4-7.2 29.4-24.2 31.6L48 90 40.2 71.6C23.2 69.4 16 59.4 16 40 16 17.6 25.6 8 48 8Z" fill="url(#gp_igreja)"></path></g>
+  <path d="M48 8c22.4 0 32 9.6 32 32 0 19.4-7.2 29.4-24.2 31.6L48 90 40.2 71.6C23.2 69.4 16 59.4 16 40 16 17.6 25.6 8 48 8Z" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="3.4" stroke-linejoin="round"></path>
+  <path d="M48 10.4c19.6 0 28.6 8.2 29.5 26.4C74.6 24 65 17.6 48 17.6S21.4 24 18.5 36.8C19.4 18.6 28.4 10.4 48 10.4Z" fill="#FFFFFF" fill-opacity=".16"></path>
+  <g transform="translate(25.2 25.2) scale(1.9)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6v6.2"></path><path d="M9.4 5.2h5.2"></path><path d="M12 8.8 6.4 13v8.4h11.2V13L12 8.8Z"></path><path d="M10.4 21.4v-4.6h3.2v4.6"></path></g>
+</svg>

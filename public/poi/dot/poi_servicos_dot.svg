@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Serviços">
-  <defs><linearGradient id="dservicos" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8A98AE"></stop><stop offset="1" stop-color="#69788E"></stop></linearGradient>
-  <filter id="dsservicos" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
-  <circle cx="16" cy="16" r="11" fill="url(#dservicos)" filter="url(#dsservicos)"></circle>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Serviços gerais">
+  <defs><linearGradient id="d_servicos" x1="16" y1="4" x2="16" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8A98AE"></stop><stop offset="1" stop-color="#69788E"></stop></linearGradient>
+  <filter id="ds_servicos" x="-50%" y="-40%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#0F1729" flood-opacity=".32"></feDropShadow></filter></defs>
+  <circle cx="16" cy="16" r="11" fill="url(#d_servicos)" filter="url(#ds_servicos)"></circle>
   <circle cx="16" cy="16" r="11" fill="none" stroke="#FFFFFF" stroke-opacity=".94" stroke-width="2.4"></circle>
   <g transform="translate(9.4 9.4) scale(0.55)" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 3.4a5 5 0 0 0-3.5 8.5L4 19.2 5.9 21l7.3-7.3a5 5 0 0 0 6.4-6.4l-3.1 3.1-2.5-2.5 3.1-3.1a5 5 0 0 0-2.3-1.4Z"></path></g>
 </svg>
