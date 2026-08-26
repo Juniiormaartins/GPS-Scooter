@@ -520,14 +520,52 @@ export function MapView({
    * recomeçaria do zero, reintroduzindo exatamente o pulo que ela existe para
    * eliminar.
    */
+  // A ref é atualizada mais abaixo, DEPOIS de `cameraRef`: a transição
+  // false → true precisa ser detectada antes da atribuição.
   const followUserRef = useRef(followUser)
-  followUserRef.current = followUser
   const speedKmhRef = useRef(speedKmh)
   speedKmhRef.current = speedKmh
   const vehicleRef = useRef(vehicleModelId)
   vehicleRef.current = vehicleModelId
   /** Zoom e inclinação exibidos — perseguem o alvo por quadro, ver cameraRef. */
   const cameraRef = useRef<{ zoom: number | null; pitch: number }>({ zoom: null, pitch: 0 })
+
+  /**
+   * Há um gesto do usuário em andamento?
+   *
+   * ISTO É O QUE DESTRAVA O MAPA NA NAVEGAÇÃO. O laço de quadro chamava
+   * `map.jumpTo` 60 vezes por segundo, e cada chamada reescreve o transform.
+   * O `DragPanHandler` do MapLibre acumula o deslocamento do dedo ENTRE os
+   * eventos de ponteiro, comparando com o transform corrente — com um
+   * `jumpTo` no meio de cada par de eventos, o acumulado era apagado antes de
+   * atingir o limiar do gesto. Resultado medido: arrastar movia o mapa 8 m e
+   * `dragstart` NUNCA disparava; como é ele que desliga o acompanhamento, o
+   * mapa ficava preso em si mesmo.
+   *
+   * Marcado a partir do evento de ponteiro BRUTO, e não de um evento do
+   * MapLibre, justamente porque os eventos dele dependiam do gesto conseguir
+   * começar — o que era o problema.
+   */
+  const gestureActiveRef = useRef(false)
+
+  /**
+   * Retomando o acompanhamento depois de o usuário mexer no mapa, a
+   * perseguição de zoom e inclinação recomeça DO VALOR ATUAL da câmera.
+   *
+   * Sem isto, `cameraRef` guardaria o zoom de antes da interação e o primeiro
+   * quadro do acompanhamento saltaria do zoom escolhido pelo usuário direto
+   * para o da navegação. Partindo do valor corrente, a câmera volta ao
+   * enquadramento de navegação suavemente, junto com a animação de
+   * recentralização.
+   *
+   * Comparação feita ANTES de atualizar a ref abaixo — é a transição
+   * false → true que interessa, não o valor em si.
+   */
+  if (followUser && !followUserRef.current) {
+    const mapaAtual = mapRef.current
+    if (mapaAtual) cameraRef.current = { zoom: mapaAtual.getZoom(), pitch: mapaAtual.getPitch() }
+  }
+  followUserRef.current = followUser
 
   /**
    * Descobre UMA vez se os sprites de alta fidelidade foram entregues.
@@ -579,6 +617,58 @@ export function MapView({
     }
     map.on('dragstart', notifyUserInteraction)
     map.on('zoomstart', notifyUserInteraction)
+    // Girar e inclinar com dois dedos também são interação manual. Sem estes,
+    // o usuário conseguia rodar o mapa e o acompanhamento continuava ligado,
+    // endireitando tudo no quadro seguinte.
+    map.on('rotatestart', notifyUserInteraction)
+    map.on('pitchstart', notifyUserInteraction)
+
+    /**
+     * Enquanto o dedo (ou o botão do mouse) está no mapa, a câmera automática
+     * SAI DO CAMINHO — ver gestureActiveRef.
+     *
+     * O fim é ouvido na janela, não no container: soltar o dedo fora do mapa é
+     * comum, e ouvir só no container deixaria a flag presa em true.
+     */
+    const container = map.getCanvasContainer()
+    let wheelTimer: ReturnType<typeof setTimeout> | null = null
+
+    const beginGesture = () => {
+      gestureActiveRef.current = true
+    }
+    const endGesture = () => {
+      gestureActiveRef.current = false
+    }
+    /**
+     * A RODA não gera evento de ponteiro.
+     *
+     * Zoom por scroll é uma sequência de `wheel` sem começo nem fim
+     * declarados, então a saída é uma janela curta que cada evento renova.
+     * 220 ms cobre o intervalo entre eventos de um scroll contínuo e devolve
+     * a câmera ao automático logo depois do último.
+     */
+    const onWheel = () => {
+      gestureActiveRef.current = true
+      if (wheelTimer) clearTimeout(wheelTimer)
+      wheelTimer = setTimeout(() => {
+        gestureActiveRef.current = false
+      }, 220)
+    }
+
+    /**
+     * As TRÊS famílias de evento, de propósito.
+     *
+     * O MapLibre trata gestos por `mousedown`/`touchstart`; o navegador
+     * moderno emite `pointerdown` junto. Ouvir só uma família funciona no
+     * aparelho, mas cria uma divergência silenciosa entre o que o MapLibre vê
+     * e o que nós vemos — e foi exatamente aí que o primeiro teste desta
+     * correção passou batido.
+     */
+    const inicios = ['pointerdown', 'mousedown', 'touchstart'] as const
+    const fins = ['pointerup', 'pointercancel', 'mouseup', 'touchend', 'touchcancel'] as const
+    for (const evento of inicios) container.addEventListener(evento, beginGesture, { passive: true })
+    for (const evento of fins) window.addEventListener(evento, endGesture, { passive: true })
+    container.addEventListener('wheel', onWheel, { passive: true })
 
     /**
      * As camadas do app são criadas quando o ESTILO fica pronto, não no evento
@@ -795,6 +885,8 @@ export function MapView({
 
     mapRef.current = map
     return () => {
+      for (const evento of fins) window.removeEventListener(evento, endGesture)
+      if (wheelTimer) clearTimeout(wheelTimer)
       map.remove()
       mapRef.current = null
     }
@@ -1219,7 +1311,18 @@ export function MapView({
         vehicleRef.current,
       )
 
-      if (!followUserRef.current) return
+      /**
+       * Gesto em andamento: o marcador continua andando, a CÂMERA não é
+       * tocada. É esta linha que devolve o mapa ao usuário durante a
+       * navegação — sem ela, o `jumpTo` do quadro seguinte desfazia o
+       * arrasto antes de o MapLibre reconhecê-lo como gesto.
+       *
+       * Não desliga o acompanhamento por conta própria: quem faz isso é o
+       * `dragstart`/`rotatestart` do MapLibre, que agora consegue disparar.
+       * Um toque simples, sem arrastar, não deve tirar o mapa do modo
+       * automático — e não tira.
+       */
+      if (!followUserRef.current || gestureActiveRef.current) return
 
       const targetZoom = navigationZoomForSpeed(speedKmhRef.current, navigationZoomRef.current)
       navigationZoomRef.current = targetZoom
