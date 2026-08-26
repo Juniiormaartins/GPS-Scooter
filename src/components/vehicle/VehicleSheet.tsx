@@ -53,7 +53,7 @@ export function VehicleSheet({ preferences, onSave, onDismiss }: VehicleSheetPro
       avoidances,
       // Trocar de veículo traz junto velocidade e autonomia do preset — é o
       // que torna a escolha significativa em vez de um rótulo.
-      ...(preset ? { referenceSpeedKmh: preset.topSpeedKmh, rangeKm: preset.rangeKm } : {}),
+      ...(preset ? { referenceSpeedKmh: preset.topSpeedKmh, rangeKm: preset.rangeKm, ratedSpeedKmh: preset.topSpeedKmh } : {}),
     })
   }
 

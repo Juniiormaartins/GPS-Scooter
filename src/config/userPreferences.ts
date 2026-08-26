@@ -129,6 +129,20 @@ export interface UserPreferences {
   /** Autonomia estimada efetiva (km). */
   rangeKm: number
   /**
+   * Velocidade em que `rangeKm` foi MEDIDO — normalmente a nominal do modelo.
+   *
+   * Existe porque autonomia sem velocidade de referência é um número solto. O
+   * fabricante anuncia "120 km" para o veículo rodando na velocidade limitada
+   * de fábrica; o mesmo veículo destravado, a 60 km/h, não faz 120 km, e a
+   * diferença não é pequena — o arrasto aerodinâmico cresce com o QUADRADO da
+   * velocidade.
+   *
+   * Guardar as duas velocidades (esta e `referenceSpeedKmh`, a que o usuário de
+   * fato anda) é o que permite ao app corrigir a autonomia em vez de repetir o
+   * número da caixa. Ver `speedAdjustedRangeKm`.
+   */
+  ratedSpeedKmh: number
+  /**
    * Foto do avatar, como data URL de um JPEG já recortado em quadrado.
    *
    * Fica NO localStorage junto das demais preferências, e não num serviço de
@@ -212,6 +226,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   vehicleModelId: 'scooter-32',
   referenceSpeedKmh: 32,
   rangeKm: 40,
+  ratedSpeedKmh: 32,
   avatarDataUrl: null,
   onboardingCompletedAt: null,
   batteryPercent: null,

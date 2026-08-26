@@ -106,7 +106,13 @@ export function ProfilePanel({
   function selectVehicle(id: VehicleModelId) {
     const preset = VEHICLE_PRESETS.find((entry) => entry.id === id)
     if (preset) {
-      onUpdatePreferences({ vehicleModelId: preset.id, referenceSpeedKmh: preset.topSpeedKmh, rangeKm: preset.rangeKm })
+      onUpdatePreferences({
+        vehicleModelId: preset.id,
+        referenceSpeedKmh: preset.topSpeedKmh,
+        rangeKm: preset.rangeKm,
+        // A autonomia do preset e a de catalogo, medida na velocidade nominal.
+        ratedSpeedKmh: preset.topSpeedKmh,
+      })
     }
     setOpenPicker(null)
   }

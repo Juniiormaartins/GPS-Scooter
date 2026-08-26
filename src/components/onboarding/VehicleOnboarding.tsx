@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BatteryDial } from '@/components/vehicle/BatteryDial'
 import { Button } from '@/components/ui/Button'
 import { mobilityProfile } from '@/config/mobilityProfiles'
+import { speedAdjustedRangeKm } from '@/services/vehicle/autonomy'
 import { VEHICLE_PRESETS, type UserPreferences, type VehicleModelId } from '@/config/userPreferences'
 
 /**
@@ -37,6 +38,14 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
   const [modelId, setModelId] = useState<VehicleModelId>(preferences.vehicleModelId)
   const [rangeKm, setRangeKm] = useState(preferences.rangeKm)
   const [speedKmh, setSpeedKmh] = useState(preferences.referenceSpeedKmh)
+  /**
+   * Velocidade em que a autonomia informada vale.
+   *
+   * Muda com o PRESET (é o número de catálogo do modelo) e NÃO muda quando o
+   * usuário ajusta a velocidade em que ele anda — é justamente a diferença
+   * entre as duas que permite corrigir a autonomia de um veículo destravado.
+   */
+  const [ratedSpeedKmh, setRatedSpeedKmh] = useState(preferences.ratedSpeedKmh)
   const [battery, setBattery] = useState(preferences.batteryPercent ?? 80)
 
   const selectPreset = (id: VehicleModelId) => {
@@ -45,6 +54,7 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
     if (preset) {
       setRangeKm(preset.rangeKm)
       setSpeedKmh(preset.topSpeedKmh)
+      setRatedSpeedKmh(preset.topSpeedKmh)
     }
   }
 
@@ -53,6 +63,7 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
       vehicleModelId: modelId,
       rangeKm,
       referenceSpeedKmh: speedKmh,
+      ratedSpeedKmh,
       onboardingCompletedAt: Date.now(),
       ...(withBattery
         ? { batteryPercent: battery, batteryUpdatedAt: Date.now(), batteryDistanceSinceUpdateMeters: 0 }
@@ -68,9 +79,13 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
             modelId={modelId}
             rangeKm={rangeKm}
             speedKmh={speedKmh}
+            ratedSpeedKmh={ratedSpeedKmh}
             onSelect={selectPreset}
             onRangeChange={(value) => {
               setRangeKm(value)
+              // Autonomia digitada à mão vale para a velocidade que ele anda:
+              // o número veio da experiência dele, não do catálogo.
+              setRatedSpeedKmh(speedKmh)
               setModelId('custom')
             }}
             onSpeedChange={(value) => {
@@ -111,6 +126,7 @@ function VehicleStep({
   modelId,
   rangeKm,
   speedKmh,
+  ratedSpeedKmh,
   onSelect,
   onRangeChange,
   onSpeedChange,
@@ -118,10 +134,17 @@ function VehicleStep({
   modelId: VehicleModelId
   rangeKm: number
   speedKmh: number
+  ratedSpeedKmh: number
   onSelect: (id: VehicleModelId) => void
   onRangeChange: (value: number) => void
   onSpeedChange: (value: number) => void
 }) {
+  // Só aparece quando há de fato diferença entre as duas velocidades.
+  const ajustada =
+    Math.abs(speedKmh - ratedSpeedKmh) >= 3
+      ? speedAdjustedRangeKm({ rangeKm, ratedSpeedKmh, referenceSpeedKmh: speedKmh } as UserPreferences)
+      : null
+
   return (
     <>
       <h1 className="text-[26px] font-extrabold leading-tight text-content-primary">Qual é o seu veículo?</h1>
@@ -164,8 +187,32 @@ function VehicleStep({
         </p>
         <div className="mt-3 flex gap-3">
           <NumberField label="Autonomia" unit="km" value={rangeKm} min={5} max={200} onChange={onRangeChange} />
-          <NumberField label="Velocidade" unit="km/h" value={speedKmh} min={6} max={60} onChange={onSpeedChange} />
+          <NumberField label="Velocidade" unit="km/h" value={speedKmh} min={6} max={90} onChange={onSpeedChange} />
         </div>
+
+        {/*
+          O EFEITO DA VELOCIDADE, dito na hora em que ele é criado.
+
+          Muita gente destrava o veículo. Quem faz isso continua vendo a
+          autonomia da caixa — que foi medida na velocidade limitada — e sai
+          contando com uma distância que não existe. Mostrar a correção AQUI,
+          enquanto o número está sendo digitado, é o único momento em que ela
+          muda uma decisão.
+        */}
+        {ajustada != null && (
+          <p className="mt-2.5 text-[12.5px] font-bold leading-snug text-warning-text">
+            Andando a {speedKmh} km/h, a autonomia real fica em torno de{' '}
+            <strong className="font-extrabold">{Math.round(ajustada)} km</strong> — os {rangeKm} km valem a{' '}
+            {ratedSpeedKmh} km/h. O app ajusta sozinho conforme mede seus trajetos.
+          </p>
+        )}
+
+        {speedKmh > 32 && (
+          <p className="mt-2 text-[12.5px] font-semibold leading-snug text-content-tertiary">
+            Acima de 32 km/h o veículo deixa de se enquadrar como autopropelido, e as regras de
+            circulação são outras — as rotas continuam sendo traçadas pelo perfil escolhido acima.
+          </p>
+        )}
       </div>
     </>
   )

@@ -75,6 +75,49 @@ function batteryConfidence(updatedAt: number | null, now = Date.now()): BatteryC
  * Precisão em tempo real só existe com telemetria do controlador.
  */
 
+/**
+ * AUTONOMIA CORRIGIDA PELA VELOCIDADE — o caso do veículo destravado.
+ *
+ * O fabricante anuncia autonomia com o veículo na velocidade limitada de
+ * fábrica. Destravado, o mesmo veículo não faz a mesma distância, e a diferença
+ * é grande: a energia gasta por quilômetro tem uma parte que não depende da
+ * velocidade (rolamento, transmissão, eletrônica) e uma parte de ARRASTO
+ * AERODINÂMICO, que cresce com o QUADRADO dela. Dobrar a velocidade não dobra o
+ * gasto — mais que dobra a parcela do arrasto.
+ *
+ *     energia por km ≈ 1 + k·v²
+ *
+ * O `k` aqui é uma PREMISSA DE PRODUTO, não uma medição deste veículo: foi
+ * escolhido para que ir de 30 para 60 km/h corte a autonomia para cerca de
+ * 55%, que é a ordem de grandeza relatada para veículos leves. Ele não sabe
+ * nada sobre a carenagem, o peso ou a posição do piloto.
+ *
+ * POR QUE MESMO ASSIM VALE A PENA: a alternativa é repetir "120 km" para quem
+ * destravou e anda a 60, o que é errado numa direção perigosa. Uma correção
+ * aproximada para o lado certo é melhor que nenhuma correção.
+ *
+ * E ELA É TEMPORÁRIA: assim que houver amostras de consumo real
+ * (`observedRangeKm`), a medição do próprio usuário passa a pesar mais que esta
+ * conta — que existe justamente para o intervalo em que ainda não há medição
+ * nenhuma.
+ */
+const DRAG_K = 4.04e-4
+
+function energyPerKm(speedKmh: number): number {
+  const v = Math.max(1, speedKmh)
+  return 1 + DRAG_K * v * v
+}
+
+export function speedAdjustedRangeKm(preferences: UserPreferences): number {
+  const catalogo = Math.max(0, preferences.rangeKm)
+  const nominal = preferences.ratedSpeedKmh
+  const real = preferences.referenceSpeedKmh
+  if (!nominal || !real || nominal <= 0 || real <= 0) return catalogo
+
+  // Andar MAIS DEVAGAR que o nominal também rende mais — a conta é simétrica.
+  return catalogo * (energyPerKm(nominal) / energyPerKm(real))
+}
+
 /** Intervalo curto demais para medir eficiência: o erro do próprio percentual domina. */
 const MIN_LEARN_METERS = 3000
 /** Sem queda de bateria não há o que dividir; quedas de 1 ponto são ruído de arredondamento. */
@@ -153,7 +196,9 @@ export type RangeSource = 'catalog' | 'blend' | 'observed'
  * lugar sem esse susto, e três amostras já pesam mais que o catálogo.
  */
 export function effectiveRange(preferences: UserPreferences): { km: number; source: RangeSource; samples: number } {
-  const catalogo = Math.max(0, preferences.rangeKm)
+  // O lado "catálogo" já vem corrigido pela velocidade real — senão um veículo
+  // destravado partiria de um número que nunca foi verdade para ele.
+  const catalogo = speedAdjustedRangeKm(preferences)
   const amostras = preferences.consumptionSamples ?? []
   const observado = observedRangeKm(amostras)
 
