@@ -22,6 +22,21 @@ export default defineConfig(({ command }) => ({
     preserveSymlinks: command === 'serve',
   },
   server: {
+    /**
+     * `/api/overpass` existe nos DOIS ambientes.
+     *
+     * Em produção quem atende é a função em `api/overpass.ts`; aqui é este
+     * proxy. O app nunca sabe a diferença — foi justamente a divergência entre
+     * ambientes (funcionava no dev, falhava em produção por CORS) que escondeu
+     * a falha de classificação de vias.
+     */
+    proxy: {
+      '/api/overpass': {
+        target: 'https://overpass-api.de',
+        changeOrigin: true,
+        rewrite: () => '/api/interpreter',
+      },
+    },
     host: true,
     // Permite acesso via túnel de desenvolvimento HTTPS (localtunnel) para
     // testar geolocalização real no celular — Safari/iOS só concede acesso
@@ -31,6 +46,13 @@ export default defineConfig(({ command }) => ({
     allowedHosts: ['.loca.lt', '.trycloudflare.com'],
   },
   preview: {
+    proxy: {
+      '/api/overpass': {
+        target: 'https://overpass-api.de',
+        changeOrigin: true,
+        rewrite: () => '/api/interpreter',
+      },
+    },
     host: true,
     allowedHosts: ['.loca.lt', '.trycloudflare.com'],
   },

@@ -223,7 +223,15 @@ class MapTilerGeocodingProvider implements GeocodingProvider {
   }
 }
 
-const OVERPASS_BASE_URL = 'https://overpass-api.de/api/interpreter'
+/**
+ * Mesma origem, pelo mesmo motivo do enriquecimento de rota (ver
+ * api/overpass.ts): a instância pública serve as respostas de ERRO sem
+ * cabeçalho CORS, e o navegador entrega ao código um "Failed to fetch" sem
+ * status. Aqui a consequência é mais discreta — a busca de POIs perde uma das
+ * fontes em silêncio — mas a causa é a mesma, e as duas usam o mesmo
+ * orçamento de dois slots por IP.
+ */
+const OVERPASS_BASE_URL = '/api/overpass'
 const OVERPASS_POI_TIMEOUT_S = 8
 /**
  * Teto curto e agressivo do lado do cliente para a busca. Medido: Mapbox

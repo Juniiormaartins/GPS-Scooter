@@ -1,6 +1,6 @@
 import { calculateEtaMinutes } from '@/services/routing/eta'
 import { getRoutingProvider } from '@/services/routing/provider'
-import { enrichRouteSegments } from '@/services/routing/segmentEnrichment'
+import { enrichRouteSegments, prefetchWaysForRoutes } from '@/services/routing/segmentEnrichment'
 import { evaluateRoute } from '@/services/routing/ruleEngine'
 import { describeAvoidanceHit, evaluateAvoidances } from '@/services/routing/avoidances'
 import { fetchRouteElevationProfile } from '@/services/routing/elevation'
@@ -248,6 +248,17 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
       severity: analyzeRouteSeverity(enrichedRoute, vehicle, true),
     }
   }
+
+  /**
+   * UMA consulta cobrindo todas as candidatas, antes de enriquecer qualquer uma.
+   *
+   * O `Promise.all` abaixo continua, mas agora ele não é mais N consultas
+   * simultâneas: a área já está no cache e cada `upgrade` só faz o casamento
+   * geométrico, que é local. Antes, cinco candidatas viravam cinco consultas
+   * concorrentes contra um endpoint que aceita duas por IP — três eram
+   * recusadas, e a rota ficava sem classificação por trecho.
+   */
+  await prefetchWaysForRoutes([result.selected.route, ...result.alternatives.map((entry) => entry.route)])
 
   const [selected, ...alternatives] = await Promise.all([
     upgrade(result.selected),

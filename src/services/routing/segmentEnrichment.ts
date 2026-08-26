@@ -26,7 +26,38 @@ import type { CandidateRoute, OsmWayTags, RoadClass, RouteSegment } from '@/type
  * usar distância ponto-a-segmento em vez de ponto-a-nó mais próximo.
  */
 
-const OVERPASS_BASE_URL = 'https://overpass-api.de/api/interpreter'
+/**
+ * MESMA ORIGEM, de propósito — ver api/overpass.ts e o proxy em vite.config.ts.
+ *
+ * Consultar `overpass-api.de` direto do navegador funciona enquanto ele
+ * responde 200. Quando ele RECUSA (429 por limite de taxa, 504 de gateway), a
+ * página de erro vem sem `Access-Control-Allow-Origin`, o navegador bloqueia a
+ * resposta e o código recebe um `TypeError: Failed to fetch` sem status. Foi
+ * assim que a classificação por trecho parou de aparecer em produção sem
+ * deixar rastro legível.
+ */
+const OVERPASS_BASE_URL = '/api/overpass'
+
+/**
+ * A instância pública dá DOIS slots simultâneos por IP (confirmado em
+ * /api/status: "Rate limit: 2"). O enriquecimento roda sobre a rota escolhida
+ * e todas as alternativas — cinco candidatas viravam cinco consultas
+ * simultâneas, três delas recusadas de saída.
+ *
+ * Uma por vez: mais lento no papel, e na prática MUITO mais rápido, porque
+ * consulta recusada não traz dado nenhum e ainda queima uma tentativa.
+ */
+let filaOverpass: Promise<unknown> = Promise.resolve()
+
+function emFila<T>(tarefa: () => Promise<T>): Promise<T> {
+  const resultado = filaOverpass.then(tarefa, tarefa)
+  // A fila nunca rejeita: uma falha não pode impedir a próxima consulta.
+  filaOverpass = resultado.then(
+    () => undefined,
+    () => undefined,
+  )
+  return resultado
+}
 const MATCH_DISTANCE_METERS = 25
 const BBOX_PADDING_DEG = 0.002 // ~200 m de folga ao redor da rota
 
@@ -57,8 +88,55 @@ const KNOWN_ROAD_CLASSES: RoadClass[] = [
   'service',
 ]
 
-/** Cache em memória por bbox arredondado — evita reconsultar a mesma área na mesma sessão. */
-const boundingBoxCache = new Map<string, Promise<OverpassWay[]>>()
+/**
+ * Cache de ÁREAS já consultadas, com busca por CONTINÊNCIA.
+ *
+ * Antes a chave era o bbox arredondado da rota, e bastava a alternativa
+ * desviar duas quadras para gerar outra chave e outra consulta. Guardando a
+ * área consultada e perguntando "alguma já cobre este retângulo?", as cinco
+ * candidatas de uma mesma viagem reaproveitam UMA resposta — que é o que
+ * mantém o uso dentro dos dois slots disponíveis.
+ */
+interface AreaCacheada {
+  bbox: BoundingBox
+  ways: Promise<OverpassWay[]>
+  chave: string
+}
+
+const areasCacheadas: AreaCacheada[] = []
+
+function contem(externo: BoundingBox, interno: BoundingBox): boolean {
+  return (
+    externo.south <= interno.south &&
+    externo.west <= interno.west &&
+    externo.north >= interno.north &&
+    externo.east >= interno.east
+  )
+}
+
+function uneBoundingBoxes(caixas: BoundingBox[]): BoundingBox {
+  return {
+    south: Math.min(...caixas.map((c) => c.south)),
+    west: Math.min(...caixas.map((c) => c.west)),
+    north: Math.max(...caixas.map((c) => c.north)),
+    east: Math.max(...caixas.map((c) => c.east)),
+  }
+}
+
+/**
+ * Teto do lado do span da união.
+ *
+ * Unir as caixas das candidatas quase sempre dá um retângulo pouco maior que o
+ * de uma delas — elas percorrem o mesmo corredor. Mas se uma alternativa
+ * divergir muito, a união viraria uma consulta de dezenas de quilômetros, que
+ * o endpoint público recusa por tamanho. Acima deste limite, cada rota volta a
+ * consultar a sua própria área.
+ */
+const MAX_UNION_SPAN_DEG = 0.25
+
+function spanExcedido(bbox: BoundingBox): boolean {
+  return bbox.north - bbox.south > MAX_UNION_SPAN_DEG || bbox.east - bbox.west > MAX_UNION_SPAN_DEG
+}
 
 function computeRouteBoundingBox(route: CandidateRoute): BoundingBox {
   let south = Infinity
@@ -142,7 +220,14 @@ async function requestWays(query: string, timeoutMs: number): Promise<OverpassWa
       body: query,
       signal: abortController.signal,
     })
-    if (!response.ok) throw new Error(`Overpass respondeu ${response.status}`)
+    if (!response.ok) {
+      // Agora o status CHEGA — antes, vindo de outra origem, um 429 aparecia
+      // como falha de rede genérica. 429/504 significam "tente de novo mais
+      // devagar", e não "não há dado de via aqui".
+      const erro = new Error(`Overpass respondeu ${response.status}`) as Error & { status?: number }
+      erro.status = response.status
+      throw erro
+    }
     const payload = (await response.json()) as { elements?: OverpassWay[] }
     return payload.elements ?? []
   } finally {
@@ -151,52 +236,78 @@ async function requestWays(query: string, timeoutMs: number): Promise<OverpassWa
 }
 
 async function fetchWaysInBoundingBox(bbox: BoundingBox): Promise<OverpassWay[]> {
-  const cacheKey = boundingBoxCacheKey(bbox)
+  // Alguma área já consultada cobre esta rota? É o caso normal quando as
+  // alternativas da mesma viagem chegam em seguida.
+  const jaCoberta = areasCacheadas.find((area) => contem(area.bbox, bbox))
+  if (jaCoberta) return jaCoberta.ways
 
-  const cached = boundingBoxCache.get(cacheKey)
-  if (cached) return cached
+  const cacheKey = boundingBoxCacheKey(bbox)
 
   const persisted = readSessionCache(cacheKey)
   if (persisted) {
     const resolved = Promise.resolve(persisted)
-    boundingBoxCache.set(cacheKey, resolved)
+    areasCacheadas.push({ bbox, ways: resolved, chave: cacheKey })
     return resolved
   }
 
   const query = `[out:json][timeout:20];way["highway"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});out tags geom;`
 
   /**
-   * UMA nova tentativa em caso de falha.
+   * Uma nova tentativa, com espera proporcional ao motivo.
    *
-   * O endpoint público do Overpass é lento e instável de forma intermitente —
-   * medido, uma consulta de bbox urbano em Goiânia levou 14,7 s. Boa parte das
-   * falhas é timeout ou 429 momentâneo, e a segunda tentativa costuma passar.
-   * Sem retry, uma falha isolada deixava a rota INTEIRA sem classificação de
-   * via, que é o motivo de os trechos não recomendados não aparecerem
-   * destacados no teste de rua.
+   * Recusa por limite de taxa (429) precisa de mais fôlego que um timeout: as
+   * consultas irmãs ainda estão ocupando os dois slots do IP. Repetir em 800 ms
+   * garantia só um segundo "não".
    */
-  const request = (async () => {
+  const request = emFila(async () => {
     try {
       return await requestWays(query, CLIENT_TIMEOUT_MS)
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 800))
+    } catch (erro) {
+      const status = (erro as { status?: number }).status
+      const espera = status === 429 || status === 504 ? 2500 : 800
+      await new Promise((resolve) => setTimeout(resolve, espera))
       return requestWays(query, CLIENT_TIMEOUT_MS)
     }
-  })()
+  })
     .then((ways) => {
       writeSessionCache(cacheKey, ways)
       return ways
     })
     .catch(() => {
-      // Falha nas duas tentativas: remove do cache para que a próxima rota
-      // nesta área possa tentar de novo. Sem isso, uma falha deixaria a região
-      // sem classificação pelo resto da sessão.
-      boundingBoxCache.delete(cacheKey)
+      // Falha nas duas tentativas: tira a área do cache para que a próxima
+      // rota possa tentar de novo. Sem isso, uma falha isolada deixaria a
+      // região sem classificação pelo resto da sessão.
+      const i = areasCacheadas.findIndex((area) => area.chave === cacheKey)
+      if (i >= 0) areasCacheadas.splice(i, 1)
       return [] as OverpassWay[]
     })
 
-  boundingBoxCache.set(cacheKey, request)
+  areasCacheadas.push({ bbox, ways: request, chave: cacheKey })
   return request
+}
+
+/**
+ * Consulta UMA área cobrindo todas as candidatas, antes de enriquecer cada uma.
+ *
+ * Sem isto, `enrichRouteResult` disparava uma consulta por candidata, em
+ * paralelo, contra um endpoint que aceita duas por IP: as excedentes eram
+ * recusadas e a rota ficava sem classificação por trecho. Com a área unida no
+ * cache, as chamadas seguintes de `enrichRouteSegments` não tocam a rede.
+ *
+ * Best-effort: se a união for grande demais ou a consulta falhar, cada rota
+ * segue consultando a sua própria área — o comportamento anterior, só que
+ * agora enfileirado.
+ */
+export async function prefetchWaysForRoutes(routes: CandidateRoute[]): Promise<void> {
+  const caixas = routes.map(computeRouteBoundingBox)
+  if (caixas.length === 0) return
+  const uniao = uneBoundingBoxes(caixas)
+  if (spanExcedido(uniao)) return
+  try {
+    await fetchWaysInBoundingBox(uniao)
+  } catch {
+    // Sem união utilizável: cada rota consulta a sua área.
+  }
 }
 
 function segmentMidpoint(path: LngLat[]): LngLat {
