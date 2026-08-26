@@ -2,8 +2,20 @@ import { env, isGeocodingConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
 
+import { poiCategoryForClass, type PoiCategory } from '@/components/map/poiLibrary'
+
 export interface GeocodingResult {
   label: string
+  /**
+   * Categoria da biblioteca de POIs, para a lista de resultados mostrar o
+   * mesmo ícone que o lugar tem no mapa.
+   *
+   * Vem de `poiCategoryForClass`, o MESMO caminho que a camada do mapa usa —
+   * inclusive a regra de fallback. Sem isto, cada resultado da busca saía com
+   * um alfinete genérico e o usuário não conseguia distinguir uma farmácia de
+   * um posto na lista, mesmo com a biblioteca sabendo a diferença.
+   */
+  poiCategory?: PoiCategory
   /** Cidade/bairro ou categoria do local, quando disponível — para exibição em duas linhas na UI. */
   secondaryLabel?: string
   point: LngLat
@@ -75,13 +87,20 @@ const NOMINATIM_CATEGORY_LABEL: Record<string, string> = {
   neighbourhood: 'Bairro',
 }
 
-function describeNominatimResult(result: NominatimResult): { label: string; secondaryLabel: string } {
+function describeNominatimResult(result: NominatimResult): {
+  label: string
+  secondaryLabel: string
+  poiCategory: PoiCategory
+} {
   const parts = result.display_name.split(',').map((part) => part.trim())
   const label = parts[0] ?? result.display_name
   const category = result.type ? NOMINATIM_CATEGORY_LABEL[result.type] : undefined
   const place = parts.length > 2 ? parts[parts.length - 3] : parts[parts.length - 1]
   const secondaryLabel = category ? `${category} · ${place}` : parts.slice(1, 3).join(', ')
-  return { label, secondaryLabel }
+  // O Nominatim devolve `class` (amenity, shop…) e `type` (pharmacy, cafe…).
+  // O `type` é o que corresponde à `class` do vocabulário do MapTiler, então
+  // ele vai primeiro; a `class` entra como segunda tentativa.
+  return { label, secondaryLabel, poiCategory: poiCategoryForClass(result.type, result.class) }
 }
 
 /**
@@ -121,8 +140,8 @@ class NominatimGeocodingProvider implements GeocodingProvider {
 
     const results = (await response.json()) as NominatimResult[]
     return results.map((result) => {
-      const { label, secondaryLabel } = describeNominatimResult(result)
-      return { label, secondaryLabel, point: { lng: Number(result.lon), lat: Number(result.lat) } }
+      const { label, secondaryLabel, poiCategory } = describeNominatimResult(result)
+      return { label, secondaryLabel, poiCategory, point: { lng: Number(result.lon), lat: Number(result.lat) } }
     })
   }
 
@@ -292,11 +311,17 @@ function escapeOverpassRegex(value: string): string {
   return regexEscaped.replace(/"/g, '\\"')
 }
 
-function describeOverpassElement(tags: Record<string, string>): { label: string; secondaryLabel: string } {
+function describeOverpassElement(tags: Record<string, string>): {
+  label: string
+  secondaryLabel: string
+  poiCategory: PoiCategory
+} {
   const label = tags.name ?? 'Local'
+  // O valor da tag (`amenity=pharmacy`, `shop=bakery`) É o vocabulário de
+  // classe da biblioteca — passa direto pela mesma função de fallback.
   const categoryKey = OVERPASS_POI_TAG_KEYS.map((key) => tags[key]).find(Boolean)
   const secondaryLabel = (categoryKey && OVERPASS_CATEGORY_LABEL[categoryKey]) || 'Ponto de interesse'
-  return { label, secondaryLabel }
+  return { label, secondaryLabel, poiCategory: poiCategoryForClass(categoryKey) }
 }
 
 const overpassPoiCache = new Map<string, Promise<GeocodingResult[]>>()
@@ -369,8 +394,8 @@ class OverpassPoiProvider implements PoiProvider {
             element.type === 'node'
               ? { lat: element.lat as number, lng: element.lon as number }
               : { lat: (element.center as { lat: number; lon: number }).lat, lng: (element.center as { lat: number; lon: number }).lon }
-          const { label, secondaryLabel } = describeOverpassElement(element.tags as Record<string, string>)
-          return { label, secondaryLabel, point }
+          const { label, secondaryLabel, poiCategory } = describeOverpassElement(element.tags as Record<string, string>)
+          return { label, secondaryLabel, poiCategory, point }
         })
       overpassPoiCache.set(cacheKey, Promise.resolve(results))
       return results

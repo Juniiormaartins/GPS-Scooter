@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { badgeUrl } from '@/components/map/poiLibrary'
 import { ListRow, SectionLabel } from '@/components/ui/primitives'
 import type { LngLat } from '@/config/region'
 import { useAddressSuggestions } from '@/hooks/useAddressSuggestions'
@@ -206,9 +207,22 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 key={`${result.point.lat},${result.point.lng}`}
                 divider
                 iconShape="circle"
-                // Relógio + tom neutro distingue "já pesquisei isso antes" de um resultado novo da busca.
+                // Relógio + tom neutro distingue "já pesquisei isso antes" de
+                // um resultado novo da busca. Quando o resultado tem categoria
+                // conhecida, o ícone passa a ser o BADGE dela — o mesmo que o
+                // lugar tem no mapa, então a lista e o mapa falam a mesma
+                // língua e dá para distinguir farmácia de posto de relance.
+                bareIcon={!result.fromHistory && result.poiCategory != null}
                 tone={result.fromHistory ? 'neutral' : 'accent'}
-                icon={result.fromHistory ? <ClockIcon /> : <PinIcon />}
+                icon={
+                  result.fromHistory ? (
+                    <ClockIcon />
+                  ) : result.poiCategory ? (
+                    <img src={badgeUrl(result.poiCategory)} alt="" aria-hidden="true" className="h-11 w-11" />
+                  ) : (
+                    <PinIcon />
+                  )
+                }
                 title={result.label}
                 subtitle={result.secondaryLabel}
                 trailing={userPoint ? `≈${formatDistance(haversineDistanceMeters(userPoint, result.point))}` : undefined}

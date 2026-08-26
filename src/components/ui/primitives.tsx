@@ -122,6 +122,13 @@ export function StatTile({
 export function ListRow({
   icon,
   iconShape = 'square',
+  /**
+   * O ícone já tem forma e cor próprias e NÃO deve ir dentro do bloco de
+   * fundo — é o caso do badge de POI, que traz squircle, gradiente da família
+   * e anel branco. Envolvê-lo num tile cinza esconderia justamente a cor que
+   * identifica a categoria.
+   */
+  bareIcon = false,
   tone = 'neutral',
   title,
   subtitle,
@@ -132,6 +139,7 @@ export function ListRow({
 }: {
   icon?: ReactNode
   iconShape?: 'square' | 'circle'
+  bareIcon?: boolean
   tone?: 'neutral' | 'accent' | 'warn' | 'go'
   title: ReactNode
   subtitle?: ReactNode
@@ -159,8 +167,8 @@ export function ListRow({
       {icon && (
         <span
           className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center ${
-            iconShape === 'circle' ? 'rounded-pill' : 'rounded-md'
-          } ${TILE}`}
+            bareIcon ? '' : `${iconShape === 'circle' ? 'rounded-pill' : 'rounded-md'} ${TILE}`
+          }`}
         >
           {icon}
         </span>
