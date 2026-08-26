@@ -59,7 +59,16 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
   const completo = rangeKm != null && speedKmh != null
 
   const selectPreset = (id: VehicleModelId) => {
+    // Tocar no veículo JÁ selecionado não faz nada. Sem isto, um toque
+    // acidental no card apaga os números que a pessoa acabou de digitar — e
+    // "confirmar" a escolha atual é um gesto natural, ninguém espera que ele
+    // destrua algo.
+    if (id === modelId) return
+
     setModelId(id)
+    // Trocar de veículo TROCA os números para os de catálogo daquele modelo, e
+    // isso é o certo: são outro veículo e outras especificações. O que não pode
+    // é o caminho inverso — editar número trocando de veículo.
     const preset = VEHICLE_PRESETS.find((entry) => entry.id === id)
     if (preset) {
       setRangeKm(preset.rangeKm)
@@ -94,17 +103,32 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
             speedKmh={speedKmh}
             ratedSpeedKmh={ratedSpeedKmh}
             onSelect={selectPreset}
+            /*
+              AJUSTAR OS NÚMEROS NÃO TROCA O VEÍCULO.
+
+              Bug relatado: escolher "Scooter elétrica", trocar a autonomia de
+              40 para 120 (o valor real do veículo do usuário) DESMARCAVA a
+              scooter. Aí, ao remarcá-la, os 120 voltavam para 40 — não havia
+              como dizer "tenho uma scooter, e a minha faz 120 km".
+
+              E o estrago passava da tela: `custom` herda o perfil de mobilidade
+              da SCOOTER (ver mobilityProfiles). Um usuário de PATINETE que
+              mexesse na autonomia virava `custom` e passava a ser roteado com
+              as regras da scooter, onde avenida arterial é `caution` em vez de
+              `unsuitable`. Ou seja, ajustar um número desligava silenciosamente
+              a proteção que é a razão de existir do app.
+
+              O tipo do veículo e os números do veículo são coisas diferentes: o
+              tipo decide em que vias ele pode andar, os números descrevem
+              aquela unidade específica. Editar um nunca deve mexer no outro.
+            */
             onRangeChange={(value) => {
               setRangeKm(value)
               // Autonomia digitada à mão vale para a velocidade que ele anda:
               // o número veio da experiência dele, não do catálogo.
               if (speedKmh != null) setRatedSpeedKmh(speedKmh)
-              setModelId('custom')
             }}
-            onSpeedChange={(value) => {
-              setSpeedKmh(value)
-              setModelId('custom')
-            }}
+            onSpeedChange={setSpeedKmh}
           />
         ) : (
           <BatteryStep battery={battery} rangeKm={rangeKm ?? preferences.rangeKm} onChange={setBattery} />

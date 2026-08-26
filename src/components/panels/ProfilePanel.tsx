@@ -168,7 +168,9 @@ export function ProfilePanel({
               selected: speed === preferences.referenceSpeedKmh,
             }))}
             onSelect={(key) => {
-              onUpdatePreferences({ referenceSpeedKmh: Number(key), vehicleModelId: 'custom' })
+              // NÃO mexe no `vehicleModelId`: velocidade é um número DO veículo,
+              // não outro veículo. Ver o comentário em VehicleOnboarding.
+              onUpdatePreferences({ referenceSpeedKmh: Number(key) })
               setOpenPicker(null)
             }}
           />
@@ -191,7 +193,7 @@ export function ProfilePanel({
               selected: range === preferences.rangeKm,
             }))}
             onSelect={(key) => {
-              onUpdatePreferences({ rangeKm: Number(key), vehicleModelId: 'custom' })
+              onUpdatePreferences({ rangeKm: Number(key) })
               setOpenPicker(null)
             }}
           />

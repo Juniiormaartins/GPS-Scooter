@@ -21,7 +21,21 @@ export type RoutePreference = 'tranquil' | 'balanced' | 'fast'
 export type AvoidanceId = 'express-roads' | 'unpaved' | 'steep-climbs' | 'steep-descents'
 export type ThemeMode = 'dark' | 'light'
 
-/** Modelos oferecidos na seleção de veículo. `custom` guarda o que o usuário ajustar manualmente. */
+/**
+ * Modelos oferecidos na seleção de veículo.
+ *
+ * `custom` é LEGADO e nada mais o produz. Ele existia para marcar "o usuário
+ * mexeu nos números", e essa era a confusão: ajustar a autonomia trocava o TIPO
+ * do veículo, e como `custom` herda o perfil de mobilidade da scooter, um
+ * usuário de patinete que mexesse num número passava a ser roteado com as
+ * regras da scooter — perdendo a proteção contra avenida arterial sem nenhum
+ * aviso.
+ *
+ * Hoje tipo e números são independentes: o tipo decide em que vias o veículo
+ * pode andar, os números descrevem aquela unidade. O valor permanece no tipo só
+ * para preferências gravadas antes desta mudança, que a migração abaixo
+ * corrige.
+ */
 export type VehicleModelId = 'scooter-32' | 'scooter-25' | 'ebike-25' | 'custom'
 
 export interface VehicleModelPreset {
@@ -240,10 +254,30 @@ export function getUserPreferences(): UserPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_PREFERENCES
-    return { ...DEFAULT_PREFERENCES, ...(JSON.parse(raw) as Partial<UserPreferences>) }
+    return migrate({ ...DEFAULT_PREFERENCES, ...(JSON.parse(raw) as Partial<UserPreferences>) })
   } catch {
     return DEFAULT_PREFERENCES
   }
+}
+
+/**
+ * Conserta preferências gravadas por versões anteriores.
+ *
+ * HOJE TRATA UM CASO SÓ: `vehicleModelId === 'custom'`. Quem está nesse estado
+ * mexeu em autonomia ou velocidade quando isso ainda trocava o tipo do veículo,
+ * e desde então vem sendo roteado com as regras da scooter — mesmo tendo
+ * escolhido patinete ou bicicleta.
+ *
+ * NÃO DÁ PARA ADIVINHAR qual era o tipo certo: a informação foi perdida no
+ * momento em que `custom` sobrescreveu o valor. Chutar seria pior que perguntar,
+ * porque um chute errado mantém exatamente o problema que esta migração existe
+ * para resolver. Então a configuração inicial é reaberta UMA vez, o usuário diz
+ * qual é o veículo, e os números que ele já tinha são preservados (o onboarding
+ * parte deles).
+ */
+function migrate(preferences: UserPreferences): UserPreferences {
+  if (preferences.vehicleModelId !== 'custom') return preferences
+  return { ...preferences, onboardingCompletedAt: null }
 }
 
 export function setUserPreferences(preferences: UserPreferences) {
@@ -265,9 +299,12 @@ export const ROUTE_PREFERENCE_TOLERANCE: Record<RoutePreference, number> = {
  * Rótulo do veículo ativo. Fonte única de verdade para a UI: quando o usuário
  * escolhe outro modelo no Perfil, TODAS as telas passam a mostrar este valor.
  *
- * `custom` aparece quando velocidade/autonomia foram ajustadas à mão, saindo
- * de qualquer preset — nesse caso o rótulo descreve o que foi configurado em
- * vez de mentir dizendo que ainda é um dos modelos prontos.
+ * Ajustar autonomia ou velocidade NÃO muda o rótulo, e é o correto: quem tem
+ * uma scooter cujo alcance real é 120 km continua tendo uma scooter. O número
+ * ajustado aparece ao lado, nas telas que o mostram.
+ *
+ * O ramo de "veículo personalizado" só é alcançado por preferências gravadas
+ * antes de tipo e números serem separados.
  */
 export function resolveVehicleLabel(preferences: UserPreferences): string {
   const preset = VEHICLE_PRESETS.find((entry) => entry.id === preferences.vehicleModelId)
