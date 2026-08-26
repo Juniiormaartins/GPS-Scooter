@@ -62,10 +62,6 @@ export function compareRoutes(current: ScoredRoute, candidate: ScoredRoute): Rou
  * empate, pela mais curta. Devolve null quando todas repetem o caminho atual —
  * caso em que a interface avisa discretamente em vez de fingir uma opção.
  */
-export function pickAlternative(current: ScoredRoute, candidates: ScoredRoute[]): ScoredRoute | null {
-  return pickAlternatives(current, candidates, 1)[0] ?? null
-}
-
 /**
  * Quantas alternativas a comparação mostra.
  *
@@ -73,7 +69,7 @@ export function pickAlternative(current: ScoredRoute, candidates: ScoredRoute[])
  * movimento não é comparar — é ler uma lista. Três (a atual mais duas) é o que
  * cabe na sheet sem rolagem e o que uma pessoa consegue pesar de relance.
  */
-export const MAX_ALTERNATIVES = 2
+const MAX_ALTERNATIVES = 2
 
 /**
  * TODAS as alternativas realmente diferentes, ordenadas.

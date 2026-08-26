@@ -11,7 +11,7 @@ import {
   type VehicleModelId,
 } from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
-import { isSpeechSupported, listPortugueseVoices, onVoicesChanged } from '@/services/navigation/voiceGuidance'
+import { describeVoice, isSpeechSupported, listPortugueseVoices, onVoicesChanged } from '@/services/navigation/voiceGuidance'
 import { AVATAR_ACCEPTED_TYPES, prepareAvatar } from '@/services/avatar'
 
 interface ProfilePanelProps {
@@ -390,16 +390,28 @@ function VoiceGroup({
 
   const selected = voices.find((voice) => voice.voiceURI === selectedUri)
 
+  /**
+   * VOZ ESCOLHIDA QUE SUMIU.
+   *
+   * A escolha persiste em `localStorage`, mas a voz é do APARELHO: o usuário
+   * pode desinstalá-la, ou abrir o app noutro navegador que não a tem. Antes,
+   * a linha mostrava "Automática" e a preferência continuava apontando para um
+   * `voiceURI` inexistente — o app usava a voz padrão sem nunca dizer que a
+   * escolha havia se perdido.
+   */
+  const escolhaPerdida = selectedUri != null && selected == null
+
   return (
     <SettingsGroup
       title="Navegação por voz"
-      footnote="Só aparecem as vozes já instaladas neste aparelho. Para ter outras opções, instale vozes em português nas configurações do sistema."
+      footnote="Só aparecem as vozes já instaladas neste aparelho, em português. Vozes marcadas como “precisa de internet” podem falhar sem sinal — no trânsito, prefira uma do aparelho. Para ter outras opções, instale vozes em português nas configurações do sistema."
     >
       <SettingsRow
         inGroup
         label="Voz das instruções"
+        description={escolhaPerdida ? 'A voz escolhida não está mais instalada — usando a automática' : undefined}
         control="value"
-        value={selected ? selected.name : 'Automática'}
+        value={selected ? describeVoice(selected, voices) : 'Automática'}
         expanded={isOpen}
         onClick={onToggle}
       />
@@ -415,8 +427,13 @@ function VoiceGroup({
             },
             ...voices.map((voice) => ({
               key: voice.voiceURI,
-              label: voice.name,
-              hint: voice.lang + (voice.localService ? ' · no aparelho' : ' · online'),
+              // Nome com qualificador quando ele se repete na lista — no iOS a
+              // mesma voz aparece em versão compacta, aprimorada e premium,
+              // as três com o mesmo nome.
+              label: describeVoice(voice, voices),
+              hint:
+                voice.lang +
+                (voice.localService ? ' · no aparelho' : ' · precisa de internet'),
               selected: voice.voiceURI === selectedUri,
             })),
           ]}

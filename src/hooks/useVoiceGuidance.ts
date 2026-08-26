@@ -17,7 +17,7 @@ import type { CandidateRoute, RouteStep } from '@/types/routing'
  *   1. ANTECIPADO  — "Em 400 metros, vire à direita para Rua 10."
  *                    Só quando o passo é longo o bastante para o aviso caber;
  *                    num passo de 80 m ele dispararia junto com o comando.
- *   2. PREPARAÇÃO  — "Prepare-se para virar à direita."
+ *   2. PREPARAÇÃO  — "Em 150 metros, vire à direita." (ver buildSpokenInstruction)
  *                    O momento de mudar de faixa, olhar o retrovisor.
  *   3. COMANDO     — o texto do provedor, no instante da manobra.
  *   4. SEGUIMENTO  — "Continue por 800 metros."
@@ -178,7 +178,22 @@ function buildSpokenInstruction(
   }
 
   if (stage === 'prepare') {
-    return `Prepare-se: ${lowercaseFirst(stripTrailingPeriod(alertText))}.`
+    /**
+     * A DISTÂNCIA no lugar de "Prepare-se".
+     *
+     * Duas razões, e a segunda é a que decide:
+     *
+     * 1. PRONÚNCIA. O motor lia "Prepare-se" como uma palavra só e saía
+     *    "preparice" — medido pelos eventos `boundary` (ver speakableText em
+     *    voiceGuidance.ts). A normalização já conserta isso para qualquer
+     *    enclítico que venha do provedor, mas o texto que NÓS escrevemos não
+     *    precisa depender dela.
+     * 2. INFORMAÇÃO. A 150 m, "em 150 metros" diz mais que "prepare-se": o
+     *    usuário sabe exatamente quando agir, e é o que todo navegador de
+     *    verdade fala nesse estágio. A iminência vem do número.
+     */
+    const rounded = Math.max(50, Math.round(distanceMeters / 50) * 50)
+    return `Em ${rounded} metros, ${lowercaseFirst(stripTrailingPeriod(alertText))}.`
   }
 
   const base = stripTrailingPeriod(commandText)

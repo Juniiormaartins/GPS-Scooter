@@ -32,10 +32,114 @@ let queue: QueueItem[] = []
 let isSpeaking = false
 let preferredVoiceUri: string | null = null
 
-/** Vozes em português disponíveis NO DISPOSITIVO — a lista real, nunca inventada. */
+/**
+ * NORMALIZAÇÃO FONÉTICA — o texto que o motor RECEBE, não o que a tela mostra.
+ *
+ * PROBLEMA REAL, medido e não suposto. O aviso de preparação era
+ * "Prepare-se: vire à direita." e o usuário ouvia algo como "preparice".
+ * Instrumentando os eventos `boundary` do próprio motor:
+ *
+ *   "Prepare-se: vire à direita."  → boundary de 1 palavra, charLength 10
+ *   "Prepare se: vire à direita."  → boundary de 2 palavras, 7 e 2
+ *
+ * Ou seja: o motor trata o pronome enclítico como parte da MESMA palavra,
+ * aplica a tonicidade de "preparese" e sai a sílaba errada. Separar devolve
+ * duas palavras e cada uma sai correta.
+ *
+ * O conjunto de pronomes é FECHADO em português, e é por isso que a troca é
+ * segura: `BR-153` não casa (dígitos), `Anhanguera-Norte` não casa
+ * (maiúscula), e um nome de rua com hífen comum também não. Só verbo seguido
+ * de pronome átono.
+ *
+ * Aplicado no ponto de FALA, e não em quem monta a frase, porque boa parte do
+ * texto vem pronta do provedor de rota. E não é hipótese: varrendo as frases
+ * reais de um trajeto, VINTE delas usam "Mantenha-se à direita/esquerda" — o
+ * mesmo padrão, em toda instrução de manter-se na faixa.
+ *
+ * `-o`, `-a`, `-os`, `-as` ficaram DE FORA de propósito. São enclíticos
+ * legítimos, mas colidem com nome próprio: "Trás-os-Montes" viraria "Trás os
+ * Montes". Como nenhuma instrução de navegação os usa, o risco não compensa.
+ */
+/*
+  Alternancia do MAIS LONGO para o mais curto e limite de palavra no fim, os
+  dois obrigatorios: sem a ordem, `lhe` casaria dentro de `lhes` e sobraria um
+  "s" solto; sem o limite, `-la` casaria em `-lado` e `-no` em
+  `Anhanguera-Norte`, quebrando nome de rua.
+*/
+const ENCLITIC = /([a-záàâãéêíóôõúç])-(lhes|lhe|los|las|nos|vos|se|me|te|lo|la)\b/gi
+
+export function speakableText(text: string): string {
+  return (
+    text
+      .replace(ENCLITIC, '$1 $2')
+      // Espaços repetidos viram pausa audível em alguns motores.
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  )
+}
+
+/**
+ * Vozes em português disponíveis NO DISPOSITIVO — a lista real, nunca inventada.
+ *
+ * DEDUPLICADA e ORDENADA. O `getVoices()` pode devolver a mesma voz mais de
+ * uma vez (observado em navegadores que agregam mais de um mecanismo), e a
+ * ordem em que ela chega é a do sistema, não uma que ajude a escolher. Aqui:
+ * pt-BR antes de pt-PT — o produto é brasileiro e uma voz de Portugal lê
+ * "vire à direita" com outra prosódia —, voz do aparelho antes de voz online
+ * (a online falha sem rede, no meio do trânsito), e nome como desempate.
+ */
 export function listPortugueseVoices(): SpeechSynthesisVoice[] {
   if (!isSpeechSupported) return []
-  return window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith('pt'))
+
+  const porUri = new Map<string, SpeechSynthesisVoice>()
+  for (const voice of window.speechSynthesis.getVoices()) {
+    if (!voice.lang.toLowerCase().startsWith('pt')) continue
+    if (!porUri.has(voice.voiceURI)) porUri.set(voice.voiceURI, voice)
+  }
+
+  return [...porUri.values()].sort((a, b) => {
+    const brA = a.lang.toLowerCase().startsWith('pt-br') ? 0 : 1
+    const brB = b.lang.toLowerCase().startsWith('pt-br') ? 0 : 1
+    if (brA !== brB) return brA - brB
+    if (a.localService !== b.localService) return a.localService ? -1 : 1
+    return a.name.localeCompare(b.name, 'pt-BR')
+  })
+}
+
+/**
+ * Rótulo da voz na interface.
+ *
+ * O nome do sistema NÃO é único: no iOS a mesma voz aparece em versão
+ * compacta, aprimorada e premium, as três chamadas "Luciana" — foi o que o
+ * usuário viu como opções repetidas. Aqui o nome ganha um qualificador só
+ * QUANDO ele se repete na lista, para não poluir o caso comum.
+ *
+ * O qualificador sai do `voiceURI`, que é onde a distinção realmente está
+ * (`com.apple.voice.compact.pt-BR.Luciana`), com o locale como segunda opção
+ * e um índice como último recurso — nunca "Voz 2" quando dá para dizer
+ * "Aprimorada".
+ */
+export function describeVoice(voice: SpeechSynthesisVoice, all: SpeechSynthesisVoice[]): string {
+  const homonimos = all.filter((entry) => entry.name === voice.name)
+  if (homonimos.length <= 1) return voice.name
+
+  const uri = voice.voiceURI.toLowerCase()
+  const qualidade =
+    uri.includes('premium') || uri.includes('siri')
+      ? 'premium'
+      : uri.includes('enhanced')
+        ? 'aprimorada'
+        : uri.includes('compact')
+          ? 'compacta'
+          : null
+
+  if (qualidade) return `${voice.name} · ${qualidade}`
+
+  // Sem pista de qualidade: o locale distingue pt-BR de pt-PT.
+  const outros = homonimos.filter((entry) => entry.lang !== voice.lang)
+  if (outros.length > 0) return `${voice.name} · ${voice.lang}`
+
+  return `${voice.name} · ${homonimos.indexOf(voice) + 1}`
 }
 
 /**
@@ -68,7 +172,9 @@ function drainQueue() {
   const item = queue.shift()!
   isSpeaking = true
 
-  const utterance = new SpeechSynthesisUtterance(item.text)
+  // Normaliza AQUI: é o último ponto antes do motor, então nada escapa —
+  // inclusive o texto que veio pronto do provedor de rota.
+  const utterance = new SpeechSynthesisUtterance(speakableText(item.text))
   utterance.lang = 'pt-BR'
   utterance.rate = 1.0
   const voice = resolveVoice()
