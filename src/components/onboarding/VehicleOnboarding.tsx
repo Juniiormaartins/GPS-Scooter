@@ -36,8 +36,15 @@ type Step = 'vehicle' | 'battery'
 export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingProps) {
   const [step, setStep] = useState<Step>('vehicle')
   const [modelId, setModelId] = useState<VehicleModelId>(preferences.vehicleModelId)
-  const [rangeKm, setRangeKm] = useState(preferences.rangeKm)
-  const [speedKmh, setSpeedKmh] = useState(preferences.referenceSpeedKmh)
+  /*
+    NULL = CAMPO VAZIO, e é um estado legítimo.
+
+    A pergunta continua obrigatória — "Continuar" fica desabilitado enquanto
+    faltar resposta —, mas apagar o número para digitar outro é parte normal de
+    responder, não uma tentativa de burlar o formulário. Ver NumberField.
+  */
+  const [rangeKm, setRangeKm] = useState<number | null>(preferences.rangeKm)
+  const [speedKmh, setSpeedKmh] = useState<number | null>(preferences.referenceSpeedKmh)
   /**
    * Velocidade em que a autonomia informada vale.
    *
@@ -47,6 +54,9 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
    */
   const [ratedSpeedKmh, setRatedSpeedKmh] = useState(preferences.ratedSpeedKmh)
   const [battery, setBattery] = useState(preferences.batteryPercent ?? 80)
+
+  /** A pergunta é obrigatória: sem os dois números não dá para continuar. */
+  const completo = rangeKm != null && speedKmh != null
 
   const selectPreset = (id: VehicleModelId) => {
     setModelId(id)
@@ -59,10 +69,13 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
   }
 
   const finish = (withBattery: boolean) => {
+    // Só é alcançável com os dois preenchidos (ver `completo`), mas o `??`
+    // mantém o tipo honesto em vez de afirmar com `!` algo que o tipo não
+    // garante.
     onFinish({
       vehicleModelId: modelId,
-      rangeKm,
-      referenceSpeedKmh: speedKmh,
+      rangeKm: rangeKm ?? preferences.rangeKm,
+      referenceSpeedKmh: speedKmh ?? preferences.referenceSpeedKmh,
       ratedSpeedKmh,
       onboardingCompletedAt: Date.now(),
       ...(withBattery
@@ -85,7 +98,7 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
               setRangeKm(value)
               // Autonomia digitada à mão vale para a velocidade que ele anda:
               // o número veio da experiência dele, não do catálogo.
-              setRatedSpeedKmh(speedKmh)
+              if (speedKmh != null) setRatedSpeedKmh(speedKmh)
               setModelId('custom')
             }}
             onSpeedChange={(value) => {
@@ -94,15 +107,26 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
             }}
           />
         ) : (
-          <BatteryStep battery={battery} rangeKm={rangeKm} onChange={setBattery} />
+          <BatteryStep battery={battery} rangeKm={rangeKm ?? preferences.rangeKm} onChange={setBattery} />
         )}
       </div>
 
       <div className="shrink-0 pt-4">
         {step === 'vehicle' ? (
-          <Button variant="primary" size="lg" onClick={() => setStep('battery')}>
-            Continuar
-          </Button>
+          <>
+            <Button variant="primary" size="lg" disabled={!completo} onClick={() => setStep('battery')}>
+              Continuar
+            </Button>
+            {/*
+              A razão de o botão estar desabilitado, dita em vez de deixada para
+              o usuário descobrir. Um botão apagado sem explicação é um beco.
+            */}
+            {!completo && (
+              <p className="mt-2 text-center text-[13px] font-bold text-content-tertiary">
+                Preencha autonomia e velocidade para continuar.
+              </p>
+            )}
+          </>
         ) : (
           <>
             <Button variant="go" size="lg" onClick={() => finish(true)}>
@@ -132,16 +156,18 @@ function VehicleStep({
   onSpeedChange,
 }: {
   modelId: VehicleModelId
-  rangeKm: number
-  speedKmh: number
+  rangeKm: number | null
+  speedKmh: number | null
   ratedSpeedKmh: number
   onSelect: (id: VehicleModelId) => void
-  onRangeChange: (value: number) => void
-  onSpeedChange: (value: number) => void
+  onRangeChange: (value: number | null) => void
+  onSpeedChange: (value: number | null) => void
 }) {
   // Só aparece quando há de fato diferença entre as duas velocidades.
+  // Só compara quando os dois números existem — com o campo vazio não há o que
+  // ajustar, e a frase some junto em vez de mostrar NaN.
   const ajustada =
-    Math.abs(speedKmh - ratedSpeedKmh) >= 3
+    rangeKm != null && speedKmh != null && Math.abs(speedKmh - ratedSpeedKmh) >= 3
       ? speedAdjustedRangeKm({ rangeKm, ratedSpeedKmh, referenceSpeedKmh: speedKmh } as UserPreferences)
       : null
 
@@ -207,7 +233,7 @@ function VehicleStep({
           </p>
         )}
 
-        {speedKmh > 32 && (
+        {speedKmh != null && speedKmh > 32 && (
           <p className="mt-2 text-[12.5px] font-semibold leading-snug text-content-tertiary">
             Acima de 32 km/h o veículo deixa de se enquadrar como autopropelido, e as regras de
             circulação são outras — as rotas continuam sendo traçadas pelo perfil escolhido acima.
@@ -245,6 +271,30 @@ function BatteryStep({
   )
 }
 
+/**
+ * Campo numérico que se deixa APAGAR.
+ *
+ * BUG REAL QUE ISTO CONSERTA, e ele tornava o campo praticamente inutilizável.
+ * A versão anterior aplicava `Math.max(min, Math.min(max, n))` a cada tecla.
+ * Apagar tudo produz string vazia, `Number('')` é 0, e 0 é finito — então o
+ * campo, em vez de ficar em branco, grudava no MÍNIMO (5 km e 6 km/h). A partir
+ * daí cada dígito digitado se concatenava com o número preso: digitar "10" num
+ * campo travado em 6 dava 610, que o clamp então cortava para o máximo, 90.
+ *
+ * A CAUSA DE FUNDO é validar durante a DIGITAÇÃO. Um número em construção é
+ * quase sempre inválido — "" e "1" são estados legítimos no caminho para "120"
+ * — e corrigi-los na hora impede o usuário de chegar ao valor que ele quer.
+ *
+ * Aqui o campo guarda TEXTO enquanto está sendo editado, aceita vazio, e só
+ * ajusta à faixa quando o dedo sai (`onBlur`). A obrigatoriedade continua: em
+ * branco, o botão de continuar fica desabilitado — a pergunta tem de ser
+ * respondida, mas o caminho até a resposta é livre.
+ *
+ * `type="text"` com `inputMode="numeric"`, e não `type="number"`: o campo
+ * numérico do navegador tem comportamento próprio de incremento, aceita "e" e
+ * "-", e em alguns navegadores devolve string vazia para valores que ele julga
+ * inválidos — o que reintroduziria exatamente esta classe de bug.
+ */
 function NumberField({
   label,
   unit,
@@ -255,24 +305,34 @@ function NumberField({
 }: {
   label: string
   unit: string
-  value: number
+  /** null = campo vazio. É um estado válido enquanto se digita. */
+  value: number | null
   min: number
   max: number
-  onChange: (value: number) => void
+  onChange: (value: number | null) => void
 }) {
   return (
     <label className="flex-1">
       <span className="block text-[12px] font-bold uppercase tracking-wide text-content-tertiary">{label}</span>
       <span className="mt-1 flex items-baseline gap-1 rounded-lg border border-hairline/[.12] bg-surface-tile px-3 py-2">
         <input
-          type="number"
+          type="text"
           inputMode="numeric"
-          value={value}
-          min={min}
-          max={max}
+          value={value == null ? '' : String(value)}
           onChange={(event) => {
-            const next = Number(event.target.value)
-            if (Number.isFinite(next)) onChange(Math.max(min, Math.min(max, next)))
+            const texto = event.target.value.replace(/\D/g, '')
+            if (texto === '') {
+              onChange(null)
+              return
+            }
+            // Sem clamp aqui: "1" a caminho de "120" não pode virar o mínimo.
+            // O ajuste à faixa acontece no blur.
+            onChange(Number(texto))
+          }}
+          onBlur={() => {
+            if (value == null) return
+            const ajustado = Math.max(min, Math.min(max, value))
+            if (ajustado !== value) onChange(ajustado)
           }}
           className="w-full min-w-0 bg-transparent text-[18px] font-extrabold text-content-primary outline-none"
         />
