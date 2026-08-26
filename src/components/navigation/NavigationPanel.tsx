@@ -9,6 +9,12 @@ import { TopScrim } from '@/components/ui/TopScrim'
 
 interface NavigationPanelProps {
   scoredRoute: ScoredRoute
+  /**
+   * Aviso de trecho crítico à frente, quando houver. Vem pronto de fora (ver
+   * useSegmentAlerts) porque a regra de QUANDO avisar depende de histórico e
+   * relógio, que não são assunto de um componente de apresentação.
+   */
+  segmentAlert?: ReactNode
   progress: NavigationProgress | null
   gpsSample: GeolocationSample | null
   /** Velocidade real de deslocamento já filtrada (ver services/navigation/speedTracker.ts). null = sem leitura confiável. */
@@ -55,6 +61,7 @@ interface NavigationPanelProps {
  */
 export function NavigationPanel({
   scoredRoute,
+  segmentAlert,
   progress,
   gpsSample,
   currentSpeedKmh,
@@ -128,6 +135,13 @@ export function NavigationPanel({
             {locationError ?? 'Obtendo sua localização…'}
           </div>
         )}
+
+        {/*
+          O aviso de trecho entra AQUI: depois do card de manobra, antes do
+          "saiu da rota". A ordem da pilha é a ordem da urgência — para onde ir
+          agora, o que vem à frente, e só então o estado da navegação.
+        */}
+        {segmentAlert}
 
         {segmentWarning}
 

@@ -1,4 +1,6 @@
+import { BatteryGauge } from '@/components/vehicle/BatteryDial'
 import { resolveVehicleLabel, type UserPreferences } from '@/config/userPreferences'
+import type { AutonomyState } from '@/services/vehicle/autonomy'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 
 interface VehicleStatusBarProps {
@@ -7,6 +9,14 @@ interface VehicleStatusBarProps {
   preferences: UserPreferences
   /** Abre o seletor de veículo. Ausente = a barra é só informativa. */
   onOpen?: () => void
+  /**
+   * Autonomia estimada — ver services/vehicle/autonomy.ts.
+   *
+   * Quando existe, ela SUBSTITUI o alcance de catálogo no número à direita:
+   * "40 km" com a bateria pela metade é uma promessa que o app não pode
+   * cumprir, e era o que a barra mostrava antes de haver estado de bateria.
+   */
+  autonomy?: AutonomyState
   /** Variante compacta (raio 22px), usada abaixo da sheet de destino — handoff tela 03. */
   compact?: boolean
 }
@@ -28,10 +38,35 @@ interface VehicleStatusBarProps {
  * pareada`. "Pareada" só aparece quando há pareamento de verdade: escrever
  * isso com o Bluetooth desconectado seria afirmar um estado inexistente.
  */
-export function VehicleStatusBar({ bluetooth, preferences, onOpen, compact = false }: VehicleStatusBarProps) {
+export function VehicleStatusBar({
+  bluetooth,
+  preferences,
+  onOpen,
+  autonomy,
+  compact = false,
+}: VehicleStatusBarProps) {
   const isConnected = bluetooth.status === 'connected'
+  /*
+    TRÊS FONTES DE AUTONOMIA, em ordem de qualidade decrescente — e a barra
+    precisa dizer QUAL delas está usando, porque as três merecem confiança
+    diferente:
+
+      1. telemetria por Bluetooth (leitura real do veículo);
+      2. bateria informada pelo usuário, decaída pela distância (estimativa);
+      3. alcance de catálogo do perfil (nem estimativa: é o máximo teórico).
+
+    Mostrar as três com o mesmo rótulo, como antes, fazia o número 3 parecer o
+    número 1.
+  */
   const hasBattery = isConnected && bluetooth.batteryPercent != null
-  const rangeKm = hasBattery ? Math.round((bluetooth.batteryPercent! / 100) * preferences.rangeKm) : preferences.rangeKm
+  const estimated = autonomy?.remainingKm ?? null
+  const rangeKm = hasBattery
+    ? Math.round((bluetooth.batteryPercent! / 100) * preferences.rangeKm)
+    : estimated != null
+      ? Math.round(estimated)
+      : preferences.rangeKm
+  const rangeLabel = hasBattery ? 'AUTONOMIA' : estimated != null ? 'AUTONOMIA EST.' : 'ALCANCE EST.'
+  const batteryPercent = hasBattery ? bluetooth.batteryPercent! : (autonomy?.estimatedPercent ?? null)
 
   const subtitle = isConnected
     ? hasBattery
@@ -66,8 +101,13 @@ export function VehicleStatusBar({ bluetooth, preferences, onOpen, compact = fal
           {rangeKm} km
         </span>
         <span className="mt-0.5 block text-[10.5px] font-extrabold tracking-[0.6px] text-content-quaternary">
-          {hasBattery ? 'AUTONOMIA' : 'ALCANCE EST.'}
+          {rangeLabel}
         </span>
+        {batteryPercent != null && (
+          <span className="mt-1 flex w-14 justify-end">
+            <BatteryGauge percent={batteryPercent} />
+          </span>
+        )}
       </span>
 
       {onOpen && (

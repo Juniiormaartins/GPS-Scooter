@@ -140,6 +140,39 @@ export interface UserPreferences {
    * de celular tem vários megabytes, e o localStorage inteiro costuma ter 5.
    */
   avatarDataUrl: string | null
+
+  /**
+   * Quando a configuração inicial do veículo foi concluída. null = nunca.
+   *
+   * É o que decide se o app abre no onboarding. Guardar a DATA e não um
+   * booleano é de propósito: no dia em que houver uma etapa nova a
+   * apresentar, dá para compará-la com esta data e mostrar só a diferença,
+   * em vez de reapresentar tudo a quem já configurou.
+   */
+  onboardingCompletedAt: number | null
+
+  /**
+   * BATERIA — o número que o usuário informou, não uma leitura.
+   *
+   * Estes três campos são crus de propósito; quem quiser saber a autonomia
+   * AGORA deve chamar `autonomyState` (services/vehicle/autonomy.ts), que
+   * aplica o decaimento por distância e a confiança pela idade. Ler
+   * `batteryPercent` direto na interface é o caminho para mostrar 80% depois
+   * de 30 km rodados.
+   */
+  batteryPercent: number | null
+  batteryUpdatedAt: number | null
+  /**
+   * Odômetro desde a última informação de bateria.
+   *
+   * Cresce com o que o app REALMENTE viu o usuário percorrer em navegação —
+   * não com a distância planejada das rotas, que ele pode nunca ter feito.
+   * Zera toda vez que a bateria é informada de novo.
+   */
+  batteryDistanceSinceUpdateMeters: number
+
+  /** Camada de adequação das vias ligada no mapa (ver MapView). Preferência de visualização, não de roteamento. */
+  suitabilityLayerEnabled: boolean
 }
 
 const STORAGE_KEY = 'gps-scooter:preferences'
@@ -156,6 +189,11 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   referenceSpeedKmh: 32,
   rangeKm: 40,
   avatarDataUrl: null,
+  onboardingCompletedAt: null,
+  batteryPercent: null,
+  batteryUpdatedAt: null,
+  batteryDistanceSinceUpdateMeters: 0,
+  suitabilityLayerEnabled: false,
 }
 
 export function getUserPreferences(): UserPreferences {

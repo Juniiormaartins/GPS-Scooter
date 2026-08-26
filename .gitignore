@@ -21,3 +21,4 @@ yarn-error.log*
 
 # ferramentas locais baixadas (binário, não faz parte do código)
 .tools/
+.vercel

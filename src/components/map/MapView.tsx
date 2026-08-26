@@ -3,9 +3,10 @@ import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
-import { MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM, SEVERITY_SHEEN } from '@/config/theme'
+import { ACCENT, MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM, SEVERITY_SHEEN } from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
+import { applySuitabilityLayer } from '@/components/map/suitabilityLayer'
 import { DESTINATION_ASSETS, DESTINATION_SIZES } from '@/components/map/poiLibrary'
 import { RiderAnimator, type RiderFrame } from '@/components/map/riderAnimator'
 import {
@@ -104,6 +105,15 @@ interface MapViewProps {
    * — a troca é só de asset: âncora, halo e cone são idênticos nos três.
    */
   vehicleModelId?: VehicleModelId
+  /** Camada de adequação das vias ligada (ver suitabilityLayer.ts). */
+  suitabilityLayer?: boolean
+  /**
+   * Raio de alcance a desenhar em volta do usuário, em km. null = não desenhar.
+   *
+   * É o modo explorar: transforma "30 km de autonomia" numa resposta
+   * geográfica. Ver ExploreSheet.
+   */
+  rangeRingKm?: number | null
   /**
    * Incremente para devolver o mapa ao norte UMA vez (botão de bússola).
    * Mesmo padrão de `centerRequestId`: um token, não um booleano, para que
@@ -123,6 +133,9 @@ export interface RouteSeveritySegment {
 }
 
 const ROUTE_SOURCE_ID = 'gps-scooter-route'
+const RANGE_RING_SOURCE_ID = 'gps-scooter-range-ring'
+const RANGE_RING_FILL_LAYER_ID = 'gps-scooter-range-ring-fill'
+const RANGE_RING_LINE_LAYER_ID = 'gps-scooter-range-ring-line'
 /** Mesma rota, quebrada por trecho — alimenta a linha colorida (o casing segue contínuo, sem emendas). */
 const ROUTE_SEGMENTS_SOURCE_ID = 'gps-scooter-route-segments'
 /**
@@ -582,6 +595,8 @@ export function MapView({
   isNavigating = false,
   speedKmh = null,
   vehicleModelId = 'scooter-32',
+  suitabilityLayer = false,
+  rangeRingKm = null,
   resetNorthRequestId = 0,
   onBearingChange,
   followUser = false,
@@ -648,6 +663,8 @@ export function MapView({
   speedKmhRef.current = speedKmh
   const vehicleRef = useRef(vehicleModelId)
   vehicleRef.current = vehicleModelId
+  const suitabilityRef = useRef(suitabilityLayer)
+  suitabilityRef.current = suitabilityLayer
   /** Zoom e inclinação exibidos — perseguem o alvo por quadro, ver cameraRef. */
   const cameraRef = useRef<{ zoom: number | null; pitch: number }>({ zoom: null, pitch: 0 })
 
@@ -809,6 +826,22 @@ export function MapView({
      *
      * `styledata` dispara mais de uma vez, daí a trava.
      */
+    /*
+      HANDLE DE DESENVOLVIMENTO.
+
+      Só em `dev`, e existe por um motivo concreto: verificar uma camada do
+      MapLibre (existe? com que expressão de cor? quantas feições?) é
+      impossível de fora sem uma referência ao mapa, e o React não expõe
+      nenhuma. Sem isto, a alternativa é conferir camada de mapa por
+      screenshot, que não distingue "não pintou" de "pintou fraco".
+
+      `import.meta.env.DEV` é apagado no build de produção, então nada disto
+      chega ao usuário.
+    */
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __gpsMap?: MapLibreMap }).__gpsMap = map
+    }
+
     let layersReady = false
     const setUpAppLayers = () => {
       if (layersReady || !map.getStyle()) return
@@ -821,6 +854,14 @@ export function MapView({
       applyCartography(map, themeRef.current)
       refineCartography(map, themeRef.current)
       void applyPoiIcons(map, themeRef.current, { isNavigating: isNavigatingRef.current })
+      /*
+        A camada de adequação entra ANTES das camadas de rota, e é por isso que
+        ela está aqui e não só no efeito reativo abaixo: ela se ancora no
+        primeiro símbolo do estilo, e as camadas do app são adicionadas depois
+        — a ordem resultante é malha colorida, rótulos do mapa, rota, marcador.
+        Invertida, o realce cobriria o próprio traçado da rota.
+      */
+      applySuitabilityLayer(map, { enabled: suitabilityRef.current, vehicleModelId: vehicleRef.current })
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -1092,6 +1133,115 @@ export function MapView({
     // posterior (ver fitToBounds).
     map.easeTo({ bearing: 0, pitch: 0, padding: ZERO_PADDING, duration: 400 })
   }, [isNavigating])
+
+  /**
+   * ANEL DE ALCANCE do modo explorar.
+   *
+   * Fonte e camadas criadas sob demanda e removidas junto: o anel é um estado
+   * momentâneo da interface, não parte permanente do mapa, e deixar camadas
+   * vazias penduradas no estilo custa avaliação a cada quadro para desenhar
+   * nada.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const remove = () => {
+      for (const id of [RANGE_RING_LINE_LAYER_ID, RANGE_RING_FILL_LAYER_ID]) {
+        if (map.getLayer(id)) map.removeLayer(id)
+      }
+      if (map.getSource(RANGE_RING_SOURCE_ID)) map.removeSource(RANGE_RING_SOURCE_ID)
+    }
+
+    if (rangeRingKm == null || rangeRingKm <= 0 || !userPoint) {
+      remove()
+      return
+    }
+
+    /*
+      ESPERAR O ESTILO, em vez de desistir.
+
+      BUG REAL, reproduzido: a primeira versão fazia `if (!map.isStyleLoaded())
+      return` e o anel simplesmente nunca aparecia. O efeito rodava no instante
+      em que o modo explorar abria — que costuma coincidir com carregamento de
+      tiles —, encontrava o estilo ocupado, desistia, e não voltava mais: as
+      dependências (`rangeRingKm`, `userPoint`) não mudam enquanto o usuário
+      está parado olhando a tela, então não havia segunda chance.
+
+      É a mesma armadilha que `setUpAppLayers` já documenta lá em cima. Aqui a
+      saída é a mesma: agendar uma tentativa no próximo `styledata` e cancelá-la
+      na limpeza.
+    */
+    const cancelWait = whenStyleReady(map, drawRing)
+    return () => {
+      cancelWait()
+      remove()
+    }
+
+    function drawRing() {
+      if (!map || rangeRingKm == null || !userPoint) return
+      const data = circlePolygon(userPoint, rangeRingKm)
+      const existing = map.getSource(RANGE_RING_SOURCE_ID)
+      if (existing) {
+        ;(existing as unknown as { setData: (value: unknown) => void }).setData(data)
+        return
+      }
+
+      map.addSource(RANGE_RING_SOURCE_ID, { type: 'geojson', data } as never)
+      // Preenchimento MUITO fraco: ele delimita, não colore. A área dentro do
+      // anel é onde o usuário vai olhar o mapa de verdade — tingi-la
+      // atrapalharia exatamente o que o anel existe para ajudar.
+      map.addLayer({
+        id: RANGE_RING_FILL_LAYER_ID,
+        type: 'fill',
+        source: RANGE_RING_SOURCE_ID,
+        paint: { 'fill-color': ACCENT.go, 'fill-opacity': 0.07 },
+      })
+      map.addLayer({
+        id: RANGE_RING_LINE_LAYER_ID,
+        type: 'line',
+        source: RANGE_RING_SOURCE_ID,
+        paint: { 'line-color': ACCENT.go, 'line-width': 2, 'line-opacity': 0.75, 'line-dasharray': [3, 2] },
+      })
+
+      /*
+        ENQUADRA O ANEL — e só na CRIAÇÃO, nunca nas atualizações.
+
+        Um anel de 9 km desenhado num mapa em zoom de rua fica inteiramente fora
+        da tela: o modo abriria dizendo "você alcança 9 km" sem mostrar nada. E
+        enquadrar a cada atualização (a posição chega a 1 Hz) sequestraria a
+        câmera do usuário toda vez que ele arrastasse o mapa.
+
+        O `padding` inferior é grande porque a folha do modo ocupa a parte de
+        baixo da tela — sem ele, o enquadramento centraliza o anel atrás da
+        folha, que é o mesmo que não enquadrar.
+      */
+      const [[oesteLng, sulLat], [lesteLng, norteLat]] = boundsOf(data)
+      map.fitBounds(
+        [
+          [oesteLng, sulLat],
+          [lesteLng, norteLat],
+        ],
+        { padding: { top: 90, bottom: 380, left: 40, right: 40 }, duration: 700 },
+      )
+    }
+  }, [rangeRingKm, userPoint])
+
+  /**
+   * Liga/desliga a camada de adequação e a reescreve ao trocar de veículo.
+   *
+   * Depende dos DOIS: a mesma via tem níveis diferentes para patinete e para
+   * scooter, então trocar de veículo com a camada ligada precisa repintar a
+   * cidade inteira — é justamente essa diferença que a camada existe para
+   * mostrar.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    // Mesma razão do anel de alcance: desistir por estilo ocupado deixaria o
+    // botão de camadas sem efeito, sem nenhuma segunda tentativa.
+    return whenStyleReady(map, () => applySuitabilityLayer(map, { enabled: suitabilityLayer, vehicleModelId }))
+  }, [suitabilityLayer, vehicleModelId])
 
   // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
   // interface clara sobre um mapa escuro (e vice-versa).
@@ -2310,3 +2460,86 @@ function markerClassName(kind: 'origin' | 'destination'): string {
 
 
 
+
+/**
+ * Polígono que aproxima um círculo geodésico de raio `radiusKm`.
+ *
+ * 72 vértices (5° cada): abaixo disso o anel mostra vértices visíveis no zoom
+ * de cidade, e acima disso não muda nada na tela — só engorda o GeoJSON que é
+ * reenviado para a GPU a cada movimento do usuário.
+ *
+ * A correção por `cos(lat)` na longitude é obrigatória: sem ela o "círculo"
+ * sairia achatado em latitudes distantes do equador, e Goiânia está a 16° sul.
+ */
+function circlePolygon(center: LngLat, radiusKm: number) {
+  const EARTH_KM = 6371
+  const latRad = (center.lat * Math.PI) / 180
+  const deltaLat = (radiusKm / EARTH_KM) * (180 / Math.PI)
+  const deltaLng = deltaLat / Math.max(0.01, Math.cos(latRad))
+
+  const ring: [number, number][] = []
+  for (let i = 0; i <= 72; i += 1) {
+    const angle = (i / 72) * Math.PI * 2
+    ring.push([center.lng + deltaLng * Math.cos(angle), center.lat + deltaLat * Math.sin(angle)])
+  }
+
+  return {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: { type: 'Polygon' as const, coordinates: [ring] },
+  }
+}
+
+/**
+ * Roda `action` assim que o estilo do mapa estiver utilizável — agora, se já
+ * estiver; no próximo `styledata`, se não.
+ *
+ * O CRITÉRIO É `getStyle()`, NÃO `isStyleLoaded()`, e a diferença não é
+ * cosmética — foi o que quebrou o anel de alcance na primeira tentativa.
+ *
+ * MEDIDO: neste app `isStyleLoaded()` fica false essencialmente o tempo todo.
+ * Ele só volta a true quando NADA está pendente no estilo, e aqui sempre está:
+ * a recoloração da cartografia, o registro das imagens de POI e as camadas de
+ * rota mexem no estilo continuamente. Um efeito que espera por `isStyleLoaded()`
+ * espera para sempre.
+ *
+ * `getStyle()` responde à pergunta que de fato importa para adicionar camada:
+ * o estilo já foi PARSEADO? Adicionar fonte e camada não exige que os tiles
+ * tenham chegado. É o mesmo critério que `setUpAppLayers` usa desde sempre —
+ * este helper só o generaliza.
+ *
+ * Devolve a função de limpeza que cancela a espera.
+ */
+function whenStyleReady(map: MapLibreMap, action: () => void): () => void {
+  if (map.getStyle()) {
+    action()
+    return () => {}
+  }
+
+  const retry = () => {
+    if (!map.getStyle()) return
+    map.off('styledata', retry)
+    action()
+  }
+  map.on('styledata', retry)
+  return () => map.off('styledata', retry)
+}
+
+/** Caixa envolvente de um polígono simples, no formato que `fitBounds` espera. */
+function boundsOf(feature: ReturnType<typeof circlePolygon>): [[number, number], [number, number]] {
+  const ring = feature.geometry.coordinates[0]
+  let west = Infinity
+  let south = Infinity
+  let east = -Infinity
+  let north = -Infinity
+  for (const [lng, lat] of ring) {
+    if (lng < west) west = lng
+    if (lng > east) east = lng
+    if (lat < south) south = lat
+    if (lat > north) north = lat
+  }
+  return [
+    [west, south],
+    [east, north],
+  ]
+}

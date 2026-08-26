@@ -9,7 +9,17 @@ import { MapControls } from '@/components/controls/MapControls'
 import { RoutePanel, RouteSummary } from '@/components/route/RoutePanel'
 import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet'
 import { BottomNavBar } from '@/components/layout/BottomNavBar'
+import { SegmentAlertBanner } from '@/components/navigation/SegmentAlertBanner'
+import { SuitabilityLegend } from '@/components/map/SuitabilityLegend'
+import { ExploreSheet } from '@/components/explore/ExploreSheet'
+import { exploreRadiusKm } from '@/services/vehicle/autonomy'
+import { frequentPlaces } from '@/services/storage/travelPatterns'
+import { listActivity } from '@/services/storage/activityHistory'
+import { mobilityProfile } from '@/config/mobilityProfiles'
+import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
+import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
+import { assessRouteAutonomy, autonomyState } from '@/services/vehicle/autonomy'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
 import { ArrivalSheet } from '@/components/navigation/ArrivalSheet'
@@ -127,6 +137,8 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   /** Tela de busca em tela cheia (SearchScreen do handoff) — aberta pelo campo "Para onde?" e pela lupa. */
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isExploreOpen, setIsExploreOpen] = useState(false)
+  const [searchSeed, setSearchSeed] = useState<string | null>(null)
   /** Instruções faladas. Começa ligada quando o dispositivo suporta — num GPS, voz é o padrão esperado. */
   const [voiceEnabled, setVoiceEnabled] = useState(isSpeechSupported)
   const [selectedPoi, setSelectedPoi] = useState<GeocodingResult | null>(null)
@@ -574,7 +586,34 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPoi, originPoint, userPosition, routeResult, isNavigating])
 
+  /**
+   * AUTONOMIA — derivada, nunca guardada em estado próprio.
+   *
+   * Se ela virasse `useState`, existiriam duas verdades sobre a bateria: a
+   * preferência salva e a cópia em memória. Como derivada de `preferences`, ela
+   * se recalcula sozinha quando o usuário informa a bateria, troca de veículo
+   * ou percorre distância — que são exatamente os três eventos que a mudam.
+   */
+  const autonomy = useMemo(() => autonomyState(preferences), [preferences])
+
   const allRoutes = routeResult ? [routeResult.selected, ...routeResult.alternatives] : []
+
+  /**
+   * Veredito de autonomia de CADA candidata, não só da ativa.
+   *
+   * É o que permite a comparação que o usuário realmente faz quando a bateria
+   * está baixa: "a recomendada não cabe, mas esta outra cabe?". Calcular só
+   * para a ativa deixaria essa pergunta sem resposta na tela em que ela é
+   * feita.
+   */
+  const autonomyByRouteId = useMemo(() => {
+    const map: Record<string, ReturnType<typeof assessRouteAutonomy>> = {}
+    for (const entry of allRoutes) {
+      map[entry.route.id] = assessRouteAutonomy(autonomy, entry.route.totalDistanceMeters)
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeResult, autonomy])
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
   /**
@@ -789,6 +828,26 @@ export default function App() {
     if (!progress || progress.remainingDistanceMeters > ARRIVAL_RADIUS_METERS) return
 
     const percorrido = activeScoredRoute?.route.totalDistanceMeters ?? progress.distanceTraveledMeters
+
+    /*
+      ODÔMETRO DA BATERIA.
+
+      O que desconta da estimativa é o que o usuário REALMENTE percorreu, medido
+      pela navegação — não a distância planejada da rota, que ele pode ter
+      abandonado no meio. `distanceTraveledMeters` vem do progresso sobre a
+      geometria, então um desvio de dois quarteirões conta os dois quarteirões.
+
+      Acumular aqui, no fim do percurso, e não a cada amostra de GPS: gravar no
+      localStorage a 1 Hz durante a navegação inteira seria escrita constante
+      para um número que só é lido quando alguém abre uma tela.
+    */
+    if (progress.distanceTraveledMeters > 0) {
+      updatePreferences({
+        batteryDistanceSinceUpdateMeters:
+          preferences.batteryDistanceSinceUpdateMeters + progress.distanceTraveledMeters,
+      })
+    }
+
     setArrival({
       label: destinationText || selectedPoi?.label || null,
       distanceMeters: percorrido,
@@ -890,6 +949,21 @@ export default function App() {
   }, [preview])
 
   const isNavigationView = isNavigating && activeScoredRoute != null
+
+  /**
+   * Aviso antecipado de trecho crítico — ver useSegmentAlerts.
+   *
+   * Fica no App e não no NavigationPanel porque depende da rota ATIVA (que
+   * muda com a escolha de alternativa e com o recálculo) e do progresso, os
+   * dois estados que já vivem aqui.
+   */
+  const segmentAlerts = useSegmentAlerts({
+    isNavigating: isNavigationView,
+    scoredRoute: activeScoredRoute,
+    progress: navigationSession.progress,
+    voiceEnabled,
+  })
+
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
 
   /**
@@ -940,6 +1014,18 @@ export default function App() {
         isNavigating={isNavigationView}
         // O marcador segue o veículo escolhido no Perfil / seletor de veículo.
         vehicleModelId={preferences.vehicleModelId}
+        /*
+          A camada de adequação só existe FORA da navegação.
+
+          Navegando, o mapa já está inteiro dedicado a uma pergunta — por onde
+          ir agora — e a rota já vem colorida por trecho com dados melhores
+          (piso e tráfego reais, não só o tipo da via). Uma segunda malha
+          colorida ali competiria com o traçado usando informação mais pobre.
+        */
+        suitabilityLayer={preferences.suitabilityLayerEnabled && !isNavigationView}
+        // O anel existe enquanto o modo explorar está aberto — fechado, o mapa
+        // volta a ser só mapa.
+        rangeRingKm={isExploreOpen ? exploreRadiusKm(autonomy) : null}
         followUser={isNavigationView && isFollowingUser}
         speedKmh={isNavigationView ? navigationSession.currentSpeedKmh : null}
         headingDeg={isNavigationView ? navigationSession.headingDeg : null}
@@ -955,6 +1041,11 @@ export default function App() {
         <>
         <NavigationPanel
           scoredRoute={activeScoredRoute}
+          segmentAlert={
+            segmentAlerts.alert ? (
+              <SegmentAlertBanner alert={segmentAlerts.alert} onDismiss={segmentAlerts.dismiss} />
+            ) : null
+          }
           progress={navigationSession.progress}
           gpsSample={navigationSession.gpsSample}
           currentSpeedKmh={navigationSession.currentSpeedKmh}
@@ -1099,6 +1190,7 @@ export default function App() {
               setIsFollowingUser(true)
               setIsNavigating(true)
             }}
+            autonomyByRouteId={autonomyByRouteId}
             onDismiss={() => {
               setRouteResult(null)
               setActiveRouteId(null)
@@ -1132,10 +1224,43 @@ export default function App() {
             {/* `mb-3` além do gap da pilha: o botão é um controle do MAPA, não
                 parte do bloco de informações — o respiro extra deixa essa
                 separação explícita em vez de parecer um card colado no outro. */}
+            {preferences.suitabilityLayerEnabled && (
+              <div className="mb-1">
+                <SuitabilityLegend vehicleLabel={mobilityProfile(preferences.vehicleModelId).label.toLowerCase()} />
+              </div>
+            )}
+
+            {/*
+              ENTRADA DO MODO EXPLORAR.
+
+              Botão próprio e não um toque escondido na barra do veículo: o modo
+              responde uma pergunta que o resto da tela não faz ("até onde dá
+              para ir?"), e uma pergunta nova precisa de uma porta visível. Fica
+              alinhado à esquerda, oposto à coluna de controles do mapa, para
+              não virar mais um botão redondo no meio dos outros.
+            */}
+            <div className="mb-1 flex justify-start">
+              <button
+                type="button"
+                onClick={() => setIsExploreOpen(true)}
+                className="pointer-events-auto flex items-center gap-2 rounded-pill border border-hairline/[.08] bg-surface-overlay px-3.5 py-2.5 shadow-float backdrop-blur-xl transition-all duration-fast active:scale-[.97]"
+              >
+                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] text-success-500" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                  <circle cx="12" cy="12" r="8.5" strokeDasharray="3 2.5" />
+                  <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+                </svg>
+                <span className="text-[13.5px] font-extrabold text-content-primary">Até onde dá para ir</span>
+              </button>
+            </div>
+
             <div className="mb-3 flex justify-end">
               <MapControls
                 onCenterOnUser={handleCenterOnUser}
                 isLocating={isLocating}
+                onToggleSuitability={() =>
+                  updatePreferences({ suitabilityLayerEnabled: !preferences.suitabilityLayerEnabled })
+                }
+                suitabilityActive={preferences.suitabilityLayerEnabled}
                 // Fora da navegação a bússola só aparece com o mapa girado —
                 // com o norte para cima ela não teria o que fazer.
                 onResetNorth={Math.abs(mapBearing) > 1 ? () => setNorthToken((c) => c + 1) : undefined}
@@ -1145,6 +1270,7 @@ export default function App() {
             <VehicleStatusBar
               bluetooth={vehicleBluetooth}
               preferences={preferences}
+              autonomy={autonomy}
               onOpen={() => setIsVehicleSheetOpen(true)}
             />
             <BottomNavBar
@@ -1166,12 +1292,46 @@ export default function App() {
         <ActivityPanel onClose={() => setActivePanel(null)} onRepeatTrip={handleRepeatTrip} />
       )}
 
+      {isExploreOpen && (
+        <ExploreSheet
+          autonomy={autonomy}
+          userPoint={userPosition}
+          savedPlaces={listSavedPlaces()}
+          frequentPlaces={frequentPlaces(listActivity())}
+          onPickPlace={(label, point) => {
+            setIsExploreOpen(false)
+            handleTraceRouteToPlace(label, point)
+          }}
+          onSearchCategory={(query) => {
+            // O modo explorar não tem busca própria: ele SEMEIA a busca que já
+            // existe. Duplicar a lista de resultados aqui criaria uma segunda
+            // implementação da mesma tela para manter em sincronia.
+            setIsExploreOpen(false)
+            setSearchSeed(query)
+            setIsSearchOpen(true)
+          }}
+          onUpdateBattery={(percent) =>
+            updatePreferences({
+              batteryPercent: percent,
+              batteryUpdatedAt: Date.now(),
+              // Informar a bateria ZERA o odômetro: o número novo já reflete
+              // tudo que foi percorrido até agora.
+              batteryDistanceSinceUpdateMeters: 0,
+            })
+          }
+          onClose={() => setIsExploreOpen(false)}
+        />
+      )}
+
       {isSearchOpen && (
         <SearchScreen
-          onBack={() => setIsSearchOpen(false)}
+          onBack={() => {
+            setIsSearchOpen(false)
+            setSearchSeed(null)
+          }}
           onPick={handlePickFromSearch}
           userPoint={userPosition}
-          initialQuery={destinationText}
+          initialQuery={searchSeed ?? destinationText}
         />
       )}
           {/*
@@ -1205,6 +1365,18 @@ export default function App() {
         está no ramo de exploração. Renderizá-la dentro do ramo de navegação a
         desmontaria no mesmo quadro em que ela deveria surgir.
       */}
+      {/*
+        CONFIGURAÇÃO INICIAL — por cima de tudo, no primeiro uso.
+
+        Fica no fim do JSX e com z-index próprio em vez de substituir a árvore
+        inteira: assim o mapa carrega e faz cache dos tiles por baixo enquanto o
+        usuário escolhe o veículo, e a primeira tela depois do onboarding já
+        aparece pronta em vez de começar cinza.
+      */}
+      {preferences.onboardingCompletedAt == null && (
+        <VehicleOnboarding preferences={preferences} onFinish={updatePreferences} />
+      )}
+
       {arrival && (
         <ArrivalSheet
           destinationLabel={arrival.label}

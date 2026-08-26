@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
+import { BatteryDial, useDeferredPercent } from '@/components/vehicle/BatteryDial'
+import { autonomyState, confidenceCaveat } from '@/services/vehicle/autonomy'
 import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
 import {
@@ -43,7 +45,7 @@ const ROUTE_PREFERENCE_OPTIONS: { key: RoutePreference; label: string; hint: str
 const SPEED_OPTIONS = [20, 25, 32, 40, 45]
 const RANGE_OPTIONS = [20, 30, 40, 60, 80]
 
-type PickerId = 'vehicle' | 'speed' | 'range' | 'routePreference' | 'voice'
+type PickerId = 'vehicle' | 'speed' | 'range' | 'battery' | 'routePreference' | 'voice'
 
 /**
  * Perfil — preferências do usuário, agrupadas por assunto.
@@ -66,6 +68,15 @@ type PickerId = 'vehicle' | 'speed' | 'range' | 'routePreference' | 'voice'
  */
 export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences, onUpdatePreferences }: ProfilePanelProps) {
   const [openPicker, setOpenPicker] = useState<PickerId | null>(null)
+
+  const autonomy = autonomyState(preferences)
+  const [battery, setBattery] = useDeferredPercent(autonomy.estimatedPercent ?? 80, (percent) =>
+    onUpdatePreferences({
+      batteryPercent: percent,
+      batteryUpdatedAt: Date.now(),
+      batteryDistanceSinceUpdateMeters: 0,
+    }),
+  )
 
   const currentVehicle = VEHICLE_PRESETS.find((preset) => preset.id === preferences.vehicleModelId)
   const vehicleLabel = currentVehicle?.label ?? 'Personalizado'
@@ -170,6 +181,46 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
               setOpenPicker(null)
             }}
           />
+        )}
+
+        {/*
+          BATERIA ATUAL, editável aqui e não só no modo explorar.
+
+          O usuário que abre o Perfil para conferir o veículo espera encontrar a
+          bateria junto — é o mesmo assunto. E é o único lugar do app onde dá
+          para ver, de uma vez, os três números que produzem a autonomia:
+          alcance máximo, bateria informada e o que sobrou depois do que já foi
+          rodado.
+        */}
+        <SettingsRow
+          inGroup
+          label="Bateria atual"
+          control="value"
+          value={
+            autonomy.estimatedPercent != null
+              ? `${autonomy.estimatedPercent}%${autonomy.hasDecayed ? ' est.' : ''}`
+              : 'Não informada'
+          }
+          description={
+            autonomy.remainingKm != null
+              ? `≈${autonomy.remainingKm.toFixed(autonomy.remainingKm < 10 ? 1 : 0)} km restantes${
+                  confidenceCaveat(autonomy.confidence) ? ` · ${confidenceCaveat(autonomy.confidence)}` : ''
+                }`
+              : 'Informe para o GPS avaliar se o trajeto cabe na autonomia.'
+          }
+          expanded={openPicker === 'battery'}
+          onClick={() => toggle('battery')}
+        />
+        {openPicker === 'battery' && (
+          <div className="px-card pb-3 pt-1">
+            <BatteryDial
+              value={battery}
+              rangeKm={preferences.rangeKm}
+              onChange={(percent) => {
+                setBattery(percent)
+              }}
+            />
+          </div>
         )}
 
         <BluetoothRow bluetooth={bluetooth} />

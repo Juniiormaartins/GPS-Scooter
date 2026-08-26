@@ -1,6 +1,9 @@
+import { RouteGradeBadge } from '@/components/route/RouteGradeBadge'
 import { SuitabilityBar, SuitabilitySummary } from '@/components/route/SuitabilityBar'
 import { Button } from '@/components/ui/Button'
 import { SectionLabel, Tag } from '@/components/ui/primitives'
+import { gradeRoute } from '@/services/routing/routeGrade'
+import type { AutonomyAssessment } from '@/services/vehicle/autonomy'
 import type { Eligibility, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
 
@@ -37,6 +40,15 @@ interface RoutePanelProps {
   onSelectRoute: (routeId: string) => void
   onStartNavigation: () => void
   onDismiss: () => void
+  /**
+   * Veredito de autonomia POR ROTA, indexado pelo id.
+   *
+   * Vem pronto de fora porque depende do estado da bateria, que é do app e não
+   * da rota. O painel não calcula autonomia — ele mostra o que já foi decidido,
+   * pelo mesmo princípio que faz a classificação por trecho vir pronta no
+   * `ScoredRoute` em vez de ser recalculada aqui.
+   */
+  autonomyByRouteId?: Record<string, AutonomyAssessment>
 }
 
 /**
@@ -48,7 +60,14 @@ interface RoutePanelProps {
  * 26px/800 à direita — o "porquê" da classificação é regra do handoff e vem
  * do ruleEngine real (highlights), não de texto fixo.
  */
-export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNavigation, onDismiss }: RoutePanelProps) {
+export function RoutePanel({
+  routes,
+  activeRouteId,
+  onSelectRoute,
+  onStartNavigation,
+  onDismiss,
+  autonomyByRouteId,
+}: RoutePanelProps) {
   const activeRoute = routes.find((entry) => entry.route.id === activeRouteId) ?? routes[0]
   if (!activeRoute) return null
 
@@ -82,6 +101,7 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
             key={entry.route.id}
             scoredRoute={entry}
             isSelected={entry.route.id === activeRouteId}
+            autonomy={autonomyByRouteId?.[entry.route.id]}
             onSelect={() => onSelectRoute(entry.route.id)}
           />
         ))}
@@ -107,14 +127,17 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
 function RouteOptionCard({
   scoredRoute,
   isSelected,
+  autonomy,
   onSelect,
 }: {
   scoredRoute: ScoredRoute
   isSelected: boolean
+  autonomy?: AutonomyAssessment
   onSelect: () => void
 }) {
   const tone = ELIGIBILITY_TONE[scoredRoute.eligibility]
   const reason = scoredRoute.highlights[0]
+  const grade = gradeRoute(scoredRoute)
 
   /*
     CARD COMPACTO. A versão anterior dava o mesmo peso a todas as candidatas —
@@ -138,9 +161,16 @@ function RouteOptionCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Tag tone={tone}>{scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}</Tag>
-          <span className="text-[12.5px] font-bold text-content-tertiary">
-            {scoredRoute.suitabilityScore}% adequada
-          </span>
+          {/*
+            O GRAU no lugar do percentual.
+
+            "49% adequada" é uma média, e média esconde concentração: o mesmo
+            49% pode ser a cidade toda meio ruim ou 4 km de rodovia no meio de
+            um trajeto ótimo. O grau é calculado sobre a EXPOSIÇÃO CRÍTICA (ver
+            routeGrade), que é o que de fato decide se dá para ir. O percentual
+            não some — continua abaixo, na candidata selecionada.
+          */}
+          <RouteGradeBadge grade={grade} />
         </div>
 
         <div className="mt-1 flex items-baseline gap-2.5">
@@ -157,10 +187,31 @@ function RouteOptionCard({
         {/* Só a selecionada explica: nas outras isso viraria parede de texto. */}
         {isSelected && (
           <>
-            {reason && <p className="mt-2 text-[13.5px] font-semibold text-content-secondary">{reason}</p>}
-            <div className="mt-1">
+            <p className="mt-2 text-[13.5px] font-semibold text-content-secondary">{grade.detail}</p>
+            {reason && reason !== grade.detail && (
+              <p className="mt-1 text-[13px] font-semibold text-content-tertiary">{reason}</p>
+            )}
+            <div className="mt-1 flex items-center gap-2">
               <SuitabilitySummary severity={scoredRoute.severity} />
+              {scoredRoute.severity.isReliable && (
+                <span className="shrink-0 text-[12.5px] font-bold text-content-tertiary">
+                  · {scoredRoute.suitabilityScore}% adequada
+                </span>
+              )}
             </div>
+            {autonomy && autonomy.verdict !== 'unknown' && (
+              <p
+                className={`mt-1.5 text-[13px] font-bold ${
+                  autonomy.verdict === 'insufficient'
+                    ? 'text-danger-text'
+                    : autonomy.verdict === 'tight'
+                      ? 'text-warning-text'
+                      : 'text-success-600'
+                }`}
+              >
+                {autonomy.message}
+              </p>
+            )}
           </>
         )}
       </div>

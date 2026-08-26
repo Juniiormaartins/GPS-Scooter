@@ -13,6 +13,9 @@ interface MapControlsProps {
   onResetNorth?: () => void
   /** Rumo atual do mapa em graus. 0 = norte; a agulha gira para refletir isso. */
   bearingDeg?: number
+  /** Liga/desliga a camada de adequação das vias. Ausente = controle não aparece (ex: durante a navegação). */
+  onToggleSuitability?: () => void
+  suitabilityActive?: boolean
 }
 
 /**
@@ -20,11 +23,11 @@ interface MapControlsProps {
  * botões de 48×48px, raio 18px, gap de 10px.
  *
  * O handoff prevê três botões: centralizar, orientação e CAMADAS. O terceiro
- * não foi implementado: ele abriria "o seletor de camadas do mapa existente",
- * e esse seletor não existe neste projeto — não há camadas alternativas
- * (satélite, trânsito) para escolher. Criar um botão que abre um seletor vazio
- * seria inventar funcionalidade, coisa que o próprio handoff proíbe (§11.8) e
- * manda perguntar em vez de improvisar (introdução do README).
+ * ficou ausente enquanto não havia camada nenhuma para escolher — um botão que
+ * abre um seletor vazio seria funcionalidade inventada. Agora existe uma: a
+ * camada de adequação das vias (ver suitabilityLayer.ts), e o botão é um
+ * INTERRUPTOR dela, não um seletor: com uma opção só, um menu seria um toque a
+ * mais para chegar no mesmo lugar.
  */
 export function MapControls({
   onCenterOnUser,
@@ -32,9 +35,33 @@ export function MapControls({
   isFollowing = false,
   onResetNorth,
   bearingDeg = 0,
+  onToggleSuitability,
+  suitabilityActive = false,
 }: MapControlsProps) {
   return (
     <div className="pointer-events-auto flex flex-col gap-2.5">
+      {onToggleSuitability && (
+        <ControlButton
+          onClick={onToggleSuitability}
+          label={suitabilityActive ? 'Ocultar adequação das vias' : 'Ver adequação das vias'}
+          active={suitabilityActive}
+        >
+          {/* Camadas empilhadas — o símbolo convencional de "camada de mapa". */}
+          <svg
+            viewBox="0 0 24 24"
+            className="h-[22px] w-[22px]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          >
+            <path d="M12 3l9 4.6-9 4.6-9-4.6L12 3z" fill={suitabilityActive ? 'currentColor' : 'none'} fillOpacity={suitabilityActive ? 0.25 : 0} />
+            <path d="M3 12.4l9 4.6 9-4.6" />
+            <path d="M3 16.9l9 4.6 9-4.6" />
+          </svg>
+        </ControlButton>
+      )}
       <ControlButton
         onClick={onCenterOnUser}
         label={isFollowing ? 'Seguindo sua localização' : 'Centralizar na sua localização'}
