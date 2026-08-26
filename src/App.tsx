@@ -54,7 +54,7 @@ import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult, ScoredRoute } from '@/types/routing'
 import type { SeverityRun } from '@/services/routing/segmentSeverity'
 import { TopScrim } from '@/components/ui/TopScrim'
-import { Diagnostics } from '@/components/ui/Diagnostics'
+import { Diagnostics, diagnosticsEnabled } from '@/components/ui/Diagnostics'
 
 type ActivePanel = 'profile' | 'saved' | 'activity' | null
 
@@ -1519,7 +1519,7 @@ export default function App() {
         Diagnóstico de layout, só com `?diag=1` na URL. Ver Diagnostics.tsx —
         existe para medir no aparelho o que não dá para reproduzir aqui.
       */}
-      {new URLSearchParams(window.location.search).has('diag') && <Diagnostics />}
+      {diagnosticsEnabled() && <Diagnostics />}
 
       {preferences.onboardingCompletedAt == null && (
         <VehicleOnboarding preferences={preferences} onFinish={updatePreferences} />

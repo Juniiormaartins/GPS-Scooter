@@ -747,6 +747,25 @@ export function MapView({
       attributionControl: { compact: true },
     })
 
+    /*
+      REDIMENSIONA O CANVAS QUANDO A ÁREA VISÍVEL MUDA.
+
+      O MapLibre observa o CONTÊINER (ResizeObserver), o que resolve quase tudo
+      — mas não o caso do iOS em modo de tela cheia: lá o contêiner pode manter
+      o mesmo tamanho enquanto a área REALMENTE visível muda (barra do navegador
+      recolhendo, indicador de gesto entrando). O observador não dispara, o
+      canvas fica com a altura antiga, e sobra uma faixa da cor de fundo do app
+      embaixo do mapa.
+
+      `visualViewport` é a única API que enxerga essa mudança. O `resize` avulso
+      depois da carga cobre o caso em que o layout se assenta um instante depois
+      da inicialização — que é justamente quando o mapa já foi criado.
+    */
+    const ajustarCanvas = () => map.resize()
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', ajustarCanvas)
+    const assentar = setTimeout(ajustarCanvas, 600)
+
     // `originalEvent` só existe em eventos disparados por gesto real do usuário
     // (arrastar/pinçar) — chamadas programáticas (easeTo/fitBounds) não o têm,
     // então isso não interrompe o modo "seguir" quando é o próprio app movendo a câmera.
@@ -1076,6 +1095,8 @@ export function MapView({
       map.off('zoom', watchZoom)
       for (const evento of fins) window.removeEventListener(evento, endGesture)
       if (wheelTimer) clearTimeout(wheelTimer)
+      vv?.removeEventListener('resize', ajustarCanvas)
+      clearTimeout(assentar)
       map.remove()
       mapRef.current = null
     }

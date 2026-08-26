@@ -13,8 +13,39 @@ import { useEffect, useState } from 'react'
  * hipóteses é a verdadeira — inclusive a mais chata delas, que é o ícone da
  * tela de início apontar para uma URL de deploy antiga (o `href` está no topo).
  *
- * Não é código de produção disfarçado: sem o parâmetro, nada disto é montado.
+ * Não é código de produção disfarçado: sem estar ligado, nada disto é montado.
  */
+
+/**
+ * O estado FICA GRAVADO, e não depende do parâmetro continuar na URL.
+ *
+ * Motivo concreto: ao adicionar o app à tela de início, o iOS abre a URL que
+ * foi salva — e o `?diag=1` se perde no caminho ou nunca esteve lá. Como o
+ * modo standalone é justamente o único em que o problema aparece, um
+ * diagnóstico que só funciona com parâmetro é um diagnóstico que não funciona
+ * onde é preciso.
+ *
+ * `?diag=1` liga e grava; `?diag=0` desliga e apaga.
+ */
+const CHAVE = 'gps-scooter:diag'
+
+export function diagnosticsEnabled(): boolean {
+  const parametro = new URLSearchParams(window.location.search).get('diag')
+  try {
+    if (parametro === '1') {
+      localStorage.setItem(CHAVE, '1')
+      return true
+    }
+    if (parametro === '0') {
+      localStorage.removeItem(CHAVE)
+      return false
+    }
+    return localStorage.getItem(CHAVE) === '1'
+  } catch {
+    // localStorage indisponível: vale só o parâmetro desta visita.
+    return parametro === '1'
+  }
+}
 
 /** Lê um `env(safe-area-inset-*)` de verdade, medindo um elemento sonda. */
 function medirInset(lado: 'top' | 'bottom'): number {
