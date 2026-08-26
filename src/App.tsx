@@ -13,7 +13,7 @@ import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
 import { SegmentDetailSheet, SegmentWarningPill } from '@/components/navigation/SegmentDetail'
-import { compareRoutes, pickAlternative, type RouteComparison } from '@/services/routing/alternatives'
+import { compareRoutes, pickAlternatives, type RouteComparison } from '@/services/routing/alternatives'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
 import { ActivityPanel } from '@/components/panels/ActivityPanel'
@@ -80,12 +80,22 @@ export default function App() {
   const [isSearchingAlternative, setIsSearchingAlternative] = useState(false)
   const [navigationNotice, setNavigationNotice] = useState<string | null>(null)
   /** Alternativa encontrada e ainda não decidida pelo usuário. */
+  /**
+   * Comparação de rotas durante a navegação.
+   *
+   * Guarda TODAS as alternativas distintas, não só a melhor. O usuário
+   * precisa pesar "mais rápida com trecho vermelho" contra "um pouco mais
+   * longa e limpa", e para isso as duas têm que estar na tela ao mesmo tempo.
+   *
+   * `appliedId` é o id da rota em vigor, ou null para a original — guardar o
+   * ID e não o índice evita que a seleção aponte para outra rota se a lista
+   * mudar de tamanho.
+   */
   const [alternative, setAlternative] = useState<{
-    route: ScoredRoute
-    comparison: RouteComparison
+    options: ScoredRoute[]
     /** Rota que estava valendo quando a comparação abriu — para poder voltar a ela. */
     original: ScoredRoute
-    applied: boolean
+    appliedId: string | null
   } | null>(null)
   const [isFollowingUser, setIsFollowingUser] = useState(true)
   const [sheetSnap, setSheetSnap] = useState<SheetSnapPoint>('half')
@@ -419,19 +429,14 @@ export default function App() {
     try {
       const result = await planRoute({ origin: from, destination: destinationPoint })
       const candidates = [result.selected, ...result.alternatives]
-      const picked = pickAlternative(activeScoredRoute, candidates)
+      const picked = pickAlternatives(activeScoredRoute, candidates)
 
-      if (!picked) {
+      if (picked.length === 0) {
         showNavigationNotice('Nenhuma rota alternativa diferente desta foi encontrada agora.')
         return
       }
 
-      setAlternative({
-        route: picked,
-        comparison: compareRoutes(activeScoredRoute, picked),
-        original: activeScoredRoute,
-        applied: false,
-      })
+      setAlternative({ options: picked, original: activeScoredRoute, appliedId: null })
     } catch {
       showNavigationNotice('Não foi possível buscar uma alternativa agora.')
     } finally {
@@ -447,12 +452,13 @@ export default function App() {
    * Não há botão de confirmar: o que estiver aplicado quando a sheet fechar é
    * o que fica valendo, e o padrão é a rota atual.
    */
-  function handleSelectAlternative(which: 'current' | 'alternative') {
+  function handleSelectAlternative(routeId: string | null) {
     if (!alternative) return
-    const chosen = which === 'alternative' ? alternative.route : alternative.original
+    const chosen =
+      routeId == null ? alternative.original : (alternative.options.find((o) => o.route.id === routeId) ?? alternative.original)
     setRouteResult({ selected: chosen, alternatives: [] })
     setActiveRouteId(chosen.route.id)
-    setAlternative({ ...alternative, applied: which === 'alternative' })
+    setAlternative({ ...alternative, appliedId: routeId })
     // O trajeto mudou: `useVoiceGuidance` limpa a fila ao ver outra rota, e o
     // desvio pendente deixa de valer para a rota nova.
     navigationSession.acknowledgeRecalculation()
@@ -722,6 +728,77 @@ export default function App() {
     }
   }, [routeResult])
 
+  /**
+   * CLASSIFICAÇÃO DAS ALTERNATIVAS.
+   *
+   * Era o buraco do fluxo de comparação. `planRoute` devolve TODAS as
+   * candidatas com `severity.isReliable: false` — a classificação por trecho
+   * chega depois, via `enrichRouteResult`, e esse enriquecimento rodava só
+   * para `routeResult` e para o preview. A alternativa nunca passava por ele.
+   *
+   * O efeito prático: a rota ATUAL mostrava a barra de adequação (ela veio do
+   * `routeResult`, já enriquecido) e a alternativa não mostrava nada — a
+   * `SuitabilityBar` não desenha sem lastro em dado de via, por decisão
+   * deliberada de não afirmar "tudo verde" sobre uma rota que não foi
+   * avaliada. O usuário só descobria a composição da alternativa depois de
+   * escolhê-la.
+   *
+   * Aqui as opções passam pelo MESMO `enrichRouteResult` do resto do app —
+   * nada de caminho paralelo. Como o cache de área do Overpass é por
+   * continência e as alternativas percorrem o mesmo corredor da rota atual,
+   * normalmente isso não custa nenhuma consulta nova.
+   */
+  useEffect(() => {
+    if (!alternative) return
+    if (alternative.options.every((option) => option.severity.isReliable)) return
+
+    let cancelled = false
+    enrichRouteResult({ selected: alternative.original, alternatives: alternative.options })
+      .then((upgraded) => {
+        if (!upgraded || cancelled) return
+        setAlternative((current) => {
+          // A comparação pode ter sido fechada ou refeita enquanto o
+          // enriquecimento corria; aplicar o resultado antigo por cima
+          // colocaria dados de uma busca em cima de outra.
+          if (!current || current.original.route.id !== alternative.original.route.id) return current
+
+          /**
+           * O índice inclui `selected` E `alternatives`.
+           *
+           * `enrichRouteResult` REORDENA depois de enriquecer — a exposição a
+           * via desaconselhada só é conhecida com as tags do OSM na mão, e a
+           * regra de segurança precisa valer sobre o dado novo. Isso significa
+           * que a rota que entrou como `selected` pode sair como alternativa e
+           * vice-versa.
+           *
+           * Indexar só `upgraded.alternatives` fazia exatamente uma opção
+           * ficar de fora do índice e manter para sempre o "avaliando vias…"
+           * — observado em teste: dois de três cartões ganhavam a barra e o
+           * terceiro não ganhava nunca.
+           *
+           * Aqui a ORDEM da comparação é preservada de propósito: reordenar os
+           * cartões debaixo do dedo do usuário enquanto ele compara seria pior
+           * que mostrá-los na ordem em que apareceram.
+           */
+          const porId = new Map(
+            [upgraded.selected, ...upgraded.alternatives].map((entry) => [entry.route.id, entry]),
+          )
+          return {
+            ...current,
+            original: porId.get(current.original.route.id) ?? current.original,
+            options: current.options.map((option) => porId.get(option.route.id) ?? option),
+          }
+        })
+      })
+      .catch(() => {
+        // Sem classificação: os cartões mostram tempo e distância, e a barra
+        // continua ausente em vez de inventada.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [alternative])
+
   useEffect(() => {
     if (!preview) return
     let cancelled = false
@@ -769,7 +846,15 @@ export default function App() {
         // de escolha e sumiriam de qualquer forma pela visibilidade das camadas.
         routeOptions={isNavigationView ? [] : routeOptions}
         routeSeveritySegments={routeSeveritySegments}
-        comparisonGeometry={alternative?.route.route.geometry ?? null}
+        comparisonGeometry={
+          // Traçado da alternativa em foco no mapa: a que está aplicada, ou a
+          // primeira da lista quando ainda se está na rota atual. Sem isto o
+          // usuário compararia cartões sem ver o caminho de nenhum deles.
+          alternative
+            ? (alternative.options.find((o) => o.route.id === alternative.appliedId) ?? alternative.options[0])?.route
+                .geometry ?? null
+            : null
+        }
         // Os trechos que o usuário pediu para evitar passam a aparecer também
         // na tela de escolha — antes só a navegação recebia esta prop, então a
         // informação sumia justamente na hora de comparar as alternativas.
@@ -853,9 +938,9 @@ export default function App() {
         {alternative && (
           <AlternativeSheet
             current={alternative.original}
-            alternative={alternative.route}
-            comparison={alternative.comparison}
-            selected={alternative.applied ? 'alternative' : 'current'}
+            options={alternative.options}
+            comparisons={alternative.options.map((option) => compareRoutes(alternative.original, option))}
+            selectedId={alternative.appliedId}
             onSelect={handleSelectAlternative}
             onDismiss={() => setAlternative(null)}
           />

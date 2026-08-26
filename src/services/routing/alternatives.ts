@@ -63,13 +63,52 @@ export function compareRoutes(current: ScoredRoute, candidate: ScoredRoute): Rou
  * caso em que a interface avisa discretamente em vez de fingir uma opção.
  */
 export function pickAlternative(current: ScoredRoute, candidates: ScoredRoute[]): ScoredRoute | null {
-  const distinct = candidates.filter((candidate) => !compareRoutes(current, candidate).isSamePath)
-  if (distinct.length === 0) return null
+  return pickAlternatives(current, candidates, 1)[0] ?? null
+}
 
-  return [...distinct].sort((a, b) => {
+/**
+ * Quantas alternativas a comparação mostra.
+ *
+ * O provedor devolve até cinco candidatas, mas comparar cinco cartões em
+ * movimento não é comparar — é ler uma lista. Três (a atual mais duas) é o que
+ * cabe na sheet sem rolagem e o que uma pessoa consegue pesar de relance.
+ */
+export const MAX_ALTERNATIVES = 2
+
+/**
+ * TODAS as alternativas realmente diferentes, ordenadas.
+ *
+ * Existe porque a comparação passou a mostrar mais de uma: antes só a melhor
+ * era oferecida, e o usuário não tinha como pesar "mais rápida com trecho
+ * vermelho" contra "um pouco mais longa e limpa" — ele via uma opção e a
+ * atual.
+ *
+ * A ordem é a mesma do ranking principal: adequação primeiro, distância como
+ * desempate. Duas candidatas que percorrem o mesmo caminho não entram, e
+ * candidatas iguais ENTRE SI também não — o provedor às vezes devolve duas
+ * variações da mesma rua.
+ */
+export function pickAlternatives(
+  current: ScoredRoute,
+  candidates: ScoredRoute[],
+  max = MAX_ALTERNATIVES,
+): ScoredRoute[] {
+  const distinct = candidates.filter((candidate) => !compareRoutes(current, candidate).isSamePath)
+
+  const ordered = [...distinct].sort((a, b) => {
     if (b.preferenceScore !== a.preferenceScore) return b.preferenceScore - a.preferenceScore
     return a.route.totalDistanceMeters - b.route.totalDistanceMeters
-  })[0]
+  })
+
+  const chosen: ScoredRoute[] = []
+  for (const candidate of ordered) {
+    if (chosen.length >= max) break
+    // Distinta também das já escolhidas, senão a sheet mostra duas vezes o
+    // mesmo caminho com nomes diferentes.
+    if (chosen.some((entry) => compareRoutes(entry, candidate).isSamePath)) continue
+    chosen.push(candidate)
+  }
+  return chosen
 }
 
 /** Fração dos pontos amostrados de `candidate` que caem sobre `reference`. */

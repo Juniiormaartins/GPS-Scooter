@@ -13,12 +13,14 @@ const SHEET_EXIT_MS = 320
 
 interface AlternativeSheetProps {
   current: ScoredRoute
-  alternative: ScoredRoute
-  comparison: RouteComparison
-  /** Qual rota está valendo AGORA — a seleção é estado do App, não desta sheet. */
-  selected: 'current' | 'alternative'
+  /** TODAS as alternativas distintas, já ordenadas. */
+  options: ScoredRoute[]
+  /** Comparação de cada opção contra a rota atual, na mesma ordem. */
+  comparisons: RouteComparison[]
+  /** Id da rota em vigor; null = a atual. A seleção é estado do App, não desta sheet. */
+  selectedId: string | null
   /** Tocar num card já troca a rota desenhada no mapa. */
-  onSelect: (which: 'current' | 'alternative') => void
+  onSelect: (routeId: string | null) => void
   onDismiss: () => void
 }
 
@@ -37,9 +39,9 @@ interface AlternativeSheetProps {
  */
 export function AlternativeSheet({
   current,
-  alternative,
-  comparison,
-  selected,
+  options,
+  comparisons,
+  selectedId,
   onSelect,
   onDismiss,
 }: AlternativeSheetProps) {
@@ -72,7 +74,7 @@ export function AlternativeSheet({
     exitTimer.current = setTimeout(onDismiss, SHEET_EXIT_MS)
   }
 
-  const handleCardSelect = (which: 'current' | 'alternative') => {
+  const handleCardSelect = (which: string | null) => {
     // Aplica ANTES de animar: a rota tem que trocar no mapa enquanto a sheet
     // ainda está saindo, senão o usuário vê o painel fechar e só depois o
     // traçado mudar, como se fossem duas coisas separadas.
@@ -88,8 +90,7 @@ export function AlternativeSheet({
    */
   const [collapsed, setCollapsed] = useState(false)
 
-  const chosen = selected === 'current' ? current : alternative
-  const deltas = describeComparison(comparison)
+  const chosen = options.find((option) => option.route.id === selectedId) ?? current
 
   return (
     <>
@@ -134,28 +135,27 @@ export function AlternativeSheet({
           <span className="h-[5px] w-11 rounded-pill bg-surface-handle" />
         </button>
 
-        <h2 className="text-sheet-title-sm text-content-primary">Rota alternativa encontrada</h2>
+        <h2 className="text-sheet-title-sm text-content-primary">
+          {options.length > 1 ? `${options.length} rotas alternativas` : 'Rota alternativa encontrada'}
+        </h2>
 
         <div className="mt-3.5 flex flex-col gap-2.5">
           <RouteCompareCard
             route={current}
             reason="Rota atual"
-            selected={selected === 'current'}
-            onSelect={() => handleCardSelect('current')}
+            selected={selectedId == null}
+            onSelect={() => handleCardSelect(null)}
           />
-          <RouteCompareCard
-            route={alternative}
-            reason={
-              comparison.suitabilityDelta > 0
-                ? 'Mais adequada ao seu veículo'
-                : comparison.etaDeltaMinutes < 0
-                  ? 'Mais rápida'
-                  : 'Alternativa'
-            }
-            selected={selected === 'alternative'}
-            onSelect={() => handleCardSelect('alternative')}
-            deltas={deltas}
-          />
+          {options.map((option, index) => (
+            <RouteCompareCard
+              key={option.route.id}
+              route={option}
+              reason={describeReason(comparisons[index], index)}
+              selected={selectedId === option.route.id}
+              onSelect={() => handleCardSelect(option.route.id)}
+              deltas={describeComparison(comparisons[index])}
+            />
+          ))}
         </div>
 
         {!collapsed && (
@@ -213,6 +213,21 @@ export function AlternativeSheet({
   )
 }
 
+/**
+ * Rótulo do cartão — o que ESTA alternativa oferece em relação à atual.
+ *
+ * Com mais de uma na tela, "Alternativa" repetido não ajuda a escolher. A
+ * frase descreve a troca concreta, e o índice entra só como desempate quando
+ * duas oferecem a mesma coisa.
+ */
+function describeReason(comparison: RouteComparison, index: number): string {
+  if (comparison.criticalDeltaMeters <= -50) return 'Menos trecho não recomendado'
+  if (comparison.suitabilityDelta > 0) return 'Mais adequada ao seu veículo'
+  if (comparison.etaDeltaMinutes < 0) return 'Mais rápida'
+  if (comparison.distanceDeltaMeters < 0) return 'Mais curta'
+  return `Alternativa ${index + 1}`
+}
+
 function RouteCompareCard({
   route,
   reason,
@@ -258,7 +273,28 @@ function RouteCompareCard({
         )}
 
         <div className="mt-2">
-          <SuitabilityBar severity={route.severity} />
+          {route.severity.isReliable ? (
+            <SuitabilityBar severity={route.severity} />
+          ) : (
+            /*
+              CLASSIFICAÇÃO A CAMINHO.
+              
+              A `SuitabilityBar` não desenha sem lastro em dado de via, e com
+              razão — pintar tudo de verde afirmaria que a rota foi avaliada.
+              Mas não desenhar NADA faz o cartão crescer quando o dado chega, e
+              some com a diferença entre "esta rota não tem trecho ruim" e
+              "ainda não sabemos". O esqueleto ocupa a mesma altura da barra e
+              diz qual dos dois é o caso.
+            */
+            <div className="flex items-center gap-2" aria-live="polite">
+              <div className="flex items-center gap-[3px]" aria-hidden="true">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <span key={i} className="h-[9px] w-[9px] rounded-[3px] bg-hairline/[.12]" />
+                ))}
+              </div>
+              <span className="text-[11.5px] font-semibold text-content-tertiary">avaliando vias…</span>
+            </div>
+          )}
         </div>
       </div>
 
