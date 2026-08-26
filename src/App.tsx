@@ -20,6 +20,7 @@ import { listActivity } from '@/services/storage/activityHistory'
 import { mobilityProfile } from '@/config/mobilityProfiles'
 import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
 import { runKey } from '@/services/navigation/segmentAlerts'
+import { currentSpeedLimit } from '@/services/navigation/speedLimit'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import {
@@ -663,6 +664,19 @@ export default function App() {
   }, [routeResult, autonomy])
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
+  /*
+    HANDLE DE DESENVOLVIMENTO da rota ativa. Mesma justificativa do `__gpsMap`
+    em MapView: inspecionar as tags do OSM que chegaram a cada trecho é
+    impossível de fora, e sem isso não dá para distinguir "esta via não tem
+    maxspeed no OSM" de "o enriquecimento perdeu a tag no caminho" — que é
+    exatamente a dúvida que decide se a placa de limite funciona.
+
+    `import.meta.env.DEV` é apagado no build de produção.
+  */
+  if (import.meta.env.DEV) {
+    ;(window as unknown as { __gpsRoute?: unknown }).__gpsRoute = activeScoredRoute
+  }
+
   /**
    * Trechos da rota ativa já classificados para o veículo — é o que faz o
    * traçado no mapa ter cores diferentes ao longo do percurso.
@@ -1088,6 +1102,17 @@ export default function App() {
         <>
         <NavigationPanel
           scoredRoute={activeScoredRoute}
+          /*
+            Recalculado a cada amostra de GPS, o que é barato: é uma soma sobre
+            os segmentos até achar o atual, sobre dados que já estão em memória.
+            Devolve null na maioria das vias — 21% de cobertura medida em
+            Goiânia —, e nesse caso a placa não é desenhada.
+          */
+          speedLimit={
+            navigationSession.progress
+              ? currentSpeedLimit(activeScoredRoute.route, navigationSession.progress.distanceTraveledMeters)
+              : null
+          }
           segmentAlert={
             segmentAlerts.alert ? (
               <SegmentAlertBanner alert={segmentAlerts.alert} onDismiss={segmentAlerts.dismiss} />

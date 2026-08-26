@@ -6,6 +6,8 @@ import { remainingSeverity } from '@/services/routing/segmentSeverity'
 import type { ManeuverType, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
 import { TopScrim } from '@/components/ui/TopScrim'
+import { SpeedLimitSign } from '@/components/navigation/SpeedLimitSign'
+import type { SpeedLimit } from '@/services/navigation/speedLimit'
 
 interface NavigationPanelProps {
   scoredRoute: ScoredRoute
@@ -19,6 +21,11 @@ interface NavigationPanelProps {
   gpsSample: GeolocationSample | null
   /** Velocidade real de deslocamento já filtrada (ver services/navigation/speedTracker.ts). null = sem leitura confiável. */
   currentSpeedKmh: number | null
+  /**
+   * Limite da via atual, quando o OpenStreetMap o traz. null = via não
+   * etiquetada, e nesse caso NADA é exibido — ver speedLimit.ts.
+   */
+  speedLimit?: SpeedLimit | null
   locationError: string | null
   routeDeviated: boolean
   isRecalculating: boolean
@@ -65,6 +72,7 @@ export function NavigationPanel({
   progress,
   gpsSample,
   currentSpeedKmh,
+  speedLimit = null,
   locationError,
   routeDeviated,
   isRecalculating,
@@ -197,7 +205,18 @@ export function NavigationPanel({
           ficam agrupadas — aqui em cima ficam só leitura e controle de câmera.
         */}
         <div className="flex items-end justify-between gap-3">
-          <StatPill label="Velocidade" value={currentSpeedKmh != null ? `${currentSpeedKmh} km/h` : '—'} />
+          {/*
+            A PLACA FICA COLADA NA VELOCIDADE, e não num canto solto: as duas
+            só significam alguma coisa uma ao lado da outra. "46 km/h" isolado
+            não diz nada; "46 km/h" ao lado de uma placa de 40 diz tudo.
+
+            Ausente quando a via não tem a tag — sem espaço reservado, sem
+            placeholder. Ver SpeedLimitSign.
+          */}
+          <div className="flex items-end gap-2.5">
+            <StatPill label="Velocidade" value={currentSpeedKmh != null ? `${currentSpeedKmh} km/h` : '—'} />
+            {speedLimit && <SpeedLimitSign limit={speedLimit} currentSpeedKmh={currentSpeedKmh} />}
+          </div>
           {recenterControl}
         </div>
 
