@@ -3,12 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0A0E1A" />
+    <!--
+      Cor inicial da barra do sistema. Vale APENAS até o React montar: a partir
+      daí `useUserPreferences` a sincroniza com o tema escolhido. Branco aqui
+      porque é a cor do splash abaixo — deixá-la escura fazia a barra piscar de
+      preto para branco no instante da abertura.
+    -->
+    <meta name="theme-color" content="#FFFFFF" />
     <title>GPS Scooter</title>
 
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
     <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,19 +23,36 @@
 
     <!-- Comportamento em tela cheia/standalone ao adicionar à Tela de Início no iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="GPS Scooter" />
     <meta name="mobile-web-app-capable" content="yes" />
   </head>
   <body>
     <div id="root"></div>
 
-    <!-- Splash estático, visível enquanto o bundle JS carrega/hidrata; removido pelo main.tsx assim que o React montar. -->
+    <!--
+      Splash estático, visível enquanto o bundle JS carrega; removido pelo
+      main.tsx assim que o React monta.
+
+      Fundo BRANCO, acompanhando o fundo da própria logo — antes era
+      #0A0E1A, e a marca (que é desenhada sobre branco) aparecia dentro de um
+      quadrado claro recortado no meio de uma tela preta.
+
+      `decoding="sync"` na marca: sem isso o navegador pode decodificar a
+      imagem fora do quadro atual e pintar o fundo branco antes dela, dando um
+      lampejo de tela vazia antes da logo aparecer.
+    -->
     <div
       id="splash"
-      style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #0A0E1A"
+      style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #FFFFFF"
     >
-      <img src="/icons/icon-192.png" width="112" height="112" alt="GPS Scooter" />
+      <img
+        src="/icons/icon-192.png"
+        width="128"
+        height="128"
+        decoding="sync"
+        alt="GPS Scooter"
+        style="display: block"
+      />
     </div>
 
     <script type="module" src="/src/main.tsx"></script>
