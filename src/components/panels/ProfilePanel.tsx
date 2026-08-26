@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
 import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
@@ -12,6 +12,7 @@ import {
 } from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 import { isSpeechSupported, listPortugueseVoices, onVoicesChanged } from '@/services/navigation/voiceGuidance'
+import { AVATAR_ACCEPTED_TYPES, prepareAvatar } from '@/services/avatar'
 
 interface ProfilePanelProps {
   onClose: () => void
@@ -58,8 +59,10 @@ type PickerId = 'vehicle' | 'speed' | 'range' | 'routePreference' | 'voice'
  * linha "Unidades — Kilômetros" que existia foi REMOVIDA por ser exatamente
  * isso: um controle que não controlava nada.
  *
- * Não há avatar, nome, e-mail nem "Sair da conta": o app não tem sistema de
- * conta, e exibir isso seria inventar funcionalidade inexistente.
+ * Há foto de avatar, mas NÃO há nome, e-mail nem "Sair da conta": o app não
+ * tem sistema de conta, e exibir isso seria inventar funcionalidade
+ * inexistente. A foto é diferente — é uma preferência local do aparelho, como
+ * o tema, e não pressupõe conta nenhuma.
  */
 export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences, onUpdatePreferences }: ProfilePanelProps) {
   const [openPicker, setOpenPicker] = useState<PickerId | null>(null)
@@ -91,6 +94,11 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
 
   return (
     <Panel title="Perfil" onClose={onClose}>
+      <AvatarGroup
+        dataUrl={preferences.avatarDataUrl}
+        onChange={(avatarDataUrl) => onUpdatePreferences({ avatarDataUrl })}
+      />
+
       <SettingsGroup
         title="Meu veículo"
         footnote="A velocidade de referência alimenta o tempo estimado das rotas; a autonomia, a estimativa de alcance. Nenhuma das duas autoriza vias inadequadas — as regras de circulação continuam avaliando cada via."
@@ -238,6 +246,91 @@ export function ProfilePanel({ onClose, vehicleBluetooth: bluetooth, preferences
         Distâncias e velocidades em quilômetros. Dados de via do OpenStreetMap; mapa do MapTiler.
       </p>
     </Panel>
+  )
+}
+
+/**
+ * Foto do avatar.
+ *
+ * FICA AQUI, e não numa tela própria: é uma preferência do aparelho como o
+ * tema e o veículo, e criar um fluxo separado para trocar uma imagem seria
+ * cerimônia demais. O toque abre direto o seletor do sistema — no celular ele
+ * já oferece câmera e galeria, então não há nada a inventar por cima.
+ *
+ * A prévia é o próprio avatar, no mesmo círculo em que ele aparece na tela
+ * principal: o usuário vê o recorte final antes de sair da tela, em vez de
+ * descobrir depois que a foto ficou torta.
+ */
+function AvatarGroup({ dataUrl, onChange }: { dataUrl: string | null; onChange: (value: string | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return
+    setErro(null)
+    try {
+      onChange(await prepareAvatar(file))
+    } catch (falha) {
+      // Mensagem REAL do que deu errado (formato não suportado, decodificação
+      // falhou), não um "erro ao salvar" genérico.
+      setErro(falha instanceof Error ? falha.message : 'Não foi possível usar esta imagem.')
+    }
+  }
+
+  return (
+    <SettingsGroup title="Foto do perfil" footnote={erro ?? undefined}>
+      <SettingsRow
+        inGroup
+        label={dataUrl ? 'Alterar foto' : 'Adicionar foto'}
+        description="A imagem é recortada em quadrado e fica salva neste aparelho"
+        icon={<AvatarPreview dataUrl={dataUrl} />}
+        control="action"
+        action={dataUrl ? 'Alterar' : 'Escolher'}
+        onClick={() => inputRef.current?.click()}
+      />
+      {dataUrl && (
+        <SettingsRow inGroup label="Remover foto" control="action" action="Remover" onClick={() => onChange(null)} />
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={AVATAR_ACCEPTED_TYPES}
+        className="hidden"
+        onChange={(event) => {
+          void handleFile(event.target.files?.[0])
+          // Zera o valor para que escolher O MESMO arquivo de novo volte a
+          // disparar `change` — sem isto, tentar de novo depois de um erro não
+          // faria nada.
+          event.target.value = ''
+        }}
+      />
+    </SettingsGroup>
+  )
+}
+
+/** Mesma moldura circular do avatar da tela principal, para a prévia não mentir sobre o recorte. */
+function AvatarPreview({ dataUrl, size = 40 }: { dataUrl: string | null; size?: number }) {
+  if (!dataUrl) {
+    return (
+      <span
+        className="flex items-center justify-center rounded-pill bg-surface-sunken text-content-tertiary"
+        style={{ width: size, height: size }}
+      >
+        <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="8" r="3.6" />
+          <path d="M4.8 20a7.6 7.6 0 0 1 14.4 0" />
+        </svg>
+      </span>
+    )
+  }
+  return (
+    <img
+      src={dataUrl}
+      alt=""
+      aria-hidden="true"
+      className="rounded-pill object-cover"
+      style={{ width: size, height: size }}
+    />
   )
 }
 

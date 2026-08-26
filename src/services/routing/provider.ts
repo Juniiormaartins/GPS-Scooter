@@ -1,6 +1,8 @@
 import { env, isRoutingConfigured } from '@/config/env'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, ManeuverType, RouteRequest, RouteSegment, RouteStep } from '@/types/routing'
+import { mobilityProfile, type MobilityProfile } from '@/config/mobilityProfiles'
+import { getUserPreferences } from '@/config/userPreferences'
 import { looksEnglish, normalizeInstruction } from '@/services/routing/instructions'
 
 /**
@@ -347,7 +349,19 @@ function valhallaTripToCandidateRoute(trip: ValhallaTrip, id: string): Candidate
 class ValhallaRoutingProvider implements RoutingProvider {
   isConfigured = true
 
-  constructor(private readonly useRoads: number) {}
+  /**
+   * `costing` é escolhido pelo PERFIL DE MOBILIDADE, não fixo.
+   *
+   * Antes os três veículos pediam `bicycle`. Medido na instância pública, no
+   * mesmo trajeto: `bicycle` 9,21 km sem rodovia; `motor_scooter` 9,22 km sem
+   * rodovia mas 26 min em vez de 33 (ele sabe que o veículo é motorizado);
+   * `pedestrian` 8,05 km, usando calçadas; `motorcycle` 10,56 km COM rodovia
+   * — por isso motocicleta ficou de fora mesmo sendo "duas rodas".
+   */
+  constructor(
+    private readonly useRoads: number,
+    private readonly costing: MobilityProfile['costing'] = 'bicycle',
+  ) {}
 
   async fetchCandidateRoutes({ origin, destination }: RouteRequest): Promise<CandidateRoute[]> {
     const body = {
@@ -355,8 +369,11 @@ class ValhallaRoutingProvider implements RoutingProvider {
         { lat: origin.lat, lon: origin.lng },
         { lat: destination.lat, lon: destination.lng },
       ],
-      costing: 'bicycle',
-      costing_options: { bicycle: { bicycle_type: 'City', use_roads: this.useRoads } },
+      costing: this.costing,
+      costing_options:
+        this.costing === 'bicycle'
+          ? { bicycle: { bicycle_type: 'City', use_roads: this.useRoads } }
+          : undefined,
       alternates: 2,
       language: 'pt-BR',
       id: 'gps-scooter',
@@ -373,7 +390,7 @@ class ValhallaRoutingProvider implements RoutingProvider {
 
     const data = (await response.json()) as ValhallaResponse
     const trips = [data.trip, ...(data.alternates ?? []).map((alt) => alt.trip)]
-    return trips.map((trip, index) => valhallaTripToCandidateRoute(trip, `valhalla-${index}`))
+    return trips.map((trip, index) => valhallaTripToCandidateRoute(trip, `valhalla-${this.costing}-${index}`))
   }
 }
 
@@ -392,20 +409,41 @@ class CombinedRoutingProvider implements RoutingProvider {
   isConfigured = true
 
   constructor(
-    private readonly valhalla: ValhallaRoutingProvider,
     private readonly osrm: RoutingProvider,
+    /** `use_roads` do costing de bicicleta: 0 evita via movimentada, 1 aceita. */
+    private readonly useRoads = 0.5,
   ) {}
 
   async fetchCandidateRoutes(request: RouteRequest): Promise<CandidateRoute[]> {
-    const [valhallaOutcome, osrmOutcome] = await Promise.allSettled([
-      this.valhalla.fetchCandidateRoutes(request),
-      this.osrm.fetchCandidateRoutes(request),
-    ])
+    /**
+     * O POOL DE CANDIDATAS É MONTADO PELO PERFIL DO VEÍCULO.
+     *
+     * - sempre o costing do perfil (bicicleta ou motor_scooter);
+     * - o OSRM "driving" continua entrando, para que a rota mais rápida por
+     *   via inadequada EXISTA como opção real e apareça classificada, em vez
+     *   de sumir;
+     * - só o patinete recebe também candidatas de PEDESTRE. Elas passam pelo
+     *   mesmo classificador que todas as outras: se o caminho por calçada for
+     *   ruim para patinete, perde no ranking. Não é rota de pedestre
+     *   renomeada — é a malha de pedestre entrando no pool para ser avaliada
+     *   com os parâmetros do patinete.
+     */
+    const profile = mobilityProfile(getUserPreferences().vehicleModelId)
 
-    const valhallaRoutes = valhallaOutcome.status === 'fulfilled' ? valhallaOutcome.value : []
-    const osrmRoutes = osrmOutcome.status === 'fulfilled' ? osrmOutcome.value.map((route) => ({ ...route, id: `driving-${route.id}` })) : []
+    const sources: Promise<CandidateRoute[]>[] = [
+      new ValhallaRoutingProvider(this.useRoads, profile.costing).fetchCandidateRoutes(request),
+      this.osrm.fetchCandidateRoutes(request).then((routes) => routes.map((route) => ({ ...route, id: `driving-${route.id}` }))),
+    ]
+    if (profile.includePedestrianCandidates) {
+      sources.push(
+        new ValhallaRoutingProvider(this.useRoads, 'pedestrian')
+          .fetchCandidateRoutes(request)
+          .then((routes) => routes.map((route) => ({ ...route, id: `foot-${route.id}` }))),
+      )
+    }
 
-    const combined = [...valhallaRoutes, ...osrmRoutes]
+    const outcomes = await Promise.allSettled(sources)
+    const combined = outcomes.flatMap((outcome) => (outcome.status === 'fulfilled' ? outcome.value : []))
     if (combined.length === 0) {
       throw new Error('Nenhuma rota encontrada entre a origem e o destino informados.')
     }
@@ -418,5 +456,5 @@ export function getRoutingProvider(): RoutingProvider {
     return new UnconfiguredRoutingProvider()
   }
 
-  return new CombinedRoutingProvider(new ValhallaRoutingProvider(0.5), new OsrmRoutingProvider(env.routingBaseUrl))
+  return new CombinedRoutingProvider(new OsrmRoutingProvider(env.routingBaseUrl))
 }

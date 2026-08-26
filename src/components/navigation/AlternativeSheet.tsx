@@ -1,9 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SuitabilityBar } from '@/components/route/SuitabilityBar'
 import { describeRun } from '@/services/routing/segmentSeverity'
 import { describeComparison, type RouteComparison } from '@/services/routing/alternatives'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { ScoredRoute } from '@/types/routing'
+
+/**
+ * Duração da saída. Casa com `duration-slow` dos tokens — a sheet e a pílula
+ * do topo saem juntas, e o desmonte espera as duas terminarem.
+ */
+const SHEET_EXIT_MS = 320
 
 interface AlternativeSheetProps {
   current: ScoredRoute
@@ -37,6 +43,43 @@ export function AlternativeSheet({
   onSelect,
   onDismiss,
 }: AlternativeSheetProps) {
+  /**
+   * SAÍDA AUTOMÁTICA DEPOIS DE ESCOLHER.
+   *
+   * O fluxo era: escolher a rota → ela é aplicada → e a sheet CONTINUAVA
+   * aberta, com a pílula dizendo "navegação pausada". Para voltar a navegar o
+   * usuário tinha que achar o "X" lá no topo — em movimento, com o trajeto já
+   * decidido. Escolher já é a confirmação; ficar não acrescenta nada.
+   *
+   * Agora a escolha aplica na hora (o traçado troca no mapa, que é o retorno
+   * visual imediato) e a sheet recolhe sozinha. O "X" continua existindo para
+   * SAIR SEM TROCAR — que é outra intenção, e essa sim precisa de um gesto
+   * explícito.
+   */
+  const [leaving, setLeaving] = useState(false)
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (exitTimer.current) clearTimeout(exitTimer.current)
+    }
+  }, [])
+
+  /** Espera a animação terminar antes de desmontar, senão a sheet some de um quadro para o outro. */
+  const closeAfterAnimation = () => {
+    if (exitTimer.current) return
+    setLeaving(true)
+    exitTimer.current = setTimeout(onDismiss, SHEET_EXIT_MS)
+  }
+
+  const handleCardSelect = (which: 'current' | 'alternative') => {
+    // Aplica ANTES de animar: a rota tem que trocar no mapa enquanto a sheet
+    // ainda está saindo, senão o usuário vê o painel fechar e só depois o
+    // traçado mudar, como se fossem duas coisas separadas.
+    onSelect(which)
+    closeAfterAnimation()
+  }
+
   const [showDetails, setShowDetails] = useState(false)
   /**
    * Sheet recolhida: só os dois cards, sem o rodapé de detalhes. Serve para
@@ -60,10 +103,14 @@ export function AlternativeSheet({
         rotas inteiras, aproximar num cruzamento, seguir cada traçado com o
         dedo. Fechar é papel do botão explícito abaixo.
       */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,env(safe-area-inset-top))]">
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-[max(1rem,env(safe-area-inset-top))] transition-all duration-slow ease-ease-out-soft ${
+          leaving ? '-translate-y-3 opacity-0' : 'translate-y-0 opacity-100'
+        }`}
+      >
         <button
           type="button"
-          onClick={onDismiss}
+          onClick={closeAfterAnimation}
           className="pointer-events-auto flex items-center gap-2 rounded-pill bg-nav-surface px-4 py-2 text-[13px] font-extrabold text-nav-content shadow-float transition-all duration-fast active:scale-[.97]"
         >
           Comparando alternativas · navegação pausada
@@ -73,7 +120,11 @@ export function AlternativeSheet({
         </button>
       </div>
 
-      <div className="pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet">
+      <div
+        className={`pointer-events-auto absolute inset-x-3 bottom-0 z-40 rounded-t-2xl bg-surface-card px-card pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[18px] shadow-sheet transition-all duration-slow ease-ease-out-soft ${
+          leaving ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+        }`}
+      >
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
@@ -90,7 +141,7 @@ export function AlternativeSheet({
             route={current}
             reason="Rota atual"
             selected={selected === 'current'}
-            onSelect={() => onSelect('current')}
+            onSelect={() => handleCardSelect('current')}
           />
           <RouteCompareCard
             route={alternative}
@@ -102,7 +153,7 @@ export function AlternativeSheet({
                   : 'Alternativa'
             }
             selected={selected === 'alternative'}
-            onSelect={() => onSelect('alternative')}
+            onSelect={() => handleCardSelect('alternative')}
             deltas={deltas}
           />
         </div>

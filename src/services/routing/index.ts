@@ -1,4 +1,4 @@
-import { calculateEtaMinutes } from '@/services/routing/eta'
+import { calculateEtaMinutes, calculateRouteEtaMinutes } from '@/services/routing/eta'
 import { getRoutingProvider } from '@/services/routing/provider'
 import { enrichRouteSegments, prefetchWaysForRoutes } from '@/services/routing/segmentEnrichment'
 import { evaluateRoute } from '@/services/routing/ruleEngine'
@@ -107,7 +107,7 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
         elevation,
         severity: analyzeRouteSeverity(enrichedRoute, vehicle, isEnriched),
         eligibility,
-        etaMinutes: calculateEtaMinutes(route.totalDistanceMeters),
+        etaMinutes: calculateRouteEtaMinutes(enrichedRoute.segments, enrichedRoute.totalDistanceMeters, vehicle.modelId, vehicle.referenceSpeedKmh),
         highlights: [],
       }
     }),
@@ -138,19 +138,97 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
  * Rótulos 'fastest'/'safest' marcam os extremos do conjunto quando distintos
  * da recomendada, para a UI oferecer alternativas (ex: "Mais rápida").
  */
+/**
+ * Metros em via fortemente desaconselhada, a partir dos quais a rota é
+ * considerada EXPOSTA.
+ *
+ * Não é zero de propósito: uma rota pode encostar 30 m numa marginal só para
+ * fazer a curva de entrada, e tratar isso como "rota perigosa" tiraria do
+ * ranking rotas que são, na prática, boas. 150 m é um quarteirão — a partir
+ * daí o usuário está de fato circulando ali.
+ */
+const EXPOSURE_THRESHOLD_METERS = 150
+
+function exposureMeters(entry: ScoredRoute): number {
+  return entry.breakdown
+    .filter((item) => item.tier === 'unsuitable' || item.tier === 'prohibited')
+    .reduce((sum, item) => sum + item.distanceMeters, 0)
+}
+
+/**
+ * A rota atravessa algum trecho PROIBIDO?
+ *
+ * Proibido aqui é sinal explícito (`access=no/private`) ou impossibilidade
+ * física (escada) — não é opinião de adequação. Encontrado em teste: para o
+ * patinete, a candidata vinda da malha de pedestre cortava 90 m de uma via de
+ * serviço marcada como privada, e ela foi RECOMENDADA mesmo saindo do
+ * pipeline com `eligibility: 'not-allowed'`. Recomendar uma rota que o
+ * próprio app classifica como não permitida é contradizer a si mesmo.
+ */
+function hasProhibited(entry: ScoredRoute): boolean {
+  return entry.breakdown.some((item) => item.tier === 'prohibited' && item.distanceMeters > 0)
+}
+
 function rankRoutes(scored: ScoredRoute[]): { ranked: ScoredRoute[]; recommendedId: string } {
   const tolerance = ROUTE_PREFERENCE_TOLERANCE[getUserPreferences().routePreference]
-  // Ranqueia pelo score JÁ descontado das preferências do usuário. Como o
-  // desconto é limitado (ver MAX_PENALTY_PER_AVOIDANCE), uma condição
-  // inevitável não elimina a rota: ela apenas perde posição e ganha aviso.
-  const maxScore = Math.max(...scored.map((entry) => entry.preferenceScore))
-  const contenders = scored.filter((entry) => entry.preferenceScore >= maxScore - tolerance)
+
+  /**
+   * SEGURANÇA ANTES DE TEMPO — regra de ordenação, não desempate.
+   *
+   * O ranking anterior era `preferenceScore` e, entre as candidatas dentro de
+   * uma tolerância, a mais CURTA vencia. O buraco: uma rota com um trecho de
+   * rodovia podia ficar dentro da tolerância e, sendo mais curta, virar a
+   * recomendada. Ou seja, a rota mais rápida com trecho perigoso ganhava da
+   * rota segura mais lenta — exatamente o que não pode acontecer num app cujo
+   * eixo é adequação.
+   *
+   * Agora a exposição a via fortemente desaconselhada é um PORTÃO: enquanto
+   * existir ao menos uma candidata sem exposição relevante, nenhuma candidata
+   * exposta pode ser recomendada, por mais rápida ou curta que seja. Só
+   * quando TODAS estão expostas (acontece: às vezes não há caminho limpo) a
+   * comparação volta a ser entre elas, aí sim pela menor exposição.
+   *
+   * A rota perigosa não some — continua na lista, marcada, e o usuário pode
+   * escolhê-la conscientemente.
+   */
+  /**
+   * DOIS PORTÕES, nesta ordem: proibido antes de desaconselhado.
+   *
+   * Sempre que existir candidata sem trecho proibido, só ela pode ser
+   * recomendada. Depois, entre as permitidas, vale o portão de exposição a via
+   * fortemente desaconselhada. Cada portão só cede quando NENHUMA candidata o
+   * satisfaz — porque às vezes não há caminho limpo, e nesse caso é melhor
+   * mostrar o menos ruim, marcado, do que não mostrar rota.
+   */
+  const allowed = scored.filter((entry) => !hasProhibited(entry))
+  const permitted = allowed.length > 0 ? allowed : scored
+
+  const clean = permitted.filter((entry) => exposureMeters(entry) < EXPOSURE_THRESHOLD_METERS)
+  const pool = clean.length > 0 ? clean : permitted
+
+  const maxScore = Math.max(...pool.map((entry) => entry.preferenceScore))
+  const contenders = pool.filter((entry) => entry.preferenceScore >= maxScore - tolerance)
   const recommended = [...contenders].sort((a, b) => a.route.totalDistanceMeters - b.route.totalDistanceMeters)[0]
 
+  // A mais rápida e a mais segura continuam sendo marcadas no conjunto INTEIRO
+  // — inclusive quando a mais rápida é a exposta. É informação, e escondê-la
+  // seria decidir pelo usuário em vez de informá-lo.
   const fastest = [...scored].sort((a, b) => a.etaMinutes - b.etaMinutes)[0]
   const safest = [...scored].sort((a, b) => b.suitabilityScore - a.suitabilityScore)[0]
 
-  const ranked = [...scored].sort((a, b) => b.preferenceScore - a.preferenceScore)
+  const ranked = [...scored].sort((a, b) => {
+    // Rota com trecho proibido vai para o fim, antes de qualquer outro critério.
+    const barredA = hasProhibited(a)
+    const barredB = hasProhibited(b)
+    if (barredA !== barredB) return barredA ? 1 : -1
+
+    const exposedA = exposureMeters(a) >= EXPOSURE_THRESHOLD_METERS
+    const exposedB = exposureMeters(b) >= EXPOSURE_THRESHOLD_METERS
+    // Rotas expostas vão para o fim da lista, sempre.
+    if (exposedA !== exposedB) return exposedA ? 1 : -1
+    if (b.preferenceScore !== a.preferenceScore) return b.preferenceScore - a.preferenceScore
+    return a.route.totalDistanceMeters - b.route.totalDistanceMeters
+  })
 
   for (const entry of ranked) {
     entry.label = undefined
@@ -245,6 +323,15 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
       preferenceScore: Math.max(0, suitabilityScore - avoidance.penaltyPoints),
       avoidanceHits: avoidance.hits,
       eligibility,
+      // O tempo é REFEITO aqui. `wayKind` só existe depois do enriquecimento,
+      // então antes dele a conta era distância ÷ velocidade para tudo — e uma
+      // rota por calçada saía com o tempo de quem passa por ela em via livre.
+      etaMinutes: calculateRouteEtaMinutes(
+        enrichedSegments,
+        enrichedRoute.totalDistanceMeters,
+        vehicle.modelId,
+        vehicle.referenceSpeedKmh,
+      ),
       severity: analyzeRouteSeverity(enrichedRoute, vehicle, true),
     }
   }
@@ -266,7 +353,24 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
   ])
 
   const changed = selected !== result.selected || alternatives.some((entry, i) => entry !== result.alternatives[i])
-  return changed ? { selected, alternatives } : null
+  if (!changed) return null
+
+  /**
+   * REORDENA depois do enriquecimento.
+   *
+   * A exposição a via desaconselhada só é conhecida DEPOIS que as tags do OSM
+   * chegam — antes disso quase tudo parece adequado. Sem reordenar aqui, a
+   * regra de "segurança antes de tempo" ficaria valendo sobre dados que ainda
+   * não existiam, e a rota que o enriquecimento revelou perigosa continuaria
+   * em primeiro lugar.
+   */
+  const { ranked, recommendedId } = rankRoutes([selected, ...alternatives])
+  attachHighlights(ranked, recommendedId)
+  const upgradedSelected = ranked.find((entry) => entry.route.id === recommendedId) ?? selected
+  return {
+    selected: upgradedSelected,
+    alternatives: ranked.filter((entry) => entry.route.id !== recommendedId),
+  }
 }
 
 export { calculateEtaMinutes } from '@/services/routing/eta'

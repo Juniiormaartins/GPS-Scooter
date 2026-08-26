@@ -1,3 +1,6 @@
+import { mobilityProfile, PEDESTRIAN_WAY_KINDS } from '@/config/mobilityProfiles'
+import type { VehicleModelId } from '@/config/userPreferences'
+import type { WayKind } from '@/types/routing'
 import { getUserPreferences } from '@/config/userPreferences'
 
 /**
@@ -20,4 +23,47 @@ export function calculateEtaMinutes(
   const distanceKm = distanceMeters / 1000
   const hours = distanceKm / referenceSpeedKmh
   return hours * 60
+}
+
+/**
+ * ETA sensível ao TIPO DE VIA.
+ *
+ * O problema concreto: para o patinete o app agora pede também candidatas de
+ * pedestre, e o Valhalla devolve aquele trajeto com 101 minutos para 8 km —
+ * porque ele cronometrou uma pessoa andando. Ignorar isso e aplicar 25 km/h a
+ * tudo seria o erro oposto: ninguém atravessa uma calçada movimentada na
+ * velocidade máxima do veículo.
+ *
+ * Então o tempo é somado por trecho: velocidade de referência do veículo na
+ * via, e a velocidade de espaço de pedestre do perfil (6–8 km/h) em calçada,
+ * calçadão e caminho. É o que faz a rota por calçada aparecer com um tempo
+ * plausível — nem o do pedestre, nem o da via livre.
+ *
+ * Sem `wayKind` (rota ainda não enriquecida), cai na conta simples de sempre.
+ */
+export function calculateRouteEtaMinutes(
+  segments: { distanceMeters: number; wayKind?: WayKind }[],
+  totalDistanceMeters: number,
+  vehicleModelId: VehicleModelId = getUserPreferences().vehicleModelId,
+  referenceSpeedKmh: number = getUserPreferences().referenceSpeedKmh,
+): number {
+  const profile = mobilityProfile(vehicleModelId)
+  const known = segments.filter((segment) => segment.wayKind != null)
+  if (known.length === 0) return calculateEtaMinutes(totalDistanceMeters, referenceSpeedKmh)
+
+  let minutes = 0
+  let accounted = 0
+  for (const segment of segments) {
+    const isPedestrianSpace = segment.wayKind != null && PEDESTRIAN_WAY_KINDS.includes(segment.wayKind)
+    const speed = isPedestrianSpace ? profile.pedestrianWaySpeedKmh : referenceSpeedKmh
+    minutes += calculateEtaMinutes(segment.distanceMeters, speed)
+    accounted += segment.distanceMeters
+  }
+
+  // Os segmentos podem não somar exatamente a distância total (arredondamento
+  // do provedor). O resto vai na velocidade de referência.
+  const remainder = totalDistanceMeters - accounted
+  if (remainder > 0) minutes += calculateEtaMinutes(remainder, referenceSpeedKmh)
+
+  return minutes
 }

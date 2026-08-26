@@ -1,175 +1,222 @@
+import { mobilityProfile, type SuitabilityReasonCode } from '@/config/mobilityProfiles'
 import type { VehicleModelId } from '@/config/userPreferences'
-import type { Eligibility, RoadClass, RouteSegment, SuitabilityTier } from '@/types/routing'
+import type { Eligibility, RouteSegment, SuitabilityTier, WayKind } from '@/types/routing'
 
 /**
- * Camada de classificação de vias ("scooter suitability"): traduz a
- * classificação estrutural de uma via (RoadClass + tags do OSM, quando o
- * enriquecimento via Overpass encontrou correspondência) em um nível de
- * adequação ao perfil autopropelido. Não decide pontuação nem faz
- * agregações de rota — isso é responsabilidade do ruleEngine.
+ * Classificação de vias POR PERFIL DE MOBILIDADE.
+ *
+ * O QUE MUDOU E POR QUÊ. Antes existia uma tabela única de adequação
+ * (`TIER_BY_ROAD_CLASS`) aplicada aos três veículos, com dois ajustes a
+ * posteriori. Isso fazia patinete, bicicleta elétrica e scooter lerem uma
+ * avenida arterial exatamente da mesma forma — e nenhum dos três reconhecia
+ * ciclovia, calçada, calçadão ou escada, porque esses tipos de via nem
+ * chegavam à classificação.
+ *
+ * Agora a tabela vem do perfil do veículo (config/mobilityProfiles.ts). O
+ * classificador não conhece veículo nenhum: ele lê a tabela do perfil ativo.
+ * Acrescentar um quarto veículo é acrescentar um perfil, não um `if`.
  *
  * Prioridade dos sinais, do mais para o menos confiável:
- * 1. tags reais do OSM (segment.osmTags) — access, motorroad, ref, maxspeed;
- * 2. RoadClass estrutural (preenchido pelo enriquecimento ou, na ausência
- *    dele, diretamente pelo provedor de rota);
- * 3. heurística temporária por nome da via — só usada quando nenhuma
- *    informação estruturada está disponível (provedor sem dados + Overpass
- *    sem match). Não deve ser tratada como fonte de verdade.
+ * 1. tags reais do OSM (access, motorroad, ref, maxspeed, bicycle, foot);
+ * 2. tipo de via normalizado (`wayKind`) contra a tabela do perfil;
+ * 3. `RoadClass` do provedor, quando não houve enriquecimento;
+ * 4. heurística por nome — último recurso, nunca fonte de verdade.
  *
- * A partir da classificação estrutural, um ajuste POR VEÍCULO é aplicado (ver
- * `applyVehicleAdjustment`). A via é a mesma; o que muda é o quanto ela serve
- * para quem está em cima dela.
+ * CADA RESULTADO CARREGA UM MOTIVO. Um indicador vermelho sem explicação
+ * obriga o usuário a adivinhar; o motivo viaja junto com o nível até a
+ * interface.
  */
 
-/**
- * Diferença de velocidade, em km/h, a partir da qual conviver com o tráfego
- * deixa de ser confortável e a via cai um nível.
- *
- * O sinal aqui é o DIFERENCIAL, não a velocidade absoluta da via: o risco de
- * um veículo lento em tráfego misto vem de ser ultrapassado repetidamente,
- * e isso depende de quanto mais rápido o resto anda. Uma avenida de 60 km/h
- * é uma situação diferente para uma scooter de 32 km/h (28 de diferença) e
- * para um patinete de 25 (35 de diferença) — é exatamente esse tipo de
- * distinção que o usuário espera ao trocar de veículo no perfil.
- *
- * 30 km/h é onde colocamos a linha: abaixo disso o fluxo ainda absorve o
- * veículo lento; acima, ele vira obstáculo. É um limiar de produto, não uma
- * medição de campo, e está documentado como tal.
- */
-const SPEED_DIFFERENTIAL_THRESHOLD_KMH = 30
-
-/**
- * Sensibilidade a piso solto por veículo. Roda pequena de patinete perde
- * estabilidade em cascalho e terra de um jeito que aro de bicicleta não
- * perde — a condição detectada é a mesma, a consequência não.
- */
-const LOOSE_SURFACE_SENSITIVITY: Record<VehicleModelId, 'high' | 'medium' | 'low'> = {
-  'scooter-25': 'high',
-  'scooter-32': 'medium',
-  'ebike-25': 'low',
-  custom: 'medium',
-}
-
-const TIER_BY_ROAD_CLASS: Record<Exclude<RoadClass, 'unknown'>, SuitabilityTier> = {
-  residential: 'very-good',
-  service: 'very-good',
-  tertiary: 'good',
-  secondary: 'good',
-  primary: 'caution',
-  trunk: 'unsuitable',
-  motorway: 'unsuitable',
+export interface SegmentAssessment {
+  tier: SuitabilityTier
+  reason: SuitabilityReasonCode
 }
 
 const HIGHWAY_REF_PATTERN = /^BR-?\d{2,3}$/i
 const HIGHWAY_NAME_PATTERN = /\bBR-?\d{2,3}\b|\brodovia\b|\bvia\s+expressa\b|\banel\s+vi[aá]rio\b/i
 const ARTERIAL_NAME_PATTERN = /\bavenida\b|\bav\.\b/i
 
-/**
- * Contexto do veículo para a classificação. Fica opcional de propósito: sem
- * ele a função devolve a classificação estrutural pura, que é o
- * comportamento anterior — nenhum chamador quebra por não passar o veículo.
- */
+/** Contexto do veículo. Opcional: sem ele a leitura é estrutural, sem perfil. */
 export interface VehicleClassificationContext {
   modelId: VehicleModelId
   referenceSpeedKmh: number
 }
 
+/**
+ * Normaliza o valor bruto de `highway=` do OSM para o vocabulário do projeto.
+ *
+ * `_link` some (uma alça de acesso à primária é uma primária), e os tipos que
+ * não interessam ao roteamento de superfície caem em `unknown` — onde a
+ * tabela do perfil tem um valor neutro, em vez de um chute.
+ */
+export function normalizeWayKind(highway: string | undefined): WayKind {
+  if (!highway) return 'unknown'
+  const value = highway.trim().toLowerCase().replace(/_link$/, '')
+  switch (value) {
+    case 'motorway':
+    case 'trunk':
+    case 'primary':
+    case 'secondary':
+    case 'tertiary':
+    case 'residential':
+    case 'living_street':
+    case 'service':
+    case 'cycleway':
+    case 'footway':
+    case 'pedestrian':
+    case 'path':
+    case 'track':
+    case 'steps':
+      return value
+    // `unclassified` no OSM não significa "sem classificação": é uma via
+    // pública de menor hierarquia, equivalente na prática a uma residencial.
+    case 'unclassified':
+      return 'residential'
+    case 'bridleway':
+      return 'path'
+    case 'corridor':
+      return 'footway'
+    default:
+      return 'unknown'
+  }
+}
+
+/** Compatibilidade: quem só precisa do nível continua chamando isto. */
 export function classifySegment(segment: RouteSegment, vehicle?: VehicleClassificationContext): SuitabilityTier {
-  const base = classifySegmentStructurally(segment)
+  return assessSegment(segment, vehicle).tier
+}
+
+export function assessSegment(segment: RouteSegment, vehicle?: VehicleClassificationContext): SegmentAssessment {
+  const base = assessStructurally(segment, vehicle)
   return vehicle ? applyVehicleAdjustment(base, segment, vehicle) : base
 }
 
-function classifySegmentStructurally(segment: RouteSegment): SuitabilityTier {
+function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificationContext): SegmentAssessment {
   const tags = segment.osmTags
 
-  // Sinais fortes e explícitos do OSM têm prioridade sobre qualquer heurística.
+  // Sinais explícitos do OSM vêm antes de qualquer tabela.
   if (tags?.access && /^(no|private)$/i.test(tags.access.trim())) {
-    return 'prohibited'
+    return { tier: 'prohibited', reason: 'access-restricted' }
   }
-  if (tags?.bicycle && /^no$/i.test(tags.bicycle.trim())) {
-    return 'prohibited'
+
+  const wayKind = segment.wayKind ?? normalizeWayKind(tags?.highway)
+
+  // Escada é impossível de percorrer sobre qualquer um dos veículos. Isto não
+  // é regra legal inventada — é geometria.
+  if (wayKind === 'steps') return { tier: 'prohibited', reason: 'not-rideable' }
+
+  const profile = vehicle ? mobilityProfile(vehicle.modelId) : null
+
+  /**
+   * `bicycle=no` deixou de ser proibição UNIVERSAL.
+   *
+   * Era: qualquer via com `bicycle=no` virava `prohibited` para os três
+   * veículos. Mas a tag fala de bicicleta — numa via onde bicicleta é
+   * proibida e scooter motorizada é o tráfego normal, ela dizia o contrário
+   * do que vale. Agora ela só proíbe quem, de fato, circula como bicicleta.
+   */
+  const bicycleNo = tags?.bicycle != null && /^no$/i.test(tags.bicycle.trim())
+  const ridesAsBicycle = profile?.costing === 'bicycle'
+  if (bicycleNo && (ridesAsBicycle || !profile)) {
+    return { tier: 'prohibited', reason: 'access-restricted' }
   }
+
+  // Infraestrutura designada: melhor caso para quem ela serve.
+  const designatedForBicycle = tags?.bicycle != null && /^(yes|designated)$/i.test(tags.bicycle.trim())
+  if (designatedForBicycle && (!profile || ridesAsBicycle)) {
+    return { tier: 'very-good', reason: 'ideal-infrastructure' }
+  }
+
   if (tags?.motorroad && /^yes$/i.test(tags.motorroad.trim())) {
-    return 'unsuitable'
+    return { tier: 'unsuitable', reason: 'expressway' }
   }
   if (tags?.ref && HIGHWAY_REF_PATTERN.test(tags.ref.trim())) {
-    return 'unsuitable'
-  }
-  if (tags?.bicycle && /^(yes|designated)$/i.test(tags.bicycle.trim())) {
-    return 'very-good'
+    return { tier: 'unsuitable', reason: 'expressway' }
   }
 
+  if (profile && wayKind !== 'unknown') {
+    return { tier: profile.wayTiers[wayKind], reason: reasonForWayKind(wayKind, profile.wayTiers[wayKind]) }
+  }
+
+  // Sem enriquecimento: usa o que o provedor deu.
   if (segment.roadClass !== 'unknown') {
-    let tier = TIER_BY_ROAD_CLASS[segment.roadClass]
-
-    const maxSpeed = tags?.maxspeed ? Number.parseInt(tags.maxspeed, 10) : undefined
-    if (maxSpeed && Number.isFinite(maxSpeed) && maxSpeed > 80 && tier !== 'unsuitable') {
-      tier = 'caution'
+    const fromClass = normalizeWayKind(segment.roadClass)
+    if (profile) {
+      return { tier: profile.wayTiers[fromClass], reason: reasonForWayKind(fromClass, profile.wayTiers[fromClass]) }
     }
-
-    return tier
   }
 
-  // Sem classificação estruturada nem enriquecimento — fallback temporário por nome.
-  if (segment.roadName && HIGHWAY_NAME_PATTERN.test(segment.roadName)) return 'unsuitable'
-  if (segment.roadName && ARTERIAL_NAME_PATTERN.test(segment.roadName)) return 'good'
-  return 'good'
+  // Último recurso: nome da via.
+  if (segment.roadName && HIGHWAY_NAME_PATTERN.test(segment.roadName)) {
+    return { tier: 'unsuitable', reason: 'expressway' }
+  }
+  if (segment.roadName && ARTERIAL_NAME_PATTERN.test(segment.roadName)) {
+    return { tier: 'good', reason: 'urban-road' }
+  }
+  return { tier: 'good', reason: 'no-data' }
+}
+
+function reasonForWayKind(kind: WayKind, tier: SuitabilityTier): SuitabilityReasonCode {
+  if (kind === 'cycleway') return 'ideal-infrastructure'
+  if (kind === 'footway' || kind === 'pedestrian') return 'pedestrian-space'
+  // Só via de acesso limitado é "rodovia". Uma arterial urbana ruim para o
+  // veículo é outra coisa, e descrevê-la como rodovia faria a explicação não
+  // bater com o que o usuário vê na rua.
+  if (kind === 'motorway' || kind === 'trunk') return 'expressway'
+  if (kind === 'residential' || kind === 'living_street') return 'local-street'
+  if (kind === 'path' || kind === 'track') return 'loose-surface'
+  if (tier === 'unsuitable') return 'arterial-road'
+  if (tier === 'caution') return 'shared-with-traffic'
+  return 'urban-road'
 }
 
 /**
- * Ajuste da classificação estrutural ao veículo selecionado.
+ * Ajuste ao veículo, sobre a leitura estrutural.
  *
- * REGRAS DELIBERADAS SOBRE O QUE ESTE AJUSTE **NÃO** FAZ:
- * - nunca melhora um trecho para 'prohibited' → utilizável. Proibição só vem
- *   de sinal explícito do OSM (access=no, bicycle=no) e vale para todos os
- *   veículos igualmente — trocar de veículo no perfil não pode "liberar" uma
- *   via fechada;
- * - nunca inventa restrição legal. Tudo aqui é adequação/conforto, que é o
- *   eixo de qualidade, separado do eixo de elegibilidade (ver Eligibility);
- * - só age quando há DADO REAL. Sem `maxspeed` não há diferencial de
- *   velocidade para calcular, e sem `surface` não há piso para avaliar: nesses
- *   casos devolve a classificação estrutural intacta em vez de chutar.
+ * O QUE ELE **NÃO** FAZ, deliberadamente:
+ * - nunca transforma `prohibited` em utilizável;
+ * - nunca inventa restrição legal — tudo aqui é adequação, que é o eixo de
+ *   qualidade, separado do eixo de elegibilidade;
+ * - só age com DADO REAL: sem `maxspeed` não há diferencial para calcular,
+ *   sem `surface` não há piso para avaliar.
  */
 function applyVehicleAdjustment(
-  base: SuitabilityTier,
+  base: SegmentAssessment,
   segment: RouteSegment,
   vehicle: VehicleClassificationContext,
-): SuitabilityTier {
-  // Proibido é proibido para qualquer veículo.
-  if (base === 'prohibited') return base
+): SegmentAssessment {
+  if (base.tier === 'prohibited') return base
 
-  let tier = base
+  const profile = mobilityProfile(vehicle.modelId)
+  let { tier, reason } = base
   const tags = segment.osmTags
 
-  // Ciclovia/via designada é o melhor caso para todos, e para bicicleta
-  // elétrica é literalmente a infraestrutura do veículo. Já tratado como
-  // 'very-good' na classificação estrutural; nada a piorar aqui.
-  const isDesignatedCycleway = tags?.bicycle != null && /^(yes|designated)$/i.test(tags.bicycle.trim())
+  const onOwnInfrastructure = base.reason === 'ideal-infrastructure'
 
   const maxSpeed = tags?.maxspeed ? Number.parseInt(tags.maxspeed, 10) : undefined
-  if (!isDesignatedCycleway && maxSpeed && Number.isFinite(maxSpeed)) {
+  if (!onOwnInfrastructure && maxSpeed && Number.isFinite(maxSpeed)) {
     const differential = maxSpeed - vehicle.referenceSpeedKmh
-    if (differential >= SPEED_DIFFERENTIAL_THRESHOLD_KMH) {
-      tier = downgrade(tier)
+    if (differential >= profile.speedDifferentialThresholdKmh) {
+      tier = downgrade(tier as NonProhibitedTier)
+      reason = 'high-speed-traffic'
     }
   }
 
-  const sensitivity = LOOSE_SURFACE_SENSITIVITY[vehicle.modelId] ?? 'medium'
-  if (sensitivity !== 'low' && isLooseSurface(tags?.surface)) {
-    // 'high' (patinete, roda pequena) desce um nível; 'medium' só desce se o
-    // trecho já não era ideal, para não transformar uma rua local tranquila
-    // de piso compactado em "atenção" para uma scooter que aguenta bem.
-    if (sensitivity === 'high' || tier !== 'very-good') {
-      tier = downgrade(tier)
+  if (profile.looseSurfaceSensitivity !== 'low' && isLooseSurface(tags?.surface)) {
+    // 'high' (roda pequena) desce sempre; 'medium' só desce se o trecho já
+    // não era ideal, para não rebaixar uma rua local de piso compactado.
+    if (profile.looseSurfaceSensitivity === 'high' || tier !== 'very-good') {
+      tier = downgrade(tier as NonProhibitedTier)
+      reason = 'loose-surface'
     }
   }
 
-  return tier
+  return { tier, reason }
 }
 
-/** Desce exatamente um degrau, sem nunca chegar a 'prohibited' — proibição não se infere. */
 type NonProhibitedTier = Exclude<SuitabilityTier, 'prohibited'>
 
+/** Desce exatamente um degrau, sem nunca chegar a 'prohibited' — proibição não se infere. */
 function downgrade(tier: NonProhibitedTier): NonProhibitedTier {
   switch (tier) {
     case 'very-good':
@@ -208,11 +255,11 @@ export const TIER_PENALTY_PER_KM: Record<SuitabilityTier, number> = {
 }
 
 /**
- * Elegibilidade é um eixo separado da pontuação (ver comentário de
- * Eligibility em types/routing.ts). 'unsuitable' continua ELEGÍVEL
- * ('discouraged') — o produto desaconselha vias rápidas/rodovias por
- * qualidade, mas não afirma que sejam proibidas sem um sinal explícito do
- * OSM (access=no, bicycle=no). Só esses sinais explícitos levam a 'prohibited'/'not-allowed'.
+ * Elegibilidade é um eixo separado da pontuação. 'unsuitable' continua
+ * ELEGÍVEL ('discouraged') — o produto desaconselha via expressa por
+ * qualidade, mas não afirma que seja proibida sem sinal explícito do OSM.
+ * É isso que mantém a rota perigosa VISÍVEL como alternativa em vez de
+ * desaparecer da interface.
  */
 export const TIER_ELIGIBILITY: Record<SuitabilityTier, Eligibility> = {
   'very-good': 'allowed',
@@ -223,9 +270,9 @@ export const TIER_ELIGIBILITY: Record<SuitabilityTier, Eligibility> = {
 }
 
 export const TIER_LABEL: Record<SuitabilityTier, string> = {
-  'very-good': 'vias locais adequadas',
-  good: 'avenidas/vias urbanas',
-  caution: 'trechos de atenção (tráfego elevado)',
-  unsuitable: 'vias expressas/rodovias',
+  'very-good': 'vias adequadas ao veículo',
+  good: 'vias urbanas comuns',
+  caution: 'trechos que exigem atenção',
+  unsuitable: 'vias fortemente desaconselhadas',
   prohibited: 'trechos não utilizáveis',
 }

@@ -6,6 +6,8 @@ interface LocationHeaderProps {
   isLocating: boolean
   onProfileClick: () => void
   onMenuClick: () => void
+  /** Foto do avatar escolhida no Perfil. null = ícone padrão. */
+  avatarDataUrl?: string | null
 }
 
 /**
@@ -27,6 +29,7 @@ export function LocationHeader({
   isLocating,
   onProfileClick,
   onMenuClick,
+  avatarDataUrl = null,
 }: LocationHeaderProps) {
   return (
     <div className="pointer-events-none flex items-center gap-3">
@@ -59,12 +62,22 @@ export function LocationHeader({
         type="button"
         onClick={onProfileClick}
         aria-label="Perfil"
-        className="pointer-events-auto relative flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-surface-card text-content-secondary shadow-float transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
+        className="pointer-events-auto relative flex h-[42px] w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-pill bg-surface-card text-content-secondary shadow-float transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
       >
-        <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="8" r="3.6" />
-          <path d="M4.8 20a7.6 7.6 0 0 1 14.4 0" />
-        </svg>
+        {/*
+          `object-cover` + `overflow-hidden` no botão: a foto já vem recortada
+          em quadrado (ver services/avatar.ts), e estes dois garantem que ela
+          preencha o círculo sem distorcer, qualquer que seja o formato que o
+          usuário escolheu. Sem foto, o ícone padrão de sempre.
+        */}
+        {avatarDataUrl ? (
+          <img src={avatarDataUrl} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="8" r="3.6" />
+            <path d="M4.8 20a7.6 7.6 0 0 1 14.4 0" />
+          </svg>
+        )}
       </button>
     </div>
   )

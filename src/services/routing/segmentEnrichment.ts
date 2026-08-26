@@ -1,5 +1,6 @@
 import type { LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
+import { normalizeWayKind } from '@/services/routing/roadClassification'
 import type { CandidateRoute, OsmWayTags, RoadClass, RouteSegment } from '@/types/routing'
 
 /**
@@ -368,6 +369,9 @@ function matchSegment(segment: RouteSegment, ways: OverpassWay[]): RouteSegment 
   return {
     ...segment,
     osmTags,
+    // Tipo de via normalizado — é o que a classificação por perfil consulta.
+    // Sem isto, calçada, ciclovia e escada continuariam invisíveis.
+    wayKind: normalizeWayKind(osmTags.highway),
     roadClass: mapHighwayTagToRoadClass(osmTags.highway) ?? segment.roadClass,
     roadName: osmTags.name || segment.roadName,
   }

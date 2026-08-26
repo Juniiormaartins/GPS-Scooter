@@ -1,3 +1,4 @@
+import { REASON_TEXT } from '@/config/mobilityProfiles'
 import { Button } from '@/components/ui/Button'
 import type { SeverityRun } from '@/services/routing/segmentSeverity'
 import { formatDistance } from '@/utils/geo'
@@ -105,6 +106,15 @@ export function SegmentDetailSheet({
             <h2 className="truncate text-sheet-title text-content-primary">{run.roadName ?? 'Trecho da rota'}</h2>
             <p className="mt-1 text-[13.5px] font-semibold text-content-secondary">
               {formatDistance(run.distanceMeters)} no seu trajeto
+            </p>
+            {/*
+              O MOTIVO, em texto. Um selo vermelho sozinho diz que há um
+              problema mas não qual — e o usuário não tem como decidir se
+              aceita o trecho sem saber se o risco é a velocidade do tráfego,
+              o tipo da via ou o piso.
+            */}
+            <p className={`mt-1.5 text-[13.5px] font-bold ${critical ? 'text-danger-text' : 'text-warning-text'}`}>
+              {REASON_TEXT[run.reason]}
             </p>
           </div>
         </div>

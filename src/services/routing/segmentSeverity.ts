@@ -1,4 +1,5 @@
-import { classifySegment, type VehicleClassificationContext } from '@/services/routing/roadClassification'
+import { REASON_TEXT, type SuitabilityReasonCode } from '@/config/mobilityProfiles'
+import { assessSegment, classifySegment, type VehicleClassificationContext } from '@/services/routing/roadClassification'
 import { formatDistance } from '@/utils/geo'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, SuitabilityTier } from '@/types/routing'
@@ -41,6 +42,8 @@ export interface ClassifiedSegment {
   tier: SuitabilityTier
   severity: SegmentSeverity
   roadName?: string
+  /** POR QUE este trecho recebeu esta classificação. Ver REASON_TEXT. */
+  reason: SuitabilityReasonCode
 }
 
 export interface RouteSeverityBreakdown {
@@ -76,6 +79,14 @@ export interface SeverityRun {
   /** Nome da via mais longa dentro do trecho, quando conhecido. */
   roadName?: string
   segmentIndexes: number[]
+  /**
+   * Motivo DOMINANTE do trecho — o que responde por mais metros dentro dele.
+   *
+   * Um indicador vermelho sem contexto obriga o usuário a adivinhar se o
+   * problema é a velocidade do tráfego, o tipo da via ou o piso. Aqui o
+   * motivo viaja junto com a cor até a tela.
+   */
+  reason: SuitabilityReasonCode
 }
 
 export function analyzeRouteSeverity(
@@ -83,7 +94,8 @@ export function analyzeRouteSeverity(
   vehicle?: VehicleClassificationContext,
   isReliable = true,
 ): RouteSeverityAnalysis {
-  const tiers = route.segments.map((segment) => classifySegment(segment, vehicle))
+  const assessments = route.segments.map((segment) => assessSegment(segment, vehicle))
+  const tiers = assessments.map((entry) => entry.tier)
 
   // 1. Agrupa segmentos contíguos que caem em via inadequada. É o
   //    comprimento do GRUPO que decide a severidade, não o do segmento —
@@ -115,8 +127,18 @@ export function analyzeRouteSeverity(
       segmentIndexes.push(i)
     }
 
+    // Motivo dominante: o que responde por mais metros dentro do trecho.
+    const metersByReason = new Map<SuitabilityReasonCode, number>()
+    for (const i of segmentIndexes) {
+      const key = assessments[i].reason
+      metersByReason.set(key, (metersByReason.get(key) ?? 0) + route.segments[i].distanceMeters)
+    }
+    const dominantReason =
+      [...metersByReason.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? assessments[start].reason
+
     runs.push({
       severity,
+      reason: dominantReason,
       distanceMeters: runMeters,
       roadName: dominantRoadName(route, segmentIndexes),
       segmentIndexes,
@@ -138,7 +160,18 @@ export function analyzeRouteSeverity(
     }
     const segmentIndexes: number[] = []
     for (let i = start; i < index; i += 1) segmentIndexes.push(i)
-    runs.push({ severity: 'attention', distanceMeters: runMeters, roadName: dominantRoadName(route, segmentIndexes), segmentIndexes })
+    const porMotivo = new Map<SuitabilityReasonCode, number>()
+    for (const i of segmentIndexes) {
+      const key = assessments[i].reason
+      porMotivo.set(key, (porMotivo.get(key) ?? 0) + route.segments[i].distanceMeters)
+    }
+    runs.push({
+      severity: 'attention',
+      reason: [...porMotivo.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? assessments[start].reason,
+      distanceMeters: runMeters,
+      roadName: dominantRoadName(route, segmentIndexes),
+      segmentIndexes,
+    })
   }
 
   const segments: ClassifiedSegment[] = route.segments.map((segment, i) => ({
@@ -147,6 +180,7 @@ export function analyzeRouteSeverity(
     tier: tiers[i],
     severity: severities[i],
     roadName: segment.roadName,
+    reason: assessments[i].reason,
   }))
 
   const breakdown = segments.reduce<RouteSeverityBreakdown>(
@@ -188,12 +222,33 @@ function dominantRoadName(route: CandidateRoute, segmentIndexes: number[]): stri
  * Frase de explicação de um trecho. Cita a via quando ela é conhecida —
  * "180 m na BR-153" é acionável; "180 m em via não recomendada" é abstrato.
  */
+/**
+ * Frase do trecho — agora com o MOTIVO.
+ *
+ * Antes dizia só "800 m na Avenida X em via não recomendada para o seu
+ * veículo", o que deixa o usuário adivinhando: é o tipo da via? a velocidade
+ * do tráfego? o piso? O motivo dominante do trecho responde isso em texto,
+ * e não só em cor.
+ */
+/** Motivos que não acrescentam nada à frase — aí vale o texto genérico da severidade. */
+const REASONLESS = new Set<SuitabilityReasonCode>(['no-data', 'urban-road', 'local-street'])
+
 export function describeRun(run: SeverityRun): string {
   const distance = formatDistance(run.distanceMeters)
   const where = run.roadName ? ` na ${run.roadName}` : ''
-  return run.severity === 'critical'
-    ? `${distance}${where} em via não recomendada para o seu veículo.`
-    : `${distance}${where} exigem atenção.`
+  /**
+   * O MOTIVO SUBSTITUI a frase genérica quando ele é mais informativo.
+   *
+   * Concatenar os dois produzia "exigem atenção — compartilhada com tráfego —
+   * exige atenção": a mesma coisa dita duas vezes. Aqui o motivo é o predicado
+   * da frase, e a severidade fica só na cor e no ícone, que já a comunicam.
+   */
+  const why = REASONLESS.has(run.reason)
+    ? run.severity === 'critical'
+      ? 'em via não recomendada para o seu veículo'
+      : 'exigem atenção'
+    : REASON_TEXT[run.reason].toLowerCase().replace(/ — exige atenção$/, '')
+  return `${distance}${where}: ${why}.`
 }
 
 /**

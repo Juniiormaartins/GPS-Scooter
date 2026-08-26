@@ -22,6 +22,36 @@ export type RoadClass =
   | 'unknown'
 
 /**
+ * Tipo de via como o OSM o descreve, normalizado.
+ *
+ * SUPERCONJUNTO de `RoadClass`, e o motivo é concreto: `RoadClass` parava em
+ * `service`, então calçada, ciclovia, caminho, escada e calçadão caíam todos
+ * em `unknown` — e eram tratados como "via urbana comum" para qualquer
+ * veículo. Uma passarela lida como avenida serve mal os três veículos: some
+ * do roteiro do patinete, para quem é um atalho legítimo, e entra no da
+ * scooter, para quem é impraticável.
+ *
+ * `RoadClass` continua existindo porque é o que o provedor de rota entrega
+ * direto; `WayKind` é o que a classificação usa depois do enriquecimento.
+ */
+export type WayKind =
+  | 'motorway'
+  | 'trunk'
+  | 'primary'
+  | 'secondary'
+  | 'tertiary'
+  | 'residential'
+  | 'living_street'
+  | 'service'
+  | 'cycleway'
+  | 'footway'
+  | 'pedestrian'
+  | 'path'
+  | 'track'
+  | 'steps'
+  | 'unknown'
+
+/**
  * Nível de adequação de um trecho de via para o perfil autopropelido —
  * a saída da camada "scooter suitability" (services/routing/roadClassification.ts).
  * 'prohibited' só deve ser atribuído a partir de um sinal explícito e
@@ -70,6 +100,11 @@ export interface RouteSegment {
   path: LngLat[]
   distanceMeters: number
   roadClass: RoadClass
+  /**
+   * Tipo de via normalizado, quando o enriquecimento encontrou a way no OSM.
+   * É ele que a classificação por perfil de mobilidade consulta.
+   */
+  wayKind?: WayKind
   /** Nome da via, quando disponível — usado apenas como sinal auxiliar, nunca como regra primária. */
   roadName?: string
   /** Tags reais do OSM associadas a este segmento, quando o enriquecimento encontrou uma via correspondente. */

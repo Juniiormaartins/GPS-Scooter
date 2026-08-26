@@ -128,6 +128,18 @@ export interface UserPreferences {
   referenceSpeedKmh: number
   /** Autonomia estimada efetiva (km). */
   rangeKm: number
+  /**
+   * Foto do avatar, como data URL de um JPEG já recortado em quadrado.
+   *
+   * Fica NO localStorage junto das demais preferências, e não num serviço de
+   * arquivos, porque o app não tem backend nem conta: a foto é do aparelho,
+   * como o tema e o veículo. Guardar o data URL evita depender de um
+   * `blob:` que morre ao recarregar a página.
+   *
+   * O recorte e a redução acontecem ANTES de salvar (ver avatar.ts): uma foto
+   * de celular tem vários megabytes, e o localStorage inteiro costuma ter 5.
+   */
+  avatarDataUrl: string | null
 }
 
 const STORAGE_KEY = 'gps-scooter:preferences'
@@ -143,6 +155,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   vehicleModelId: 'scooter-32',
   referenceSpeedKmh: 32,
   rangeKm: 40,
+  avatarDataUrl: null,
 }
 
 export function getUserPreferences(): UserPreferences {

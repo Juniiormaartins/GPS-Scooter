@@ -877,6 +877,7 @@ export default function App() {
       <TopScrim />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <LocationHeader
+          avatarDataUrl={preferences.avatarDataUrl}
           currentStreet={currentStreetLabel}
           currentArea={currentAreaLabel}
           isLocating={isLocating}
