@@ -18,7 +18,7 @@
 :root,
 :root[data-theme='dark'] {
   --surface: #0a0e1a;
-  --surface-map: #0e1424;
+  --surface-map: #0b111f;
   --surface-sunken: #131c2e;
   --surface-card: #1a2438;
   /**
@@ -132,8 +132,6 @@
    * cabeçalho é texto claro sobre mapa escuro, e o scrim escurece — por isso
    * aquele não foi mexido.
    */
-  --map-backdrop: #e9edf2;
-
   --scrim-top: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.48) 0%,
@@ -152,7 +150,7 @@
    * board são a fonte de verdade usada aqui.
    */
   --surface: #f6f8fb;
-  --surface-map: #e4eaf3;
+  --surface-map: #e9edf2;
   --surface-sunken: #f6f8fb;
   --surface-card: #ffffff;
   /* Chrome flutuante sobre o mapa: branco a 92% + blur(20px). */
@@ -236,9 +234,6 @@
    * aparelho. Quando `env` funciona, `max` escolhe o valor real e este piso nao
    * atrapalha.
    */
-  /** Cor do mapa, para o que aparece fora da área desenhada. Ver a regra de `html`. */
-  --map-backdrop: #0b111f;
-
   --safe-top: env(safe-area-inset-top, 0px);
 
   /*
@@ -302,7 +297,7 @@ html {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
-  background-color: var(--map-backdrop);
+  background-color: var(--surface-map);
 }
 
 /*
@@ -371,7 +366,18 @@ body {
   inset: 0;
   overflow: hidden;
   font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
-  background-color: var(--surface);
+  /*
+    A COR DO MAPA, não a das superfícies do app — e aqui está o defeito da
+    tentativa anterior: eu pintei o `html` com a cor do mapa e o `body`, que é
+    `position: fixed`, continuou pintando `--surface` POR CIMA dele. A mudança
+    era inerte.
+    
+    Todas as camadas que podem aparecer atrás do mapa (html, body, e a raiz do
+    app) usam a mesma cor. Não é maquiagem: este app é um mapa em tela cheia, e
+    a cor certa para o que fica atrás dele é a do próprio mapa — `--surface` é a
+    cor de card, que nunca deveria estar visível ali.
+  */
+  background-color: var(--surface-map);
   -webkit-tap-highlight-color: transparent;
 }
 
