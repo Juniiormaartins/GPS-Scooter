@@ -119,10 +119,14 @@
    * por cima de preto-sobre-claro não melhora leitura nenhuma; só embranquece o
    * mapa. Foi o que produziu a "tarja" branca embaixo da barra de status.
    *
-   * Fica quase transparente: 0,16 na borda é o suficiente para segurar os
-   * ícones da barra de status contra uma área clara do mapa, e some depressa. A
-   * barra de status volta a ser transparente de fato, com o mapa aparecendo
-   * atrás dela.
+   * QUARTA PASSADA, e o alvo mudou de lugar junto com o problema. Enquanto a
+   * barra de status era uma TARJA OPACA, qualquer branco a mais somava com ela
+   * e o topo virava uma parede. Com a barra transparente, o degradê volta a ser
+   * o que deveria ter sido desde o início: uma sombra suave que dá campo aos
+   * ícones do sistema e ao endereço, com o mapa aparecendo através dela.
+   *
+   * 0,34 na borda é o meio termo medido entre os 0,5 que produziam a tarja e os
+   * 0,16 que sumiram por completo. O mapa continua visível atrás.
    *
    * No tema ESCURO o cálculo é o oposto e o degradê continua valendo: lá o
    * cabeçalho é texto claro sobre mapa escuro, e o scrim escurece — por isso
@@ -130,8 +134,8 @@
    */
   --scrim-top: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.16) 0%,
-    rgba(255, 255, 255, 0.05) 45%,
+    rgba(255, 255, 255, 0.34) 0%,
+    rgba(255, 255, 255, 0.12) 45%,
     rgba(255, 255, 255, 0) 100%
   );
 
@@ -261,9 +265,27 @@
 }
 
 html,
-body,
 #root {
   height: 100%;
+  margin: 0;
+  overscroll-behavior: none;
+}
+
+/*
+ * O BODY FICA FORA da regra de `height: 100%` acima, e isso é o conserto de um
+ * bug real: sobrou uma faixa clara na base da tela, da altura exata do
+ * indicador de gesto.
+ *
+ * CAUSA: `inset: 0` e `height: 100%` no mesmo elemento posicionado são
+ * CONFLITANTES. Pela regra do CSS, com `top`, `bottom` e `height` todos
+ * definidos, o `bottom` é o que se ignora — então a altura deixava de ser "até
+ * a borda de baixo" e passava a ser 100% do bloco contenedor, que no iOS não
+ * inclui a área sob o indicador. O mapa terminava antes do fim da tela.
+ *
+ * Sem `height`, quem manda é o `inset: 0`: a base do body é a base da tela, por
+ * definição, sem depender de qual viewport o sistema resolve reportar.
+ */
+body {
   margin: 0;
   overscroll-behavior: none;
 }
