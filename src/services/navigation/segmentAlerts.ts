@@ -79,7 +79,7 @@ const MIN_ANNOUNCE_METERS = 80
 const MIN_GAP_MS = 20000
 
 /** Metros de cada trecho a partir do início da rota. */
-export function runStartOffsets(route: CandidateRoute, runs: SeverityRun[]): number[] {
+function runStartOffsets(route: CandidateRoute, runs: SeverityRun[]): number[] {
   const cumulative: number[] = []
   let total = 0
   for (const segment of route.segments) {
@@ -87,6 +87,18 @@ export function runStartOffsets(route: CandidateRoute, runs: SeverityRun[]): num
     total += segment.distanceMeters
   }
   return runs.map((run) => cumulative[run.segmentIndexes[0]] ?? 0)
+}
+
+/**
+ * Identidade estável de um trecho dentro da rota.
+ *
+ * Base da regra "avisa uma vez" — e também de saber, em App.tsx, se a pílula
+ * permanente está falando do MESMO trecho que o aviso momentâneo. Exportada
+ * justamente para que essa comparação não recrie a fórmula em outro arquivo e
+ * as duas versões divirjam silenciosamente na primeira mudança.
+ */
+export function runKey(run: Pick<SeverityRun, 'segmentIndexes'>): string {
+  return `${run.segmentIndexes[0]}-${run.segmentIndexes[run.segmentIndexes.length - 1]}`
 }
 
 function levelFor(run: SeverityRun): AlertLevel {
@@ -125,7 +137,7 @@ export function nextSegmentAlert(context: AlertContext): SegmentAlert | null {
   severity.runs.forEach((run, index) => {
     if (run.distanceMeters < MIN_ANNOUNCE_METERS) return
 
-    const key = `${run.segmentIndexes[0]}-${run.segmentIndexes[run.segmentIndexes.length - 1]}`
+    const key = runKey(run)
     if (announcedRunKeys.has(key)) return
 
     const distanceAheadMeters = offsets[index] - distanceTraveledMeters

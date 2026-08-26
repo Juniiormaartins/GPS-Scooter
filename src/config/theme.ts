@@ -91,10 +91,27 @@ export const ROUTE_RIBBON = {
  * miolo. Cada severidade ganha a versão escurecida da sua cor, então o trecho
  * continua sendo lido como âmbar/vermelho — a regra de sinalização não muda,
  * só o acabamento acompanha.
+ *
+ * SÓ O CRÍTICO MUDOU, e a distinção é do produto, não estética.
+ *
+ * A escala tem três leituras: AZUL quando pode trafegar, MARROM/ÂMBAR quando a
+ * via não é ideal mas dá, VERMELHO quando não se deve estar ali. O marrom do
+ * nível de atenção é deliberado e fica como está — é ele que diz "não é
+ * proibido, é só ruim".
+ *
+ * O problema era o CRÍTICO virar marrom também, apagando justamente a
+ * distinção. #7C1414 é escurecido a ponto de perder saturação: o olho lê vinho,
+ * e a essa espessura vinho é indistinguível do marrom de atenção. E o contorno
+ * não é um detalhe fino — no zoom de rua tem 17px contra 12px do miolo, ou
+ * seja, 2,5px de cada lado; em zoom de bairro responde por quase metade da
+ * largura da fita. A via crítica lia como marrom com um fio vermelho dentro.
+ *
+ * #A81620 continua mais escuro que o miolo (é o que faz a borda existir) mas
+ * permanece inequivocamente VERMELHO em qualquer espessura.
  */
 export const SEVERITY_RIM = {
   attention: '#7A4B05',
-  critical: '#7C1414',
+  critical: '#A81620',
 } as const
 
 /**
@@ -109,10 +126,20 @@ export const SEVERITY_RIM = {
  *
  * Cada severidade passa a ter o clareamento da PRÓPRIA cor, então o brilho
  * volta a ser volume e não uma tinta por cima.
+ *
+ * SEGUNDA PASSADA, de novo só no CRÍTICO: #FFC2C2 é um rosa quase branco.
+ * Sobre um miolo vermelho, um fio rosa-claro bem no CENTRO da fita — que é onde
+ * o olho pousa — tirava a saturação exatamente do ponto mais visível. Somado ao
+ * contorno vinho, era isso que fazia a via crítica parecer marrom, confundindo-a
+ * com o nível de atenção.
+ *
+ * #F2585E é a própria cor CLAREADA, não embranquecida: continua mais claro que
+ * o miolo (o volume permanece) sem deixar de ser vermelho. O âmbar do nível de
+ * atenção fica como estava — lá o resultado marrom é o desejado.
  */
 export const SEVERITY_SHEEN = {
   attention: '#FFE0A3',
-  critical: '#FFC2C2',
+  critical: '#F2585E',
 } as const
 
 export const MAP_COLORS_LIGHT = {

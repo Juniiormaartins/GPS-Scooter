@@ -45,15 +45,6 @@ export const ROUTE_GRADE_LABEL: Record<RouteGrade, string> = {
  */
 export type GradeTone = 'good' | 'attention' | 'critical' | 'neutral'
 
-export const ROUTE_GRADE_TONE: Record<RouteGrade, GradeTone> = {
-  excellent: 'good',
-  good: 'good',
-  attention: 'attention',
-  poor: 'critical',
-  unsuitable: 'critical',
-  unknown: 'neutral',
-}
-
 /**
  * Exposição crítica a partir da qual a rota deixa de ser "pouco recomendada" e
  * passa a ser "não recomendada".

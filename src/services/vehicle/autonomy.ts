@@ -27,7 +27,7 @@ import type { UserPreferences } from '@/config/userPreferences'
  * imprevisível e ainda parece preciso. A margem de reserva abaixo é o que
  * absorve o erro.
  */
-export function percentPerKm(rangeKm: number): number {
+function percentPerKm(rangeKm: number): number {
   if (rangeKm <= 0) return 0
   return 100 / rangeKm
 }
@@ -47,7 +47,7 @@ const FRESH_MS = 6 * 60 * 60 * 1000
 /** Até 48 h ainda vale a pena mostrar, com ressalva explícita. */
 const AGING_MS = 48 * 60 * 60 * 1000
 
-export function batteryConfidence(updatedAt: number | null, now = Date.now()): BatteryConfidence {
+function batteryConfidence(updatedAt: number | null, now = Date.now()): BatteryConfidence {
   if (updatedAt == null) return 'unknown'
   const age = now - updatedAt
   if (age < FRESH_MS) return 'fresh'

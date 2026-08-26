@@ -17,6 +17,7 @@ import { frequentPlaces } from '@/services/storage/travelPatterns'
 import { listActivity } from '@/services/storage/activityHistory'
 import { mobilityProfile } from '@/config/mobilityProfiles'
 import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
+import { runKey } from '@/services/navigation/segmentAlerts'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { assessRouteAutonomy, autonomyState } from '@/services/vehicle/autonomy'
@@ -1079,8 +1080,25 @@ export default function App() {
           onFindAlternative={destinationPoint ? handleFindAlternative : undefined}
           isSearchingAlternative={isSearchingAlternative}
           notice={navigationNotice}
+          /*
+            A PÍLULA SOME ENQUANTO O AVISO ESTÁ NA TELA — e só para o MESMO
+            trecho.
+
+            As duas coisas dizem a verdade sobre o mesmo lugar de formas
+            diferentes: o aviso é momentâneo, tem voz e explica o motivo; a
+            pílula é permanente e abre o detalhe do trecho. Juntas, na mesma
+            hora, sobre o mesmo trecho, viram duas frases empilhadas repetindo
+            uma à outra — foi o que a auditoria encontrou na tela de navegação.
+
+            Nove segundos depois o aviso se retira e a pílula volta, que é a
+            divisão certa: primeiro a notícia, depois a referência.
+
+            A comparação usa `runKey`, exportada de segmentAlerts — a mesma
+            chave da regra de "avisa uma vez", para as duas não divergirem.
+          */
           segmentWarning={
-            upcomingSegmentWarning && (
+            upcomingSegmentWarning &&
+            segmentAlerts.alert?.key !== runKey(upcomingSegmentWarning.run) && (
               <SegmentWarningPill
                 run={upcomingSegmentWarning.run}
                 distanceAheadMeters={upcomingSegmentWarning.aheadMeters}
