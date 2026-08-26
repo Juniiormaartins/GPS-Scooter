@@ -86,7 +86,25 @@ export default async function handler(request: RequestLike, response: ResponseLi
   try {
     const upstream = await fetch(OVERPASS_UPSTREAM, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: {
+        'Content-Type': 'text/plain',
+        /**
+         * USER-AGENT EXPLÍCITO — NÃO REMOVER.
+         *
+         * A instância pública recusa com **406 Not Acceptable** requisições
+         * sem User-Agent ou com um genérico. Medido, mesma consulta:
+         * sem UA → 406; UA "node" → 406; UA identificando a aplicação → 200.
+         *
+         * Do navegador isso nunca apareceu, porque o próprio navegador põe o
+         * seu UA. Ao mover a chamada para o servidor, o `fetch` do runtime
+         * manda o dele — e foi assim que o proxy passou a levar 406 onde o
+         * cliente levava 200.
+         *
+         * A política de uso do Overpass também exige identificação da
+         * aplicação, então isto não é contorno: é o comportamento correto.
+         */
+        'User-Agent': 'GPS-Scooter/1.0 (navegacao para mobilidade eletrica leve; +https://gps-scooter.vercel.app)',
+      },
       body: query,
       signal: controller.signal,
     })
