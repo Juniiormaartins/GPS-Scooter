@@ -264,10 +264,30 @@
   --nav-control: rgba(255, 255, 255, 0.1);
 }
 
-html,
-#root {
+html {
   height: 100%;
   margin: 0;
+  overscroll-behavior: none;
+}
+
+/*
+ * O #root TAMBÉM É FIXO, e não 100% de altura.
+ *
+ * Segunda tentativa de fechar a faixa clara na base, e desta vez atacando a
+ * causa estrutural em vez de um elo dela: a altura vinha encadeada por
+ * percentual em `html` → `body` → `#root`, e basta UM desses elos resolver
+ * contra um viewport diferente para a cadeia inteira sair curta. No iOS, com a
+ * página estendida sob a barra de status e o indicador de gesto, é exatamente
+ * onde os viewports divergem.
+ *
+ * `position: fixed; inset: 0` não pergunta a ninguém qual é a altura: as quatro
+ * bordas SÃO as bordas da janela. Não há percentual para resolver, não há
+ * cadeia para quebrar.
+ */
+#root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
   overscroll-behavior: none;
 }
 
