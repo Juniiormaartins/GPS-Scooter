@@ -20,6 +20,15 @@ export interface SearchHistoryEntry {
   secondaryLabel?: string
   point: LngLat
   searchedAt: number
+  /**
+   * Categoria da biblioteca de POIs, guardada junto.
+   *
+   * Sem ela, pesquisar de novo um lugar já visitado devolvia a linha do
+   * histórico SEM badge — e o histórico entra antes dos resultados externos,
+   * então ele escondia justamente a linha que tinha a categoria. O mesmo lugar
+   * mudava de ícone conforme já tivesse sido pesquisado ou não.
+   */
+  poiCategory?: GeocodingResult['poiCategory']
 }
 
 const STORAGE_KEY = 'gps-scooter:search-history'
@@ -61,6 +70,7 @@ export function recordSearch(result: GeocodingResult) {
     id: `search-${Date.now()}`,
     label: result.label,
     secondaryLabel: result.secondaryLabel,
+    poiCategory: result.poiCategory,
     point: result.point,
     searchedAt: Date.now(),
   })

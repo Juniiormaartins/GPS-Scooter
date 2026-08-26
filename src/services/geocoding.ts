@@ -2,7 +2,7 @@ import { env, isGeocodingConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
 
-import { poiCategoryForClass, type PoiCategory } from '@/components/map/poiLibrary'
+import { POI_FALLBACK, poiCategoryForClass, resolvePoiCategory, type PoiCategory } from '@/components/map/poiLibrary'
 
 export interface GeocodingResult {
   label: string
@@ -21,6 +21,41 @@ export interface GeocodingResult {
   point: LngLat
   /** True quando a sugestão veio do histórico local, não de um provedor externo — a UI marca essas com ícone de relógio. */
   fromHistory?: boolean
+  /**
+   * True quando o resultado é uma ÁREA (bairro, localidade, cidade, estado) e
+   * não um ponto endereçável.
+   *
+   * Serve a uma coisa só: barrar a adoção de categoria. O centro de um bairro
+   * cai perto de dezenas de estabelecimentos, então por proximidade ele
+   * "herdaria" a categoria de qualquer um deles — foi o que aconteceu com o
+   * bairro Vila Brasília, que apareceu com badge de ônibus por causa do
+   * terminal. Bairro não é estabelecimento, e nenhuma distância muda isso.
+   */
+  isArea?: boolean
+}
+
+/**
+ * ADOTA a categoria do duplicado descartado.
+ *
+ * PROBLEMA REAL. A deduplicação escolhia um vencedor por proximidade e jogava
+ * fora o resto — inclusive a CATEGORIA. Quem sobrevive costuma ser o resultado
+ * de ENDEREÇO (MapTiler/Nominatim), que não tem categoria nenhuma: medido, a
+ * geocodificação do MapTiler devolve `kind: "street"` para "Terminal Vila
+ * Brasília" e nada mais. O resultado do Overpass, esse SIM com a tag
+ * `amenity=bus_station`, era descartado por estar a poucos metros.
+ *
+ * Daí o sintoma: no mapa o terminal aparece com o badge de ônibus, e na busca
+ * o mesmo lugar aparece com alfinete genérico. Não era mapeamento errado — era
+ * a categoria certa sendo jogada fora na hora de unir as listas.
+ *
+ * A adoção é UNILATERAL: só preenche quem está sem categoria. Um resultado que
+ * já tem a sua nunca é sobrescrito por um vizinho.
+ */
+function adoptCategory(survivor: GeocodingResult, discarded: GeocodingResult): void {
+  if (survivor.isArea) return
+  if (survivor.poiCategory == null && discarded.poiCategory != null) {
+    survivor.poiCategory = discarded.poiCategory
+  }
 }
 
 export interface GeocodingProvider {
@@ -87,10 +122,47 @@ const NOMINATIM_CATEGORY_LABEL: Record<string, string> = {
   neighbourhood: 'Bairro',
 }
 
+/**
+ * Classes do Nominatim que descrevem um ESTABELECIMENTO.
+ *
+ * O Nominatim usa o vocabulário cru do OSM, onde `class` é a chave da tag e
+ * `type` é o valor. Nesse vocabulário convivem POIs (`amenity=pharmacy`),
+ * VIAS (`highway=service`), áreas (`landuse=residential`) e limites
+ * administrativos (`boundary=administrative`) — todos no mesmo formato.
+ *
+ * Só as chaves desta lista descrevem um lugar que faz sentido ter badge. O
+ * resto é endereço ou geografia, e a lista mostra alfinete, que é o símbolo de
+ * "um ponto no mapa" e não de "um estabelecimento deste tipo".
+ *
+ * `highway` fica DE FORA de propósito, e é o caso que originou a regra: numa
+ * busca por "Terminal Vila Brasília" o Nominatim devolve `highway=service`
+ * (a via de acesso do terminal) antes das plataformas, e `service` na tabela
+ * de POIs é a categoria de oficinas — o lugar aparecia com badge de serviços
+ * na busca e badge de ônibus no mapa.
+ */
+const NOMINATIM_POI_CLASSES = new Set([
+  'amenity',
+  'shop',
+  'leisure',
+  'tourism',
+  'office',
+  'healthcare',
+  'craft',
+  'emergency',
+  'historic',
+  'club',
+  'sport',
+  'aeroway',
+])
+
+/** Classes do Nominatim que descrevem uma ÁREA, não um ponto — ver `isArea`. */
+const NOMINATIM_AREA_CLASSES = new Set(['place', 'boundary', 'landuse', 'natural'])
+
 function describeNominatimResult(result: NominatimResult): {
   label: string
   secondaryLabel: string
-  poiCategory: PoiCategory
+  poiCategory?: PoiCategory
+  isArea: boolean
 } {
   const parts = result.display_name.split(',').map((part) => part.trim())
   const label = parts[0] ?? result.display_name
@@ -100,7 +172,14 @@ function describeNominatimResult(result: NominatimResult): {
   // O Nominatim devolve `class` (amenity, shop…) e `type` (pharmacy, cafe…).
   // O `type` é o que corresponde à `class` do vocabulário do MapTiler, então
   // ele vai primeiro; a `class` entra como segunda tentativa.
-  return { label, secondaryLabel, poiCategory: poiCategoryForClass(result.type, result.class) }
+  //
+  // Dentro de uma classe de POI o fallback VALE: `amenity=marketplace` sem
+  // equivalência na tabela ainda é um estabelecimento, e badge genérico é a
+  // resposta certa. Fora dela não há badge nenhum.
+  const isPoi = result.class ? NOMINATIM_POI_CLASSES.has(result.class) : false
+  const poiCategory = isPoi ? resolvePoiCategory(result.type, result.class) ?? POI_FALLBACK : undefined
+  const isArea = result.class ? NOMINATIM_AREA_CLASSES.has(result.class) : false
+  return { label, secondaryLabel, poiCategory, isArea }
 }
 
 /**
@@ -140,8 +219,8 @@ class NominatimGeocodingProvider implements GeocodingProvider {
 
     const results = (await response.json()) as NominatimResult[]
     return results.map((result) => {
-      const { label, secondaryLabel, poiCategory } = describeNominatimResult(result)
-      return { label, secondaryLabel, poiCategory, point: { lng: Number(result.lon), lat: Number(result.lat) } }
+      const { label, secondaryLabel, poiCategory, isArea } = describeNominatimResult(result)
+      return { label, secondaryLabel, poiCategory, isArea, point: { lng: Number(result.lon), lat: Number(result.lat) } }
     })
   }
 
@@ -180,14 +259,17 @@ const MAPTILER_PLACE_TYPE_LABEL: Record<string, string> = {
   region: 'Estado',
 }
 
-function describeMapTilerFeature(feature: MapTilerFeature): { label: string; secondaryLabel: string } {
+/** Tipos do MapTiler que descrevem uma ÁREA, não um ponto — ver `isArea`. */
+const MAPTILER_AREA_TYPES = new Set(['neighbourhood', 'place', 'municipality', 'region', 'country'])
+
+function describeMapTilerFeature(feature: MapTilerFeature): { label: string; secondaryLabel: string; isArea: boolean } {
   const parts = feature.place_name.split(',').map((part) => part.trim())
   const label = feature.text || parts[0] || feature.place_name
   const type = feature.place_type?.[0]
   const category = type ? MAPTILER_PLACE_TYPE_LABEL[type] : undefined
   const place = parts.length > 1 ? parts[parts.length - 2] : ''
   const secondaryLabel = category && place ? `${category} · ${place}` : parts.slice(1, 3).join(', ')
-  return { label, secondaryLabel }
+  return { label, secondaryLabel, isArea: type ? MAPTILER_AREA_TYPES.has(type) : false }
 }
 
 /**
@@ -224,8 +306,8 @@ class MapTilerGeocodingProvider implements GeocodingProvider {
 
     const data = (await response.json()) as MapTilerGeocodingResponse
     return (data.features ?? []).map((feature) => {
-      const { label, secondaryLabel } = describeMapTilerFeature(feature)
-      return { label, secondaryLabel, point: { lng: feature.center[0], lat: feature.center[1] } }
+      const { label, secondaryLabel, isArea } = describeMapTilerFeature(feature)
+      return { label, secondaryLabel, isArea, point: { lng: feature.center[0], lat: feature.center[1] } }
     })
   }
 
@@ -264,6 +346,14 @@ const OVERPASS_POI_TIMEOUT_S = 8
  * COMPLEMENTAR — Mapbox e Nominatim já cobrem a maioria dos casos.
  */
 const OVERPASS_SEARCH_CLIENT_TIMEOUT_MS = 3500
+/**
+ * Desistência DEFINITIVA da requisição — o caso "o servidor não respondeu
+ * nada", que o teto acima não cobre mais desde que ele parou de cancelar.
+ *
+ * 20s é folgado de propósito: nada aqui bloqueia a tela, e a única coisa que
+ * este limite evita é uma requisição pendurada para sempre.
+ */
+const OVERPASS_HARD_TIMEOUT_MS = 20000
 /** Chaves de tag OSM usadas para reconhecer um nó/via como um estabelecimento nomeado (não apenas uma via/endereço). */
 const OVERPASS_POI_TAG_KEYS = ['shop', 'amenity', 'leisure', 'tourism', 'office', 'healthcare'] as const
 
@@ -346,13 +436,64 @@ const overpassPoiCache = new Map<string, Promise<GeocodingResult[]>>()
 class OverpassPoiProvider implements PoiProvider {
   isConfigured = true
 
+  /**
+   * Caminho RÁPIDO — o que a lista espera.
+   *
+   * Corre a requisição contra um cronômetro e devolve lista vazia se ela
+   * perder. O que NÃO acontece mais: a requisição ser cancelada junto. Ela
+   * continua, e quem chega depois (`searchWithoutBudget`) recebe a mesma
+   * promessa — uma requisição só, dois consumidores.
+   *
+   * MEDIDO, e é o que motivou a mudança: a instância pública do Overpass
+   * respondeu esta consulta em 3,1s, 3,6s, 9,8s e 11,0s em medições
+   * consecutivas. Com o teto de 3,5s e cancelamento junto, o resultado era
+   * jogado fora quase sempre — pagávamos a espera e perdíamos a resposta. Era
+   * por isso que o Terminal Vila Brasília aparecia sem badge na busca mesmo
+   * com o Overpass sabendo que ele é `amenity=bus_station`.
+   */
   async search(query: string): Promise<GeocodingResult[]> {
     const trimmed = query.trim()
     if (trimmed.length < 3) return []
 
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const budget = new Promise<GeocodingResult[]>((resolve) => {
+      timer = setTimeout(() => resolve([]), OVERPASS_SEARCH_CLIENT_TIMEOUT_MS)
+    })
+    try {
+      return await Promise.race([this.request(trimmed), budget])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Caminho TARDIO — sem cronômetro.
+   *
+   * Usado por `adoptLatePoiCategories`, depois de a lista já estar na tela.
+   * Aqui a espera não custa nada ao usuário: ele já está lendo os resultados.
+   */
+  async searchWithoutBudget(query: string): Promise<GeocodingResult[]> {
+    const trimmed = query.trim()
+    if (trimmed.length < 3) return []
+    return this.request(trimmed)
+  }
+
+  private async request(trimmed: string): Promise<GeocodingResult[]> {
     const cacheKey = trimmed.toLowerCase()
     const cached = overpassPoiCache.get(cacheKey)
     if (cached) return cached
+
+    const promise = this.fetchElements(trimmed)
+    // Entra no cache JÁ como promessa, não só depois de resolver: é isso que
+    // faz os dois consumidores compartilharem a mesma requisição em vez de
+    // dispararem duas (a instância pública dá 2 slots por IP — duas
+    // requisições iguais gastariam os dois).
+    overpassPoiCache.set(cacheKey, promise)
+    promise.catch(() => overpassPoiCache.delete(cacheKey))
+    return promise
+  }
+
+  private async fetchElements(trimmed: string): Promise<GeocodingResult[]> {
 
     const { southWest, northEast } = SUPPORTED_REGION.bounds
     const bbox = `${southWest.lat},${southWest.lng},${northEast.lat},${northEast.lng}`
@@ -363,12 +504,11 @@ class OverpassPoiProvider implements PoiProvider {
     ]).join('')
     const ql = `[out:json][timeout:${OVERPASS_POI_TIMEOUT_S}];(${clauses});out center 10;`
 
-    // Só entra no cache o resultado de uma resposta BEM-SUCEDIDA — o servidor
-    // público do Overpass tem limite de taxa compartilhado e pode responder
-    // 429/504 sob carga (confirmado em teste). Cachear a falha faria a busca
-    // ficar "presa" sem resultados de POI pelo resto da sessão mesmo depois
-    // do limite liberar; assim, uma tentativa mal-sucedida sempre pode ser
-    // repetida na próxima busca pelo mesmo termo.
+    // Só PERMANECE no cache o resultado de uma resposta BEM-SUCEDIDA (ver
+    // `request`) — o servidor público do Overpass tem limite de taxa
+    // compartilhado e pode responder 429/504 sob carga (confirmado em teste).
+    // Manter a falha faria a busca ficar "presa" sem resultados de POI pelo
+    // resto da sessão mesmo depois do limite liberar.
     // O `[timeout:N]` acima é uma instrução para o PRÓPRIO Overpass abortar o
     // processamento da consulta — não cobre lentidão de rede/fila antes
     // disso, então sem um limite do lado do cliente uma resposta que nunca
@@ -377,7 +517,7 @@ class OverpassPoiProvider implements PoiProvider {
     // as fontes. AbortController garante que essa fonte sempre desiste a
     // tempo, mesmo quando o servidor simplesmente não responde nada.
     const abortController = new AbortController()
-    const abortTimer = setTimeout(() => abortController.abort(), OVERPASS_SEARCH_CLIENT_TIMEOUT_MS)
+    const abortTimer = setTimeout(() => abortController.abort(), OVERPASS_HARD_TIMEOUT_MS)
     try {
       const response = await fetch(OVERPASS_BASE_URL, {
         method: 'POST',
@@ -397,10 +537,7 @@ class OverpassPoiProvider implements PoiProvider {
           const { label, secondaryLabel, poiCategory } = describeOverpassElement(element.tags as Record<string, string>)
           return { label, secondaryLabel, poiCategory, point }
         })
-      overpassPoiCache.set(cacheKey, Promise.resolve(results))
       return results
-    } catch {
-      return []
     } finally {
       clearTimeout(abortTimer)
     }
@@ -580,12 +717,14 @@ class CombinedPoiProvider implements PoiProvider {
 
     const combined: { result: GeocodingResult; bonus: number }[] = nominatimResults.map((result) => ({ result, bonus: 0 }))
     for (const candidate of overpassResults) {
-      const isDuplicate = combined.some((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      if (!isDuplicate) combined.push({ result: candidate, bonus: OVERPASS_OVER_NOMINATIM_BONUS })
+      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
+      if (duplicate) adoptCategory(duplicate.result, candidate)
+      else combined.push({ result: candidate, bonus: OVERPASS_OVER_NOMINATIM_BONUS })
     }
     for (const candidate of mapboxResults) {
-      const isDuplicate = combined.some((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      if (!isDuplicate) combined.push({ result: candidate, bonus: MAPBOX_OVER_NOMINATIM_BONUS })
+      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
+      if (duplicate) adoptCategory(duplicate.result, candidate)
+      else combined.push({ result: candidate, bonus: MAPBOX_OVER_NOMINATIM_BONUS })
     }
 
     const allFailed =
@@ -637,8 +776,11 @@ class CombinedGeocodingProvider implements GeocodingProvider {
     // aparecia — bug real encontrado em teste (ver relatório), não hipotético.
     const combined: { result: GeocodingResult; sourceBonus: number }[] = addressResults.map((result) => ({ result, sourceBonus: 0 }))
     for (const candidate of poiResults) {
-      const isDuplicate = combined.some((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      if (!isDuplicate) combined.push({ result: candidate, sourceBonus: POI_OVER_ADDRESS_BONUS })
+      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
+      // O endereço sobrevive por estar primeiro, mas é o POI que sabe QUE
+      // tipo de lugar é aquilo. Sem esta linha o badge se perdia aqui.
+      if (duplicate) adoptCategory(duplicate.result, candidate)
+      else combined.push({ result: candidate, sourceBonus: POI_OVER_ADDRESS_BONUS })
     }
 
     const allFailed = addressOutcome.status === 'rejected' && poiOutcome.status === 'rejected'
@@ -662,6 +804,48 @@ class CombinedGeocodingProvider implements GeocodingProvider {
   async reverseGeocode(point: LngLat): Promise<string | null> {
     return (await this.addressProvider.reverseGeocode(point)) ?? this.reverseGeocodeFallback.reverseGeocode(point)
   }
+}
+
+/**
+ * SEGUNDA PASSADA das categorias, depois de a lista já estar na tela.
+ *
+ * POR QUE ELA EXISTE. O Overpass é a única fonte que conhece a tag real do
+ * lugar (`amenity=bus_station`, `shop=bakery`) — o MapTiler devolve endereço e
+ * o Nominatim devolve, para muitos lugares, a VIA de acesso em vez do
+ * estabelecimento. Mas ele também é a fonte lenta e instável: medido, entre
+ * 3,1s e 11,0s para a mesma consulta. Esperar por ele antes de mostrar a lista
+ * é inaceitável; descartá-lo por atraso é perder a categoria.
+ *
+ * Então a lista sai com o que chegou a tempo e as categorias entram depois,
+ * quando chegarem. Nenhum resultado é inventado nem removido aqui: a única
+ * coisa que muda é o ícone de linhas que JÁ estão na tela, e só das que estão
+ * sem categoria (`adoptCategory` é unilateral).
+ *
+ * Devolve `true` quando algo mudou — quem chama só re-renderiza nesse caso.
+ */
+export async function adoptLatePoiCategories(results: GeocodingResult[], query: string): Promise<boolean> {
+  const pendentes = results.filter((result) => result.poiCategory == null)
+  if (pendentes.length === 0) return false
+
+  let pois: GeocodingResult[]
+  try {
+    pois = await new OverpassPoiProvider().searchWithoutBudget(query)
+  } catch {
+    return false
+  }
+
+  let mudou = false
+  for (const poi of pois) {
+    // Mesmo critério de "é o mesmo lugar" usado na mesclagem das fontes — a
+    // regra de proximidade mora num lugar só.
+    const alvo = pendentes.find(
+      (result) => result.poiCategory == null && haversineDistanceMeters(result.point, poi.point) < DEDUPE_DISTANCE_METERS,
+    )
+    if (!alvo) continue
+    adoptCategory(alvo, poi)
+    mudou = mudou || alvo.poiCategory != null
+  }
+  return mudou
 }
 
 /**

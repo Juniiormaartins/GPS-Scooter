@@ -212,13 +212,26 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 // conhecida, o ícone passa a ser o BADGE dela — o mesmo que o
                 // lugar tem no mapa, então a lista e o mapa falam a mesma
                 // língua e dá para distinguir farmácia de posto de relance.
-                bareIcon={!result.fromHistory && result.poiCategory != null}
+                /**
+                 * A CATEGORIA manda, inclusive no histórico.
+                 *
+                 * Antes a linha do histórico usava sempre o relógio, então o
+                 * mesmo lugar aparecia com badge de farmácia quando era
+                 * resultado novo e com relógio quando já tinha sido
+                 * pesquisado — dois ícones para o mesmo estabelecimento.
+                 *
+                 * A informação "já pesquisei isso" continua na tela: estas
+                 * linhas vêm agrupadas sob "Pesquisas recentes", no topo. O
+                 * relógio fica para quem não tem categoria, que é onde ele
+                 * ainda acrescenta algo.
+                 */
+                bareIcon={result.poiCategory != null}
                 tone={result.fromHistory ? 'neutral' : 'accent'}
                 icon={
-                  result.fromHistory ? (
-                    <ClockIcon />
-                  ) : result.poiCategory ? (
+                  result.poiCategory ? (
                     <img src={badgeUrl(result.poiCategory)} alt="" aria-hidden="true" className="h-11 w-11" />
+                  ) : result.fromHistory ? (
+                    <ClockIcon />
                   ) : (
                     <PinIcon />
                   )

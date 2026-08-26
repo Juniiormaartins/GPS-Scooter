@@ -97,18 +97,30 @@
    */
   --scrim-top: linear-gradient(
     180deg,
-    rgba(10, 14, 26, 0.92) 0%,
-    rgba(10, 14, 26, 0.55) 45%,
+    rgba(10, 14, 26, 0.66) 0%,
+    rgba(10, 14, 26, 0.3) 42%,
     rgba(10, 14, 26, 0) 100%
   );
 }
 
 :root[data-theme='light'] {
-  /* Branco no claro, mesmo princípio: o topo se aproxima do fundo do chrome. */
+  /*
+   * Branco no claro, mesmo princípio: o topo se aproxima do fundo do chrome.
+   *
+   * MUITO mais fraco do que era (0,95 / 0,62). Naquela intensidade ele deixava
+   * de ser degradê de leitura e virava uma camada branca: sobre um mapa claro,
+   * 62% de branco a 45% da altura ainda cobre a faixa onde fica o nome da rua
+   * atual, e o topo inteiro da tela lia como papel em vez de mapa. O relato
+   * foi exatamente esse — "sombra branca forte invadindo a área do endereço".
+   *
+   * O que ele precisa fazer é só um: dar campo suficiente para os ícones da
+   * barra de status e o texto do cabeçalho sobre uma rua branca. 0,5 na borda
+   * já resolve isso, e a 42% da altura o mapa volta praticamente limpo.
+   */
   --scrim-top: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.62) 45%,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.18) 42%,
     rgba(255, 255, 255, 0) 100%
   );
 
@@ -178,7 +190,16 @@
  * protege.
  */
 :root {
-  --scrim-top-height: calc(env(safe-area-inset-top, 0px) + 200px);
+  /*
+   * ALTURA do degradê: barra de status + cabeçalho de localização, e nada
+   * além disso.
+   *
+   * Eram 200px, medidos por estimativa. Somados à safe area de um iPhone o
+   * degradê descia ~244px — passava do campo de busca e chegava no mapa útil,
+   * que é a metade da tela em que o usuário procura referência visual. 116px
+   * cobrem a linha do endereço com folga e devolvem o mapa logo abaixo dela.
+   */
+  --scrim-top-height: calc(env(safe-area-inset-top, 0px) + 116px);
 }
 
 :root {

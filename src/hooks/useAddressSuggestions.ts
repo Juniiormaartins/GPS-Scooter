@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
+import { adoptLatePoiCategories, getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { matchSearchHistory } from '@/services/storage/searchHistory'
 import { haversineDistanceMeters } from '@/utils/geo'
 
@@ -51,6 +51,7 @@ export function useAddressSuggestions(query: string) {
       label: entry.label,
       secondaryLabel: entry.secondaryLabel,
       point: entry.point,
+      poiCategory: entry.poiCategory,
       fromHistory: true,
     }))
     setSuggestions(historyMatches)
@@ -66,11 +67,49 @@ export function useAddressSuggestions(query: string) {
           if (requestIdRef.current !== requestId) return // resposta obsoleta — uma busca mais nova já está em andamento
           // Histórico primeiro; resultados externos que apontam para o mesmo
           // lugar são descartados para não duplicar a linha na lista.
-          const withoutDuplicates = results.filter(
-            (result) => !historyMatches.some((entry) => haversineDistanceMeters(entry.point, result.point) < HISTORY_DEDUPE_METERS),
-          )
-          setSuggestions([...historyMatches, ...withoutDuplicates])
+          /**
+           * O histórico SOMBREIA o resultado externo do mesmo lugar — e o
+           * externo pode ser o único dos dois que sabe a categoria (entradas
+           * antigas do histórico foram gravadas antes de existir `poiCategory`).
+           * Antes de descartar, o histórico adota o que falta, senão o mesmo
+           * lugar aparece com badge quando é novo e com alfinete quando já foi
+           * pesquisado.
+           */
+          const withoutDuplicates = results.filter((result) => {
+            const sombreado = historyMatches.find(
+              (entry) => haversineDistanceMeters(entry.point, result.point) < HISTORY_DEDUPE_METERS,
+            )
+            if (!sombreado) return true
+            if (sombreado.poiCategory == null && result.poiCategory != null) {
+              sombreado.poiCategory = result.poiCategory
+            }
+            return false
+          })
+          const lista = [...historyMatches, ...withoutDuplicates]
+          setSuggestions(lista)
           setIsLoading(false)
+
+          /**
+           * SEGUNDA PASSADA das categorias.
+           *
+           * A lista já está na tela; isto só troca alfinete por badge nas
+           * linhas cuja categoria chegou atrasada (ver
+           * `adoptLatePoiCategories`). Sem `setIsLoading` de novo: para o
+           * usuário a busca terminou, e reacender o esqueleto por causa de um
+           * ícone seria mentir sobre o estado.
+           *
+           * `requestIdRef` é conferido OUTRA VEZ aqui porque esta parte
+           * demora segundos — nesse tempo o usuário pode ter digitado mais, e
+           * pintar badge numa lista que não existe mais é pior que não pintar.
+           */
+          adoptLatePoiCategories(lista, trimmed)
+            .then((mudou) => {
+              if (!mudou || requestIdRef.current !== requestId) return
+              setSuggestions([...lista])
+            })
+            .catch(() => {
+              // Categoria é enfeite informativo; falhar aqui não muda a lista.
+            })
         })
         .catch(() => {
           if (requestIdRef.current !== requestId) return

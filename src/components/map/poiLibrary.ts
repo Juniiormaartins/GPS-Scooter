@@ -491,14 +491,36 @@ export const POI_LAYER_IDS = [
  * "nenhum ícone".
  */
 export function poiCategoryForClass(className?: string | null, subclass?: string | null): PoiCategory {
+  return resolvePoiCategory(className, subclass) ?? POI_FALLBACK
+}
+
+/**
+ * A mesma consulta, SEM o fallback obrigatório.
+ *
+ * Existe porque "não sei a categoria" e "é um POI de categoria desconhecida"
+ * são coisas diferentes, e só quem chama sabe qual das duas está vivendo.
+ *
+ * Na CAMADA DO MAPA a distinção não existe: tudo que está na camada `poi` é um
+ * POI, então classe desconhecida tem de virar `poi_generico` — esconder o
+ * símbolo seria perder informação real do provedor. É para isso que serve
+ * `poiCategoryForClass`.
+ *
+ * Na BUSCA existe: o Nominatim devolve, no mesmo formato, ruas
+ * (`highway=service`), bairros (`place=suburb`) e limites administrativos.
+ * Aplicar o fallback ali carimbaria um badge de POI em coisas que não são POI
+ * — e pior que genérico, às vezes ERRADO, porque o vocabulário se cruza:
+ * `highway=service` é uma via de acesso, mas `service` na tabela é a categoria
+ * de oficinas/serviços. Era exatamente o sintoma: o Terminal Vila Brasília
+ * aparecia na busca com o badge de serviços enquanto no mapa aparecia com o de
+ * ônibus.
+ */
+export function resolvePoiCategory(className?: string | null, subclass?: string | null): PoiCategory | null {
   const direct = lookup(className)
   if (direct) return direct
   // `subclass` costuma ser mais específico que `class` (ex: class=shop,
   // subclass=florist). Só é consultado quando a classe não resolveu, para não
   // sobrepor uma equivalência canônica da tabela.
-  const bySubclass = lookup(subclass)
-  if (bySubclass) return bySubclass
-  return POI_FALLBACK
+  return lookup(subclass)
 }
 
 function lookup(value?: string | null): PoiCategory | null {

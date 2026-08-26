@@ -15,7 +15,18 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
     <link rel="apple-touch-icon" href="/icons/icon-180.png" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!--
+      `black-translucent`: a página se estende POR BAIXO da barra de status do
+      iOS, e o mapa continua aparecendo atrás dela. É o que dá a barra de
+      status transparente.
+
+      Foi trocado por `default` junto com a logo nova, e `default` faz o
+      oposto: reserva uma faixa opaca no topo e encurta a viewport. O efeito
+      colateral é duplo — a barra vira uma tarja sólida e
+      `env(safe-area-inset-top)` zera, então o degradê de leitura passa a
+      começar na borda da tela em vez de acompanhar o recorte do aparelho.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

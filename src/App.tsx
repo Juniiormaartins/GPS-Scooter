@@ -12,6 +12,7 @@ import { BottomNavBar } from '@/components/layout/BottomNavBar'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import { NavigationPanel } from '@/components/navigation/NavigationPanel'
 import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
+import { ArrivalSheet } from '@/components/navigation/ArrivalSheet'
 import { SegmentDetailSheet, SegmentWarningPill } from '@/components/navigation/SegmentDetail'
 import { compareRoutes, pickAlternatives, type RouteComparison } from '@/services/routing/alternatives'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
@@ -52,6 +53,20 @@ const SEGMENT_WARNING_LOOKAHEAD_METERS = 2000
  */
 const RECALCULATION_COOLDOWN_MS = 12000
 
+/**
+ * Distância que caracteriza CHEGADA.
+ *
+ * 30 m é a ordem de grandeza do erro do próprio GPS em cidade: exigir menos
+ * faria a chegada nunca disparar em rua com prédio alto, e exigir mais
+ * encerraria o percurso um quarteirão antes. É também a distância em que o
+ * provedor já falou "Chegou ao seu destino".
+ */
+/** Aviso de falha de localização — constante para poder ser retirado por identidade quando a posição volta. */
+const LOCATION_UNAVAILABLE_MESSAGE =
+  'Não foi possível obter sua localização. Defina a origem manualmente para traçar a rota.'
+
+const ARRIVAL_RADIUS_METERS = 30
+
 export default function App() {
   const [originText, setOriginText] = useState('')
   const [destinationText, setDestinationText] = useState('')
@@ -72,6 +87,16 @@ export default function App() {
   const [preview, setPreview] = useState<{ destination: LngLat; result: RouteResult } | null>(null)
   /** Quando o último recálculo por desvio começou — ver RECALCULATION_COOLDOWN_MS. */
   const lastRecalculationAtRef = useRef(0)
+  /**
+   * Percurso concluído, aguardando o usuário fechar a tela de finalização.
+   *
+   * Guarda os números do trajeto no instante da chegada porque a navegação é
+   * encerrada junto: um quadro depois `activeScoredRoute` já não existe, e a
+   * tela mostraria distância e tempo vazios.
+   */
+  const [arrival, setArrival] = useState<{ label: string | null; distanceMeters: number; durationMinutes: number } | null>(
+    null,
+  )
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
@@ -212,10 +237,29 @@ export default function App() {
 
     if (pendingTraceDestination) {
       setPendingTraceDestination(null)
-      setStatusMessage('Não foi possível obter sua localização. Defina a origem manualmente para traçar a rota.')
+      setStatusMessage(LOCATION_UNAVAILABLE_MESSAGE)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationError, pendingCenter])
+
+  /**
+   * Tira o aviso de localização quando a localização VOLTA.
+   *
+   * Bug real, reproduzido: com a permissão bloqueada o aviso aparecia, o
+   * usuário tocava em "Tentar usar minha localização", a posição chegava, a
+   * origem era preenchida, a rota era traçada — e o aviso continuava ali,
+   * dizendo que a localização falhou, por cima de uma tela que provava o
+   * contrário. Ele só era limpo no caminho em que havia um "Traçar rota"
+   * pendente esperando a posição.
+   *
+   * A comparação é por IDENTIDADE com a constante, não por conteúdo: assim
+   * este efeito nunca apaga uma mensagem de outra natureza (erro de cálculo de
+   * rota, região não suportada) que por acaso esteja na tela.
+   */
+  useEffect(() => {
+    if (!userPosition) return
+    setStatusMessage((atual) => (atual === LOCATION_UNAVAILABLE_MESSAGE ? null : atual))
+  }, [userPosition])
 
   const idleLocationMessage = useMemo(() => {
     if (isLocating) return 'Localizando você…'
@@ -729,6 +773,39 @@ export default function App() {
   }, [routeResult])
 
   /**
+   * CHEGADA AO DESTINO.
+   *
+   * O provedor já anuncia "Chegou ao seu destino" por voz — o que faltava era
+   * o encerramento visual. Aqui a navegação é encerrada e a tela de
+   * finalização entra; a voz não é tocada nem repetida, ela roda pelo caminho
+   * normal das instruções.
+   *
+   * A distância restante vem de `progress`, que é medida sobre a rota e não em
+   * linha reta, então ela não dispara ao passar perto do destino por outra rua.
+   */
+  useEffect(() => {
+    if (!isNavigating || arrival) return
+    const progress = navigationSession.progress
+    if (!progress || progress.remainingDistanceMeters > ARRIVAL_RADIUS_METERS) return
+
+    const percorrido = activeScoredRoute?.route.totalDistanceMeters ?? progress.distanceTraveledMeters
+    setArrival({
+      label: destinationText || selectedPoi?.label || null,
+      distanceMeters: percorrido,
+      durationMinutes: activeScoredRoute?.etaMinutes ?? 0,
+    })
+    // Encerra a navegação de verdade: acompanhamento, comparação e avisos
+    // pendentes saem junto, senão a tela de chegada conviveria com um painel
+    // de manobra que não tem mais para onde apontar.
+    setIsNavigating(false)
+    setIsFollowingUser(true)
+    setAlternative(null)
+    setNavigationNotice(null)
+    setOpenSegmentRunIndex(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNavigating, navigationSession.progress, arrival])
+
+  /**
    * CLASSIFICAÇÃO DAS ALTERNATIVAS.
    *
    * Era o buraco do fluxo de comparação. `planRoute` devolve TODAS as
@@ -1030,7 +1107,21 @@ export default function App() {
         </BottomSheet>
       ) : (
         !selectedPoi && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)]">
+            {/*
+              ESPAÇO ABAIXO DA BARRA DE ABAS (o `pb` acima).
+
+              Era `max(0.75rem, env(safe-area-inset-bottom))`, e o `max` é o
+              erro: num iPhone a safe area vale 34px e VENCE os 12px de
+              respiro, então o resultado é 34px — exatamente a altura do
+              indicador de gesto do sistema. A barra encostava nele, sem
+              nenhuma folga própria, e ficava parecendo empurrada para fora da
+              tela.
+
+              Somar em vez de escolher: a safe area afasta do indicador e os
+              12px continuam sendo o respiro entre a barra e essa área. Onde
+              não há recorte (`env` vale 0) o resultado é os mesmos 12px.
+            */}
             {/*
               O botão de recentralizar faz parte desta MESMA pilha, alinhado à
               direita. Antes ele flutuava com um `bottom` em pixels fixos, que
@@ -1105,6 +1196,34 @@ export default function App() {
             />
           )}
         </>
+      )}
+
+      {/*
+        FINALIZAÇÃO fora dos dois ramos, de propósito.
+        
+        A chegada encerra a navegação, então quando esta tela aparece o app já
+        está no ramo de exploração. Renderizá-la dentro do ramo de navegação a
+        desmontaria no mesmo quadro em que ela deveria surgir.
+      */}
+      {arrival && (
+        <ArrivalSheet
+          destinationLabel={arrival.label}
+          distanceMeters={arrival.distanceMeters}
+          durationMinutes={arrival.durationMinutes}
+          onFinish={() => {
+            // Nada é enviado nem guardado nesta versão — ver ArrivalSheet.
+            // Fechar limpa o destino e devolve o mapa ao estado de exploração,
+            // que é o que "voltar ao mapa" significa depois de um percurso
+            // concluído: começar do zero, não reabrir a rota que acabou.
+            setArrival(null)
+            setRouteResult(null)
+            setActiveRouteId(null)
+            setPreview(null)
+            setSelectedPoi(null)
+            setDestinationText('')
+            setDestinationPoint(null)
+          }}
+        />
       )}
     </div>
   )

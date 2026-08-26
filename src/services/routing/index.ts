@@ -11,6 +11,7 @@ import {
   getUserPreferences,
   ROUTE_PREFERENCE_TOLERANCE,
 } from '@/config/userPreferences'
+import { mobilityProfile } from '@/config/mobilityProfiles'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
 
@@ -114,7 +115,7 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
   )
 
   const { ranked, recommendedId } = rankRoutes(scored)
-  attachHighlights(ranked, recommendedId)
+  attachHighlights(ranked, recommendedId, mobilityProfile(vehicle.modelId).label.toLowerCase())
 
   const selected = ranked.find((entry) => entry.route.id === recommendedId)!
   const alternatives = ranked.filter((entry) => entry.route.id !== recommendedId)
@@ -240,7 +241,16 @@ function rankRoutes(scored: ScoredRoute[]): { ranked: ScoredRoute[]; recommended
   return { ranked, recommendedId: recommended.route.id }
 }
 
-function attachHighlights(routes: ScoredRoute[], recommendedId: string) {
+/**
+ * O nome do VEÍCULO no destaque, não "scooter" fixo.
+ *
+ * O texto dizia "Recomendada para scooter" mesmo com patinete ou bicicleta
+ * elétrica selecionados — e desde que cada veículo passou a ter regras
+ * próprias de via (ver mobilityProfiles), isso não é só uma palavra fora do
+ * lugar: a recomendação foi calculada com as regras DAQUELE veículo, e nomear
+ * outro faz o app parecer estar respondendo sobre outra coisa.
+ */
+function attachHighlights(routes: ScoredRoute[], recommendedId: string, vehicleLabel: string) {
   const recommended = routes.find((entry) => entry.route.id === recommendedId)
   if (!recommended) return
 
@@ -253,9 +263,9 @@ function attachHighlights(routes: ScoredRoute[], recommendedId: string) {
 
     if (entry.route.id === recommendedId) {
       if (unsuitableDistance === 0) {
-        highlights.push('Recomendada para scooter — evita vias expressas e rodovias.')
+        highlights.push(`Recomendada para ${vehicleLabel} — evita vias expressas e rodovias.`)
       } else {
-        highlights.push(`Recomendada para scooter — inclui ${formatDistance(unsuitableDistance)} de acesso inevitável em via inadequada.`)
+        highlights.push(`Recomendada para ${vehicleLabel} — inclui ${formatDistance(unsuitableDistance)} de acesso inevitável em via inadequada.`)
       }
     } else if (unsuitableDistance > 0 && recommended.route.id !== entry.route.id) {
       const extraTime = Math.round(entry.etaMinutes - recommended.etaMinutes)
@@ -365,7 +375,7 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
    * em primeiro lugar.
    */
   const { ranked, recommendedId } = rankRoutes([selected, ...alternatives])
-  attachHighlights(ranked, recommendedId)
+  attachHighlights(ranked, recommendedId, mobilityProfile(vehicle.modelId).label.toLowerCase())
   const upgradedSelected = ranked.find((entry) => entry.route.id === recommendedId) ?? selected
   return {
     selected: upgradedSelected,
