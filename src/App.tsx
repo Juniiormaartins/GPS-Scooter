@@ -47,6 +47,11 @@ const CURRENT_LOCATION_LABEL = 'Minha localização atual'
  */
 const SEGMENT_WARNING_LOOKAHEAD_METERS = 2000
 
+/**
+ * Intervalo mínimo entre dois recálculos por desvio. Ver o efeito que o usa.
+ */
+const RECALCULATION_COOLDOWN_MS = 12000
+
 export default function App() {
   const [originText, setOriginText] = useState('')
   const [destinationText, setDestinationText] = useState('')
@@ -65,6 +70,8 @@ export default function App() {
    * rota" fica instantâneo quando o preview já terminou.
    */
   const [preview, setPreview] = useState<{ destination: LngLat; result: RouteResult } | null>(null)
+  /** Quando o último recálculo por desvio começou — ver RECALCULATION_COOLDOWN_MS. */
+  const lastRecalculationAtRef = useRef(0)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
@@ -568,6 +575,28 @@ export default function App() {
   // passa pelo mesmo pipeline planRoute de sempre.
   useEffect(() => {
     if (!navigationSession.routeDeviated || !navigationSession.gpsSample || !destinationPoint || isRecalculating) return
+
+    /**
+     * INTERVALO MÍNIMO entre recálculos.
+     *
+     * `isRecalculating` já impedia dois recálculos SIMULTÂNEOS, mas nada
+     * impedia dois SEGUIDOS. Medido em teste: com o usuário 60 m fora da rota
+     * de forma sustentada, o app recalculava a cada poucos segundos — e cada
+     * recálculo são quatro requisições (Valhalla e OSRM, com alternativas)
+     * contra servidores públicos de demonstração. Doze requisições em 26 s.
+     *
+     * O ciclo se realimenta: a rota nova passa pela posição atual, o usuário
+     * continua se afastando dela, e sai de rota outra vez. Recalcular de novo
+     * em três segundos não produz rota diferente — produz tráfego e um painel
+     * que pisca "recalculando".
+     *
+     * 12 s é maior que o tempo de detecção sustentada, então um desvio real e
+     * continuado ainda gera um novo recálculo; o que ele corta é a repetição
+     * dentro da mesma manobra errada.
+     */
+    const agora = Date.now()
+    if (agora - lastRecalculationAtRef.current < RECALCULATION_COOLDOWN_MS) return
+    lastRecalculationAtRef.current = agora
 
     let cancelled = false
     setIsRecalculating(true)

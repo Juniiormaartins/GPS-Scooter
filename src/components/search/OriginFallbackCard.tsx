@@ -56,7 +56,14 @@ export function OriginFallbackCard({
       <button
         type="button"
         onClick={onRetryLocation}
-        className="mt-2.5 flex items-center gap-2 text-[13.5px] font-extrabold text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+        /*
+          `-mx-2 py-3 px-2` leva o alvo de toque de 20px de altura para 44px sem
+          mover o texto: a margem negativa devolve ao layout o que o padding
+          horizontal tomou. Medido na auditoria — é o caminho de recuperação de
+          quem está sem localização, o pior lugar para um alvo difícil de
+          acertar.
+        */
+        className="-mx-2 mt-1 flex items-center gap-2 px-2 py-3 text-[13.5px] font-extrabold text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
       >
         <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />

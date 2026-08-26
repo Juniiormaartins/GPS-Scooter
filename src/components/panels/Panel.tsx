@@ -38,7 +38,8 @@ export function Panel({ title, onClose, action, children }: PanelProps) {
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="flex h-9 w-9 items-center justify-center rounded-pill text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+            /* 44px de alvo de toque; o ícone segue com 24px. */
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
           >
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.5}>
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />

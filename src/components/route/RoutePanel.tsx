@@ -62,7 +62,13 @@ export function RoutePanel({ routes, activeRouteId, onSelectRoute, onStartNaviga
           type="button"
           onClick={onDismiss}
           aria-label="Fechar opções de rota"
-          className="p-1 text-content-tertiary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
+          /*
+            ALVO DE TOQUE de 44px. O ícone continua com 20px — o que cresce é a
+            área sensível, e o `-m-2.5` devolve o espaço para o layout não se
+            mexer. Medido na auditoria: este botão tinha 28×28, bem abaixo do
+            mínimo confortável.
+          */
+          className="-m-2.5 flex h-11 w-11 items-center justify-center p-2.5 text-content-tertiary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />

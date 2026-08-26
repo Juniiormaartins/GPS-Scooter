@@ -687,6 +687,11 @@ export function MapView({
     const setUpAppLayers = () => {
       if (layersReady || !map.getStyle()) return
       layersReady = true
+      // Pronto: para de escutar. `styledata` dispara a cada mudança de estilo
+      // (recolorir, trocar ícone de POI, mexer em largura de via), e sem isto
+      // este closure continuaria sendo chamado para não fazer nada pelo resto
+      // da vida do mapa.
+      map.off('styledata', setUpAppLayers)
       applyCartography(map, themeRef.current)
       refineCartography(map, themeRef.current)
       void applyPoiIcons(map, themeRef.current, { isNavigating: isNavigatingRef.current })

@@ -130,15 +130,28 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange?.(!checked)}
-      className={`flex h-[34px] w-[62px] shrink-0 items-center rounded-pill p-[3px] transition-colors duration-base ease-standard ${
-        checked ? 'justify-end bg-success-500' : 'justify-start bg-ink-500'
-      }`}
+      /*
+        ÁREA SENSÍVEL no botão, VISUAL na pista interna.
+
+        O trilho continua 62×34, como o handoff especifica; o botão em volta
+        tem 44px de altura e não pinta nada. `-my-[5px]` devolve os 10px ao
+        layout, então a linha não muda de altura. Medido na auditoria: 34px é
+        abaixo do mínimo confortável — e um interruptor é justamente o controle
+        que se erra com o polegar.
+      */
+      className="-my-[5px] flex shrink-0 items-center py-[5px]"
     >
-      {/* Botão do toggle sempre branco: ele é o elemento que se move sobre o
-          trilho, e a leitura de estado vem da COR DO TRILHO, não da bolinha.
-          Antes o estado desligado usava um cinza-claro fixo, que no tema
-          escuro brigava com o trilho e no claro sumia nele. */}
-      <span className="h-7 w-7 rounded-pill bg-white shadow-tile transition-all duration-base" />
+      <span
+        className={`flex h-[34px] w-[62px] items-center rounded-pill p-[3px] transition-colors duration-base ease-standard ${
+          checked ? 'justify-end bg-success-500' : 'justify-start bg-ink-500'
+        }`}
+      >
+        {/* Botão do toggle sempre branco: ele é o elemento que se move sobre o
+            trilho, e a leitura de estado vem da COR DO TRILHO, não da bolinha.
+            Antes o estado desligado usava um cinza-claro fixo, que no tema
+            escuro brigava com o trilho e no claro sumia nele. */}
+        <span className="h-7 w-7 rounded-pill bg-white shadow-tile transition-all duration-base" />
+      </span>
     </button>
   )
 }

@@ -1,7 +1,7 @@
 import { env, isRoutingConfigured } from '@/config/env'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, ManeuverType, RouteRequest, RouteSegment, RouteStep } from '@/types/routing'
-import { normalizeInstruction } from '@/services/routing/instructions'
+import { looksEnglish, normalizeInstruction } from '@/services/routing/instructions'
 
 /**
  * Camada de integração com o provedor externo de roteamento.
@@ -276,6 +276,21 @@ function valhallaTripToCandidateRoute(trip: ValhallaTrip, id: string): Candidate
     // usando `roundabout_exit_count`, que é dado estruturado (ver instructions.ts).
     const exitCount = maneuver.roundabout_exit_count ?? null
     const instruction = normalizeInstruction(maneuver.instruction, exitCount)
+
+    /**
+     * A rede de segurança precisava estar LIGADA.
+     *
+     * `looksEnglish` existia para avisar quando a locale do Valhalla soltasse
+     * uma moldura em inglês que a normalização não cobre — mas nada a
+     * chamava, então ela nunca avisou nada. Uma frase nova em inglês chegaria
+     * ao usuário em silêncio, que é exatamente o que ela deveria impedir.
+     *
+     * Só em desenvolvimento: em produção um aviso no console não ajuda
+     * ninguém e o texto já é o melhor disponível.
+     */
+    if (import.meta.env.DEV && looksEnglish(instruction)) {
+      console.warn('[rota] instrução não traduzida pela locale do Valhalla:', instruction)
+    }
 
     steps.push({
       maneuver: maneuverTypeFromInstruction(maneuver.instruction, index === 0, index === leg.maneuvers.length - 1),
