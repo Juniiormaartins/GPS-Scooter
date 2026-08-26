@@ -268,7 +268,31 @@ body,
   overscroll-behavior: none;
 }
 
+/*
+ * A PÁGINA NÃO ROLA, E NÃO BALANÇA.
+ *
+ * SINTOMA: segurar o campo de busca ou a barra de abas e arrastar movia a
+ * interface inteira, como se a tela fosse uma folha solta. O app é uma tela
+ * fixa com um mapa atrás — nada disso deveria se mover.
+ *
+ * `overscroll-behavior: none` acima NÃO resolve sozinho: o iOS o respeita em
+ * contêineres de rolagem, mas ignora para o balanço elástico do próprio
+ * documento. A única trava que funciona lá é tirar o documento da rolagem por
+ * completo, e é o que `position: fixed` faz.
+ *
+ * `overflow: hidden` junto porque, sem ele, um filho que ultrapasse a altura
+ * por um pixel devolve a rolagem — e com o body fixo isso aparece como conteúdo
+ * inalcançável em vez de rolagem, que é pior.
+ *
+ * O QUE ISTO NÃO PODE QUEBRAR, e por isso `inset: 0` em vez de altura fixa: as
+ * áreas que DEVEM rolar (lista de rotas, painéis, resultados de busca) têm
+ * `overflow-y: auto` próprio e continuam rolando normalmente. O que some é
+ * apenas a rolagem do documento, que nunca teve função aqui.
+ */
 body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
   font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
   background-color: var(--surface);
   -webkit-tap-highlight-color: transparent;

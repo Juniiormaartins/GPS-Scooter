@@ -1047,8 +1047,20 @@ export default function App() {
    */
   const mapUserPoint = isNavigating ? (navPosition ?? userPosition) : userPosition
 
+  /*
+    `h-full`, NÃO `h-screen`.
+
+    `h-screen` é `100vh`, e no iOS `100vh` não é a altura visível: ele reporta a
+    altura da tela ignorando a barra de status e o indicador de gesto. O
+    resultado era uma página alguns pixels mais alta que a janela — rolável por
+    essa diferença, que é a outra metade do arrasto que o usuário sentia ao
+    segurar a busca ou a barra de abas.
+
+    `h-full` segue o `#root`, que segue o `body` fixo em `inset: 0` — ou seja,
+    exatamente a área visível, qualquer que seja ela.
+  */
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-surface">
+    <div className="relative h-full w-full overflow-hidden bg-surface">
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}
