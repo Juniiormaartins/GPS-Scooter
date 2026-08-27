@@ -297,45 +297,35 @@ html {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
-  /* TESTE TEMPORÁRIO — ver DIAGNOSTICO-CORES.md. Volta a var(--surface-map). */
-  background-color: #ff00ff;
+  background-color: var(--surface-map);
 }
 
 /*
- * O #root TAMBÉM É FIXO, e não 100% de altura.
+ * O #root NÃO CALCULA A PRÓPRIA CAIXA — herda a do `body`.
  *
- * Segunda tentativa de fechar a faixa clara na base, e desta vez atacando a
- * causa estrutural em vez de um elo dela: a altura vinha encadeada por
- * percentual em `html` → `body` → `#root`, e basta UM desses elos resolver
- * contra um viewport diferente para a cadeia inteira sair curta. No iOS, com a
- * página estendida sob a barra de status e o indicador de gesto, é exatamente
- * onde os viewports divergem.
+ * PROVA CONCRETA (teste de cores no aparelho): pintando `html` de magenta,
+ * `body` de ciano e a raiz do app de verde, a faixa clara aparecia CIANO —
+ * tanto em cima quanto embaixo. `#root` já usava `position: fixed; inset: 0`,
+ * EXATAMENTE igual ao `body`. Se os dois resolvem a mesma regra contra a
+ * mesma janela, não deveria sobrar fresta nenhuma entre eles — e sobrava, dos
+ * dois lados. Ou seja: dois elementos `fixed` INDEPENDENTES, cada um
+ * calculando `inset: 0` por conta própria contra a janela, não estavam
+ * batendo exatamente iguais neste aparelho/versão de iOS em modo standalone.
  *
- * `position: fixed; inset: 0` não pergunta a ninguém qual é a altura: as quatro
- * bordas SÃO as bordas da janela. Não há percentual para resolver, não há
- * cadeia para quebrar.
+ * A CORREÇÃO: parar de deixar o `#root` calcular sozinho. Com `body` como
+ * `position: fixed` (que também estabelece bloco de contenção para
+ * descendentes posicionados), `#root` em `position: absolute; inset: 0` para
+ * de resolver contra a janela e passa a copiar EXATAMENTE a caixa do `body` —
+ * não há mais duas contas em paralelo que possam divergir.
  */
 #root {
-  position: fixed;
+  position: absolute;
   inset: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  background-color: var(--surface-map);
 }
 
-/*
- * O BODY FICA FORA da regra de `height: 100%` acima, e isso é o conserto de um
- * bug real: sobrou uma faixa clara na base da tela, da altura exata do
- * indicador de gesto.
- *
- * CAUSA: `inset: 0` e `height: 100%` no mesmo elemento posicionado são
- * CONFLITANTES. Pela regra do CSS, com `top`, `bottom` e `height` todos
- * definidos, o `bottom` é o que se ignora — então a altura deixava de ser "até
- * a borda de baixo" e passava a ser 100% do bloco contenedor, que no iOS não
- * inclui a área sob o indicador. O mapa terminava antes do fim da tela.
- *
- * Sem `height`, quem manda é o `inset: 0`: a base do body é a base da tela, por
- * definição, sem depender de qual viewport o sistema resolve reportar.
- */
 body {
   margin: 0;
   overscroll-behavior: none;
@@ -357,10 +347,16 @@ body {
  * por um pixel devolve a rolagem — e com o body fixo isso aparece como conteúdo
  * inalcançável em vez de rolagem, que é pior.
  *
- * O QUE ISTO NÃO PODE QUEBRAR, e por isso `inset: 0` em vez de altura fixa: as
- * áreas que DEVEM rolar (lista de rotas, painéis, resultados de busca) têm
- * `overflow-y: auto` próprio e continuam rolando normalmente. O que some é
- * apenas a rolagem do documento, que nunca teve função aqui.
+ * `inset: 0`, não `height: 100vh`/`100%`: já tentamos as duas variantes de
+ * altura (e uma versão exagerada, `100vh + 150px`) tentando fechar a faixa
+ * clara da base — nenhuma resolveu, e a versão exagerada só empurrou conteúdo
+ * real para fora da tela visível. `inset: 0` é a área que o app de fato
+ * controla, sem sobra artificial.
+ *
+ * O QUE ISTO NÃO PODE QUEBRAR: as áreas que DEVEM rolar (lista de rotas,
+ * painéis, resultados de busca) têm `overflow-y: auto` próprio e continuam
+ * rolando normalmente. O que some é apenas a rolagem do documento, que nunca
+ * teve função aqui.
  */
 body {
   position: fixed;
@@ -378,8 +374,7 @@ body {
     a cor certa para o que fica atrás dele é a do próprio mapa — `--surface` é a
     cor de card, que nunca deveria estar visível ali.
   */
-  /* TESTE TEMPORÁRIO — volta a var(--surface-map). */
-  background-color: #00ffff;
+  background-color: var(--surface-map);
   -webkit-tap-highlight-color: transparent;
 }
 

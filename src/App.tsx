@@ -1049,19 +1049,28 @@ export default function App() {
   const mapUserPoint = isNavigating ? (navPosition ?? userPosition) : userPosition
 
   /*
-    `h-full`, NÃO `h-screen`.
+    `absolute inset-0`, NÃO `h-full w-full`.
 
-    `h-screen` é `100vh`, e no iOS `100vh` não é a altura visível: ele reporta a
-    altura da tela ignorando a barra de status e o indicador de gesto. O
-    resultado era uma página alguns pixels mais alta que a janela — rolável por
-    essa diferença, que é a outra metade do arrasto que o usuário sentia ao
-    segurar a busca ou a barra de abas.
+    Era `h-full w-full` — percentual, resolvido contra a altura de `#root`.
+    `body` e `#root` já usam `inset: 0` (não percentual) exatamente porque uma
+    cadeia de alturas percentuais quebra assim que UM elo resolve contra um
+    viewport diferente — mas essa div, a raiz de tudo que o app desenha
+    (mapa, onboarding, cada sheet), continuava sendo esse elo solto.
 
-    `h-full` segue o `#root`, que segue o `body` fixo em `inset: 0` — ou seja,
-    exatamente a área visível, qualquer que seja ela.
+    `#root` não tem cor de fundo própria. Quando o percentual fechava alguns
+    pixels a menos que a altura real do `#root` (o mesmo tipo de divergência
+    de viewport que motivou os dois consertos anteriores), a fresta expunha o
+    `#root` transparente por trás — que por sua vez revela o `body`. Era a
+    faixa clara na base, e o motivo de repintar `html`/`body`/aqui na cor do
+    mapa não ter resolvido nada: o vazamento não vinha de nenhum deles ter a
+    cor errada, vinha desta div nunca alcançar a borda real da tela.
+
+    `absolute inset-0` tira o percentual do caminho: a div passa a ocupar
+    exatamente a caixa do `#root` (seu ancestral posicionado mais próximo),
+    ponto a ponto, sem depender de altura resolvida.
   */
   return (
-    <div className="relative h-full w-full overflow-hidden bg-surface-map" style={{ backgroundColor: '#00ff00' }}>
+    <div className="absolute inset-0 overflow-hidden bg-surface-map">
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}
