@@ -293,10 +293,19 @@
  * sobra tenha a cor do mapa em vez de branco — aí ela deixa de ser uma faixa e
  * passa a ser continuação do mapa.
  */
-html {
+html,
+body {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
+  /*
+   * TRAVA A ROLAGEM SEM `position: fixed`.
+   *
+   * `overflow: hidden` no documento faz o mesmo serviço de impedir o arrasto
+   * da página, SEM introduzir um elemento que precise calcular a própria caixa
+   * contra a janela — que foi exatamente o que criou a faixa.
+   */
+  overflow: hidden;
   background-color: var(--surface-map);
 }
 
@@ -319,17 +328,36 @@ html {
  * não há mais duas contas em paralelo que possam divergir.
  */
 #root {
-  position: absolute;
-  inset: 0;
+  /*
+   * DIMENSIONADO POR `100vh`, NÃO POR `inset: 0`. Esta é a correção da faixa,
+   * e o motivo está no comportamento do iOS:
+   *
+   *   - `100vh` é o viewport GRANDE: a altura da tela com a interface do
+   *     navegador recolhida. Se sobrar, o excesso transborda e é recortado —
+   *     invisível.
+   *   - `inset: 0` o iOS resolve contra o viewport CURTO em modo standalone.
+   *     Se faltar, o que falta VIRA FAIXA.
+   *
+   * A faixa nasceu no commit em que troquei um pelo outro para travar o
+   * arrasto da página. Foi trocar um transbordo inofensivo por uma falta
+   * visível. Entre errar para mais e errar para menos, aqui só um dos dois
+   * aparece na tela.
+   *
+   * `100lvh` (large viewport height) diz explicitamente "o viewport no seu
+   * tamanho máximo" e é honrado a partir do iOS 15.4; `100vh` fica como
+   * reserva para o que for anterior.
+   */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100lvh;
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--surface-map);
 }
 
-body {
-  margin: 0;
-  overscroll-behavior: none;
-}
 
 /*
  * A PÁGINA NÃO ROLA, E NÃO BALANÇA.
@@ -359,22 +387,7 @@ body {
  * teve função aqui.
  */
 body {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
   font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
-  /*
-    A COR DO MAPA, não a das superfícies do app — e aqui está o defeito da
-    tentativa anterior: eu pintei o `html` com a cor do mapa e o `body`, que é
-    `position: fixed`, continuou pintando `--surface` POR CIMA dele. A mudança
-    era inerte.
-    
-    Todas as camadas que podem aparecer atrás do mapa (html, body, e a raiz do
-    app) usam a mesma cor. Não é maquiagem: este app é um mapa em tela cheia, e
-    a cor certa para o que fica atrás dele é a do próprio mapa — `--surface` é a
-    cor de card, que nunca deveria estar visível ali.
-  */
-  background-color: var(--surface-map);
   -webkit-tap-highlight-color: transparent;
 }
 
