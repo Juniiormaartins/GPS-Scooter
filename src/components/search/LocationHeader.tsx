@@ -8,6 +8,21 @@ interface LocationHeaderProps {
   onMenuClick: () => void
   /** Foto do avatar escolhida no Perfil. null = ícone padrão. */
   avatarDataUrl?: string | null
+  /**
+   * Abre a troca de origem. Ausente = o cabeçalho é só informativo.
+   *
+   * Fica AQUI e não num controle novo porque é aqui que a origem já é exibida:
+   * o lugar natural de trocar uma informação é onde ela está escrita.
+   */
+  onEditOrigin?: () => void
+  /**
+   * True quando a origem foi definida À MÃO, e não pelo GPS.
+   *
+   * Precisa ser visível, e não um detalhe: o app faz afirmações de segurança e
+   * de autonomia a partir da origem. Se ela é fictícia, quem olha a tela tem de
+   * saber disso sem precisar lembrar que digitou algo minutos atrás.
+   */
+  isManualOrigin?: boolean
 }
 
 /**
@@ -30,7 +45,10 @@ export function LocationHeader({
   onProfileClick,
   onMenuClick,
   avatarDataUrl = null,
+  onEditOrigin,
+  isManualOrigin = false,
 }: LocationHeaderProps) {
+  const Bloco = onEditOrigin ? 'button' : 'div'
   return (
     <div className="pointer-events-none flex items-center gap-3">
       <button
@@ -44,19 +62,45 @@ export function LocationHeader({
         </svg>
       </button>
 
-      <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2.5">
+      <Bloco
+        {...(onEditOrigin
+          ? {
+              type: 'button' as const,
+              onClick: onEditOrigin,
+              'aria-label': isManualOrigin
+                ? `Origem definida manualmente: ${currentStreet ?? 'sem nome'}. Tocar para trocar.`
+                : 'Trocar o ponto de partida',
+            }
+          : {})}
+        className={`flex min-w-0 flex-1 items-center gap-2.5 text-left ${
+          onEditOrigin ? 'pointer-events-auto transition-all duration-fast active:scale-[.98] active:opacity-[.88]' : 'pointer-events-none'
+        }`}
+      >
+        {/*
+          O PONTO MUDA DE COR quando a origem é manual: azul é "é você, pelo
+          GPS"; âmbar é "isto foi digitado". Cor sozinha não basta, e por isso o
+          subtítulo também troca — mas o ponto é o que se nota de relance.
+        */}
         <span
-          className={`h-[9px] w-[9px] shrink-0 rounded-pill bg-brand-500 ${isLocating ? 'animate-pulse' : ''}`}
+          className={`h-[9px] w-[9px] shrink-0 rounded-pill ${
+            isManualOrigin ? 'bg-warning-500' : 'bg-brand-500'
+          } ${isLocating && !isManualOrigin ? 'animate-pulse' : ''}`}
         />
         <div className="min-w-0">
           <p className="truncate text-[17px] font-extrabold leading-tight text-content-primary">
             {currentStreet ?? (isLocating ? 'Localizando…' : 'Sua localização')}
           </p>
-          {currentArea && (
-            <p className="truncate text-[13px] font-semibold leading-tight text-content-secondary">{currentArea}</p>
+          {isManualOrigin ? (
+            <p className="truncate text-[13px] font-bold leading-tight text-warning-text">
+              Partida definida por você
+            </p>
+          ) : (
+            currentArea && (
+              <p className="truncate text-[13px] font-semibold leading-tight text-content-secondary">{currentArea}</p>
+            )
           )}
         </div>
-      </div>
+      </Bloco>
 
       <button
         type="button"

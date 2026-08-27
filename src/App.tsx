@@ -146,6 +146,14 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   /** Tela de busca em tela cheia (SearchScreen do handoff) — aberta pelo campo "Para onde?" e pela lupa. */
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  /**
+   * O que a tela de busca está escolhendo: destino (padrão) ou PARTIDA.
+   *
+   * Trocar a partida serve para testar ou simular um trajeto a partir de outro
+   * lugar — algo que antes só era possível quando o GPS falhava, porque o campo
+   * de origem só aparecia nesse caso.
+   */
+  const [searchMode, setSearchMode] = useState<'destination' | 'origin'>('destination')
   const [isExploreOpen, setIsExploreOpen] = useState(false)
   const [searchSeed, setSearchSeed] = useState<string | null>(null)
   /** Instruções faladas. Começa ligada quando o dispositivo suporta — num GPS, voz é o padrão esperado. */
@@ -317,6 +325,45 @@ export default function App() {
     setFollowUserAsOrigin(false)
     setOriginText(result.label)
     setOriginPoint(result.point)
+    /*
+      A ROTA EM TELA MORRE JUNTO. Ela foi traçada de outro ponto de partida;
+      mantê-la desenhada enquanto a origem já é outra mostraria um trajeto que
+      não corresponde mais a nada. O preview se refaz sozinho pelo efeito que
+      observa origem e destino.
+    */
+    setRouteResult(null)
+    setActiveRouteId(null)
+    setPreview(null)
+  }
+
+  /** Volta a partida para o GPS, desfazendo uma origem definida à mão. */
+  function handleUseGpsAsOrigin() {
+    setFollowUserAsOrigin(true)
+    setRouteResult(null)
+    setActiveRouteId(null)
+    setPreview(null)
+    if (userPosition) {
+      setOriginPoint(userPosition)
+      setOriginText(CURRENT_LOCATION_LABEL)
+      /*
+        Resolve o nome da via de novo. Sem isto o cabeçalho ficava em "Minha
+        localização atual" depois de voltar do modo manual — tecnicamente
+        verdade, mas menos informativo do que o nome da rua, que é o que ele
+        mostra em todas as outras situações.
+
+        Best-effort de propósito: se falhar, o rótulo genérico já é válido.
+      */
+      getGeocodingProvider()
+        .reverseGeocode(userPosition)
+        .then((label) => {
+          if (label) setOriginText(label.split(',')[0])
+        })
+        .catch(() => {})
+    } else {
+      setPendingCenter(true)
+      setOriginText('Localizando…')
+      locate()
+    }
   }
 
   function handleSelectDestination(result: GeocodingResult) {
@@ -644,6 +691,15 @@ export default function App() {
     batteryCheckIn.dispensar()
   }
 
+  /**
+   * A partida foi definida À MÃO?
+   *
+   * `followUserAsOrigin` false sozinho não basta: ele também fica false quando
+   * o GPS falhou e ninguém escolheu nada. O que caracteriza origem manual é
+   * haver um ponto escolhido E o app não estar seguindo a posição.
+   */
+  const isManualOrigin = !followUserAsOrigin && originPoint != null
+
   const allRoutes = routeResult ? [routeResult.selected, ...routeResult.alternatives] : []
 
   /**
@@ -806,11 +862,17 @@ export default function App() {
    * Reaproveitam o endereço que a geocodificação reversa JÁ resolveu para a
    * origem quando ela é a posição atual — não há consulta nova. O rótulo vem
    * como "Rua X, Bairro, Cidade": a primeira parte é a via, o resto é a área.
-   * Quando a origem foi digitada à mão, ela não descreve onde o usuário está,
-   * então o cabeçalho não afirma nada.
+   *
+   * COM ORIGEM MANUAL o nome também aparece, e isso mudou de propósito. Antes o
+   * cabeçalho ficava mudo nesse caso, para não afirmar "você está aqui" sobre
+   * um lugar digitado. Agora ele próprio marca a diferença — ponto âmbar e
+   * "Partida definida por você" no lugar do bairro —, então mostrar o nome
+   * deixa de ser uma afirmação falsa e passa a ser a informação mais útil da
+   * tela: de onde o trajeto está sendo calculado.
    */
   const [currentStreetLabel, currentAreaLabel] = (() => {
-    if (!followUserAsOrigin || !originText.trim() || originText === 'Localizando…') return [null, null]
+    if (!originText.trim() || originText === 'Localizando…') return [null, null]
+    if (!followUserAsOrigin && originPoint == null) return [null, null]
     const parts = originText.split(',').map((part) => part.trim()).filter(Boolean)
     if (parts.length === 0) return [null, null]
     return [parts[0], parts.slice(1).join(' · ') || null]
@@ -1246,6 +1308,11 @@ export default function App() {
           isLocating={isLocating}
           onProfileClick={() => setActivePanel('profile')}
           onMenuClick={() => setActivePanel('profile')}
+          isManualOrigin={isManualOrigin}
+          onEditOrigin={() => {
+            setSearchMode('origin')
+            setIsSearchOpen(true)
+          }}
         />
 
         <SearchBar onOpenSearch={() => setIsSearchOpen(true)} value={destinationText || null} />
@@ -1475,13 +1542,32 @@ export default function App() {
 
       {isSearchOpen && (
         <SearchScreen
+          mode={searchMode}
           onBack={() => {
             setIsSearchOpen(false)
+            setSearchMode('destination')
             setSearchSeed(null)
           }}
-          onPick={handlePickFromSearch}
+          onPick={(result) => {
+            if (searchMode === 'origin') {
+              handleSelectOrigin(result)
+              setIsSearchOpen(false)
+              setSearchMode('destination')
+              return
+            }
+            handlePickFromSearch(result)
+          }}
+          onUseCurrentLocation={
+            searchMode === 'origin'
+              ? () => {
+                  handleUseGpsAsOrigin()
+                  setIsSearchOpen(false)
+                  setSearchMode('destination')
+                }
+              : undefined
+          }
           userPoint={userPosition}
-          initialQuery={searchSeed ?? destinationText}
+          initialQuery={searchMode === 'origin' ? '' : (searchSeed ?? destinationText)}
         />
       )}
           {/*

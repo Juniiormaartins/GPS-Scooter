@@ -13,12 +13,31 @@ interface SearchScreenProps {
   /** Posição atual — usada só para a distância à direita de cada resultado (dado real; sem ela, o campo some). */
   userPoint: LngLat | null
   initialQuery?: string
+  /**
+   * O que se está escolhendo.
+   *
+   * `origin` existe para trocar o PONTO DE PARTIDA — testar um trajeto a partir
+   * de outro lugar, simular uma rota que se pretende fazer depois. A tela é a
+   * mesma de propósito: busca, histórico e badges de categoria já funcionam e
+   * duplicá-los criaria duas telas para manter em sincronia.
+   */
+  mode?: 'destination' | 'origin'
+  /** Volta a origem para o GPS. Só faz sentido em `mode: 'origin'` com posição disponível. */
+  onUseCurrentLocation?: () => void
 }
 
 /** Categorias rápidas do handoff. O texto vira termo de busca real — não é filtro decorativo. */
 const CATEGORIES = ['Restaurantes', 'Postos', 'Estacionar'] as const
 
-export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: SearchScreenProps) {
+export function SearchScreen({
+  onBack,
+  onPick,
+  userPoint,
+  initialQuery = '',
+  mode = 'destination',
+  onUseCurrentLocation,
+}: SearchScreenProps) {
+  const isOrigin = mode === 'origin'
   const [query, setQuery] = useState(initialQuery)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [history, setHistory] = useState(() => listSearchHistory())
@@ -72,7 +91,7 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
                 setQuery(e.target.value)
                 setActiveCategory(null)
               }}
-              placeholder="Para onde você quer ir?"
+              placeholder={isOrigin ? 'De onde você quer partir?' : 'Para onde você quer ir?'}
               className="min-w-0 flex-1 bg-transparent text-field-text text-content-primary placeholder:text-content-tertiary focus:outline-none"
             />
             {/* Spinner NO CAMPO enquanto busca: é onde o olho já está, então o
@@ -128,6 +147,27 @@ export function SearchScreen({ onBack, onPick, userPoint, initialQuery = '' }: S
 
       {/* Corpo: eyebrow "RESULTADOS" e as linhas em variante divider. */}
       <div className="flex-1 overflow-y-auto px-gutter pb-[max(1.5rem,var(--safe-bottom))] pt-gutter">
+        {/*
+          VOLTAR AO GPS em primeiro lugar, antes de qualquer resultado.
+          
+          Quem trocou a partida à mão precisa de um caminho de volta óbvio, e
+          ele não pode estar escondido depois de uma lista: sair do modo de
+          teste tem de ser mais fácil do que entrar nele.
+        */}
+        {isOrigin && onUseCurrentLocation && (
+          <button
+            type="button"
+            onClick={onUseCurrentLocation}
+            className="mb-3 flex w-full items-center gap-3 rounded-xl border border-hairline/[.08] bg-surface-card px-3.5 py-3 text-left transition-all duration-base active:scale-[.98]"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-extrabold text-content-primary">Usar minha localização</span>
+              <span className="mt-0.5 block text-[12.5px] font-semibold text-content-tertiary">
+                Volta a partir de onde você está
+              </span>
+            </span>
+          </button>
+        )}
         {query.trim().length < 3 ? (
           // Sem busca ativa: mostra o histórico, para voltar a um destino recorrente sem digitar.
           history.length > 0 ? (

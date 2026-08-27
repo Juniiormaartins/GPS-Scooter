@@ -65,10 +65,6 @@ export function OriginFallbackCard({
         */
         className="-mx-2 mt-1 flex items-center gap-2 px-2 py-3 text-[13.5px] font-extrabold text-brand-500 transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
       >
-        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 2v3M12 19v3M22 12h-3M5 12H2" />
-        </svg>
         Tentar usar minha localização
       </button>
     </div>
