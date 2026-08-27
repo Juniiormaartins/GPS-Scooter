@@ -71,22 +71,28 @@ não empilhar.
 
 ## Como medir no aparelho quando for preciso
 
-Existe um painel de diagnóstico em `src/components/ui/Diagnostics.tsx`, ligado
-por `?diag=1` na URL (e desligado por `?diag=0`). Ele mostra insets reais,
-alturas de cada camada e a sobra na base.
+Existiu um painel de diagnóstico (`?diag=1`) que foi **removido** depois de
+cumprir seu papel — ele aparecia na tela e não tem lugar num app em uso. Se for
+preciso medir de novo, vale reconstruí-lo com o que se aprendeu:
 
-Duas armadilhas descobertas na prática:
+**Meça TODAS as camadas.** O painel original media `body`, `#root`, canvas,
+`innerHeight` e `visualViewport`, e deixava de fora a `<div>` raiz do app — que
+era exatamente onde estava a fresta. Como tudo que era medido concordava entre
+si, a conclusão era sempre "0px de sobra", e a busca ia para fora da página.
+Meça também o `top` de cada camada, não só a altura: duas caixas de mesma altura
+podem estar deslocadas uma da outra.
+
+**Duas armadilhas para chegar ao modo standalone:**
 
 - ao adicionar à tela de início, o iOS abre a `start_url` do **manifest** e
-  descarta a query — o parâmetro não chega ao modo standalone;
+  descarta a query — um parâmetro de URL não chega lá;
 - um app aberto pelo ícone usa **armazenamento separado** do navegador, então
   `localStorage` não serve de ponte.
 
-Para medir em standalone, adicione à tela de início a URL **já com `?diag=1`**,
-ou aponte a `start_url` do manifest para ela temporariamente.
+A saída é adicionar à tela de início a URL **já com o parâmetro**, ou apontar a
+`start_url` do manifest para ela temporariamente.
 
-E o mais importante: **inclua todas as camadas na medição.** O painel media
-`body`, `#root`, canvas, `innerHeight` e `visualViewport`, e deixava de fora a
-`<div>` raiz do app — que era exatamente onde estava a fresta. Como tudo que era
-medido concordava entre si, a conclusão era sempre "0px de sobra", e a busca ia
-para fora da página.
+**O teste que realmente resolveu** foi pintar cada camada de uma cor berrante
+(`html` magenta, `body` ciano, raiz do app verde) e pedir um print. Uma imagem
+identificou a camada culpada depois de oito tentativas às cegas. Se houver dúvida
+sobre qual elemento pinta alguma coisa, faça isso primeiro, não por último.

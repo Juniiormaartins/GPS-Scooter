@@ -3,16 +3,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ command }) => ({
-  /**
-   * Carimbo de build, exposto como `__BUILD_TIME__`.
-   *
-   * Serve ao painel de diagnóstico: sem ele não há como distinguir, olhando um
-   * print do aparelho, "a correção não funcionou" de "o aparelho está numa
-   * versão anterior". As duas coisas parecem idênticas na tela.
-   */
-  define: {
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-  },
   plugins: [react()],
   resolve: {
     alias: {
