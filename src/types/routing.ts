@@ -27,9 +27,9 @@ export type RoadClass =
  * SUPERCONJUNTO de `RoadClass`, e o motivo é concreto: `RoadClass` parava em
  * `service`, então calçada, ciclovia, caminho, escada e calçadão caíam todos
  * em `unknown` — e eram tratados como "via urbana comum" para qualquer
- * veículo. Uma passarela lida como avenida serve mal os três veículos: some
- * do roteiro do patinete, para quem é um atalho legítimo, e entra no da
- * scooter, para quem é impraticável.
+ * veículo. Uma passarela lida como avenida serve mal os dois veículos: entra
+ * no roteiro da scooter, para quem é impraticável, e perde a distinção de
+ * ciclovia, que para a bicicleta é o melhor espaço que existe.
  *
  * `RoadClass` continua existindo porque é o que o provedor de rota entrega
  * direto; `WayKind` é o que a classificação usa depois do enriquecimento.

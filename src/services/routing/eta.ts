@@ -28,10 +28,10 @@ export function calculateEtaMinutes(
 /**
  * ETA sensível ao TIPO DE VIA.
  *
- * O problema concreto: para o patinete o app agora pede também candidatas de
- * pedestre, e o Valhalla devolve aquele trajeto com 101 minutos para 8 km —
- * porque ele cronometrou uma pessoa andando. Ignorar isso e aplicar 25 km/h a
- * tudo seria o erro oposto: ninguém atravessa uma calçada movimentada na
+ * O problema concreto: uma rota pode incluir trechos de calçada ou calçadão,
+ * e o Valhalla os cronometra como se fossem percorridos a pé — 101 minutos
+ * para 8 km, numa medição real. Ignorar isso e aplicar a velocidade de
+ * cruzeiro a tudo seria o erro oposto: ninguém atravessa uma calçada na
  * velocidade máxima do veículo.
  *
  * Então o tempo é somado por trecho: velocidade de referência do veículo na

@@ -49,7 +49,6 @@ const ANGLE_FILES = [
  */
 const SPRITE_FOLDER: Record<VehicleModelId, string> = {
   'scooter-32': 'scooter_eletrica',
-  'scooter-25': 'patinete_eletrico_urbano',
   'ebike-25': 'bicicleta_eletrica',
   custom: 'scooter_eletrica',
 }
@@ -84,13 +83,12 @@ const SCREEN_TO_FILE_OFFSET_DEG = 180
  * outra orientação-base.
  *
  * Os três atuais foram CONFERIDOS um a um e têm exatamente a mesma base — em
- * `marker_45_nordeste` scooter, patinete e bicicleta apontam todos para
+ * `marker_45_nordeste` scooter e bicicleta apontam ambos para
  * baixo-direita. Por isso os três são 0. A tabela existe para que corrigir um
  * asset divergente seja mudar um número aqui, e não mexer na trigonometria.
  */
 const SPRITE_BASE_OFFSET_DEG: Record<VehicleModelId, number> = {
   'scooter-32': 0,
-  'scooter-25': 0,
   'ebike-25': 0,
   custom: 0,
 }

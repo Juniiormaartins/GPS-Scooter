@@ -27,7 +27,7 @@ export type ThemeMode = 'dark' | 'light'
  * `custom` é LEGADO e nada mais o produz. Ele existia para marcar "o usuário
  * mexeu nos números", e essa era a confusão: ajustar a autonomia trocava o TIPO
  * do veículo, e como `custom` herda o perfil de mobilidade da scooter, um
- * usuário de patinete que mexesse num número passava a ser roteado com as
+ * usuário de bicicleta que mexesse num número passava a ser roteado com as
  * regras da scooter — perdendo a proteção contra avenida arterial sem nenhum
  * aviso.
  *
@@ -36,7 +36,7 @@ export type ThemeMode = 'dark' | 'light'
  * para preferências gravadas antes desta mudança, que a migração abaixo
  * corrige.
  */
-export type VehicleModelId = 'scooter-32' | 'scooter-25' | 'ebike-25' | 'custom'
+export type VehicleModelId = 'scooter-32' | 'ebike-25' | 'custom'
 
 export interface VehicleModelPreset {
   id: VehicleModelId
@@ -52,7 +52,6 @@ export interface VehicleModelPreset {
  */
 export const VEHICLE_PRESETS: VehicleModelPreset[] = [
   { id: 'scooter-32', label: 'Scooter elétrica (autopropelido)', topSpeedKmh: 32, rangeKm: 40 },
-  { id: 'scooter-25', label: 'Patinete elétrico urbano', topSpeedKmh: 25, rangeKm: 30 },
   { id: 'ebike-25', label: 'Bicicleta elétrica', topSpeedKmh: 25, rangeKm: 60 },
 ]
 
@@ -115,14 +114,12 @@ export const ELEVATION_DEPENDENT_AVOIDANCES: AvoidanceId[] = ['steep-climbs', 's
  * Peso da preferência por veículo. A condição detectada é a mesma; o quanto
  * ela incomoda não é.
  *
- * Racional: uma subida de 6% derruba a velocidade de um patinete de roda
- * pequena muito mais do que a de uma bicicleta elétrica com assistência de
- * pedal — e piso solto é bem mais crítico para roda pequena do que para aro
- * de bicicleta. Os números são pesos relativos de produto, não medições.
+ * Racional: uma subida de 6% derruba a velocidade de uma scooter leve mais do
+ * que a de uma bicicleta elétrica com assistência de pedal — e piso solto é
+ * mais crítico para roda pequena do que para aro de bicicleta. Os números são pesos relativos de produto, não medições.
  */
 export const AVOIDANCE_WEIGHT_BY_VEHICLE: Record<VehicleModelId, Record<AvoidanceId, number>> = {
   'scooter-32': { 'express-roads': 1, unpaved: 1, 'steep-climbs': 1, 'steep-descents': 1 },
-  'scooter-25': { 'express-roads': 1, unpaved: 1.3, 'steep-climbs': 1.2, 'steep-descents': 1.2 },
   'ebike-25': { 'express-roads': 1, unpaved: 0.7, 'steep-climbs': 0.6, 'steep-descents': 0.8 },
   custom: { 'express-roads': 1, unpaved: 1, 'steep-climbs': 1, 'steep-descents': 1 },
 }
@@ -266,7 +263,7 @@ export function getUserPreferences(): UserPreferences {
  * HOJE TRATA UM CASO SÓ: `vehicleModelId === 'custom'`. Quem está nesse estado
  * mexeu em autonomia ou velocidade quando isso ainda trocava o tipo do veículo,
  * e desde então vem sendo roteado com as regras da scooter — mesmo tendo
- * escolhido patinete ou bicicleta.
+ * escolhido bicicleta.
  *
  * NÃO DÁ PARA ADIVINHAR qual era o tipo certo: a informação foi perdida no
  * momento em que `custom` sobrescreveu o valor. Chutar seria pior que perguntar,
@@ -276,8 +273,22 @@ export function getUserPreferences(): UserPreferences {
  * parte deles).
  */
 function migrate(preferences: UserPreferences): UserPreferences {
-  if (preferences.vehicleModelId !== 'custom') return preferences
-  return { ...preferences, onboardingCompletedAt: null }
+  /*
+    PATINETE FOI REMOVIDO do produto. Quem tinha `scooter-25` gravado precisa
+    sair desse estado, senão `mobilityProfile` cai no perfil padrão (scooter) e
+    a pessoa passa a ser roteada com regras mais permissivas do que escolheu —
+    silenciosamente, que é o pior modo de errar aqui.
+
+    Reabrir a configuração inicial é a saída honesta: o app não tem como saber
+    se quem andava de patinete passou a andar de bicicleta ou de scooter, e
+    chutar decidiria por ela algo que muda quais vias são recomendadas. Os
+    números (autonomia, velocidade, bateria) são preservados.
+  */
+  const legado = preferences.vehicleModelId as string
+  if (legado === 'custom' || legado === 'scooter-25') {
+    return { ...preferences, onboardingCompletedAt: null }
+  }
+  return preferences
 }
 
 export function setUserPreferences(preferences: UserPreferences) {

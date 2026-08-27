@@ -8,7 +8,7 @@ import type { SuitabilityTier, WayKind } from '@/types/routing'
  * POR QUE ISTO EXISTE. A classificação de vias tratava os três veículos com a
  * MESMA tabela (`TIER_BY_ROAD_CLASS`), diferenciando-os só por dois ajustes a
  * posteriori: diferencial de velocidade e sensibilidade a piso solto. Na
- * prática, patinete, bicicleta elétrica e scooter recebiam a mesma leitura de
+ * prática, bicicleta elétrica e scooter recebiam a mesma leitura de
  * uma avenida, de uma ciclovia e de uma calçada — e as três coisas são
  * radicalmente diferentes conforme o que se está pilotando.
  *
@@ -27,7 +27,7 @@ import type { SuitabilityTier, WayKind } from '@/types/routing'
  *
  * SOBRE 'prohibited': continua reservado a impossibilidade FÍSICA ou a sinal
  * explícito do OSM. Escada é impossível de pilotar — isso não é regra legal
- * inventada, é geometria. Rodovia para patinete é `unsuitable`: fortemente
+ * inventada, é geometria. Rodovia para bicicleta é `unsuitable`: fortemente
  * desaconselhada, visível, penalizada, mas não apagada da interface (ver
  * item "vias perigosas continuam visíveis").
  */
@@ -55,7 +55,7 @@ export const REASON_TEXT: Record<SuitabilityReasonCode, string> = {
   'high-speed-traffic': 'Tráfego em velocidade muito acima da sua',
   /*
     Arterial NÃO é rodovia. Uma via `primary` chamada "Rua 83" é uma avenida
-    urbana movimentada: ruim para patinete, mas chamá-la de rodovia na tela
+    urbana movimentada: ruim para bicicleta, mas chamá-la de rodovia na tela
     seria descrever errado o que o usuário está vendo pela janela. Só
     motorway/trunk, `motorroad=yes` e ref BR- viram 'expressway'.
   */
@@ -79,20 +79,10 @@ export interface MobilityProfile {
    */
   costing: 'bicycle' | 'motor_scooter' | 'pedestrian'
   /**
-   * Pedir TAMBÉM candidatas da malha de pedestre.
-   *
-   * Só o patinete. A pergunta do produto é "existe um caminho por calçada e
-   * passarela que encurte o trajeto?", e para o patinete a resposta é
-   * legítima. Elas entram no MESMO pool e passam pelo MESMO classificador —
-   * não é rota de pedestre renomeada: se o caminho for ruim para patinete,
-   * ele perde no ranking como qualquer outra.
-   */
-  includePedestrianCandidates: boolean
-  /**
    * Velocidade de cruzeiro em espaço de pedestre, em km/h.
    *
    * É o que impede o erro que o Valhalla comete quando devolve a rota de
-   * pedestre: 8 km em 101 minutos. O patinete não anda a 5 km/h numa calçada,
+   * pedestre: 8 km em 101 minutos. A bicicleta não anda a 5 km/h numa calçada,
    * mas também não anda a 25 — vai devagar por prudência, e é esse número.
    */
   pedestrianWaySpeedKmh: number
@@ -116,7 +106,6 @@ const SCOOTER: MobilityProfile = {
   id: 'scooter-32',
   label: 'Scooter elétrica',
   costing: 'motor_scooter',
-  includePedestrianCandidates: false,
   pedestrianWaySpeedKmh: 6,
   speedDifferentialThresholdKmh: 35,
   looseSurfaceSensitivity: 'medium',
@@ -142,55 +131,18 @@ const SCOOTER: MobilityProfile = {
 }
 
 /**
- * PATINETE ELÉTRICO — o perfil que mais se distancia dos outros dois.
- *
- * Roda pequena, velocidade baixa, sem carenagem: uma avenida arterial é
- * genuinamente perigosa, e é por isso que `primary` aqui é `unsuitable` e não
- * `caution` como na scooter. Em compensação, ciclovia e calçada são espaços
- * legítimos — a calçada como `caution`, porque conviver com pedestre exige
- * andar devagar e dar preferência, não porque seja proibido.
- */
-const KICK_SCOOTER: MobilityProfile = {
-  id: 'scooter-25',
-  label: 'Patinete elétrico',
-  costing: 'bicycle',
-  includePedestrianCandidates: true,
-  pedestrianWaySpeedKmh: 8,
-  speedDifferentialThresholdKmh: 25,
-  looseSurfaceSensitivity: 'high',
-  wayTiers: {
-    motorway: 'unsuitable',
-    trunk: 'unsuitable',
-    primary: 'unsuitable',
-    secondary: 'caution',
-    tertiary: 'good',
-    residential: 'very-good',
-    living_street: 'very-good',
-    service: 'good',
-    cycleway: 'very-good',
-    footway: 'caution',
-    pedestrian: 'caution',
-    path: 'caution',
-    track: 'caution',
-    steps: 'prohibited',
-    unknown: 'good',
-  },
-}
-
-/**
  * BICICLETA ELÉTRICA — perfil de bicicleta, com a velocidade de uma e-bike.
  *
  * Divide quase tudo com a bicicleta comum; o que muda é a velocidade (que
  * entra no ETA e no diferencial de tráfego) e o fato de aguentar caminho de
- * terra batida melhor que um patinete. Calçada fica em `caution` pelo mesmo
- * motivo do patinete, e não melhor: bicicleta em calçada é conflito com
+ * terra batida melhor que roda pequena. Calçada fica em `caution` e não
+ * melhor: bicicleta em calçada é conflito com
  * pedestre.
  */
 const EBIKE: MobilityProfile = {
   id: 'ebike-25',
   label: 'Bicicleta elétrica',
   costing: 'bicycle',
-  includePedestrianCandidates: false,
   pedestrianWaySpeedKmh: 8,
   speedDifferentialThresholdKmh: 30,
   looseSurfaceSensitivity: 'low',
@@ -216,7 +168,6 @@ const EBIKE: MobilityProfile = {
 /** `custom` herda o perfil da scooter — é de onde o usuário parte ao ajustar à mão. */
 const PROFILES: Record<VehicleModelId, MobilityProfile> = {
   'scooter-32': SCOOTER,
-  'scooter-25': KICK_SCOOTER,
   'ebike-25': EBIKE,
   custom: { ...SCOOTER, id: 'custom', label: 'Veículo personalizado' },
 }

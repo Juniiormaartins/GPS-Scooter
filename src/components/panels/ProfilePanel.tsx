@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
 import { BatteryDial, useDeferredPercent } from '@/components/vehicle/BatteryDial'
 import { autonomyState, confidenceCaveat } from '@/services/vehicle/autonomy'
+import { NumberField, RANGE_LIMITS, SPEED_LIMITS } from '@/components/ui/NumberField'
 import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
 import {
@@ -160,19 +161,15 @@ export function ProfilePanel({
           onClick={() => toggle('speed')}
         />
         {openPicker === 'speed' && (
-          <OptionList
-            label="Velocidade de referência"
-            options={SPEED_OPTIONS.map((speed) => ({
-              key: String(speed),
-              label: `${speed} km/h`,
-              selected: speed === preferences.referenceSpeedKmh,
-            }))}
-            onSelect={(key) => {
-              // NÃO mexe no `vehicleModelId`: velocidade é um número DO veículo,
-              // não outro veículo. Ver o comentário em VehicleOnboarding.
-              onUpdatePreferences({ referenceSpeedKmh: Number(key) })
-              setOpenPicker(null)
-            }}
+          <NumericSetting
+            atalhos={SPEED_OPTIONS}
+            unidade="km/h"
+            rotulo="Velocidade"
+            valor={preferences.referenceSpeedKmh}
+            limites={SPEED_LIMITS}
+            // NÃO mexe no `vehicleModelId`: velocidade é um número DO veículo,
+            // não outro veículo. Ver o comentário em VehicleOnboarding.
+            onChange={(v) => onUpdatePreferences({ referenceSpeedKmh: v })}
           />
         )}
 
@@ -185,17 +182,13 @@ export function ProfilePanel({
           onClick={() => toggle('range')}
         />
         {openPicker === 'range' && (
-          <OptionList
-            label="Autonomia estimada"
-            options={RANGE_OPTIONS.map((range) => ({
-              key: String(range),
-              label: `≈${range} km`,
-              selected: range === preferences.rangeKm,
-            }))}
-            onSelect={(key) => {
-              onUpdatePreferences({ rangeKm: Number(key) })
-              setOpenPicker(null)
-            }}
+          <NumericSetting
+            atalhos={RANGE_OPTIONS}
+            unidade="km"
+            rotulo="Autonomia"
+            valor={preferences.rangeKm}
+            limites={RANGE_LIMITS}
+            onChange={(v) => onUpdatePreferences({ rangeKm: v })}
           />
         )}
 
@@ -621,5 +614,69 @@ function BluetoothIcon() {
     <svg viewBox="0 0 24 24" className="h-6 w-6" {...ICON}>
       <path d="M6.5 6.5l11 11L12 22V2l5.5 5.5L6.5 17.5" />
     </svg>
+  )
+}
+
+/**
+ * Ajuste numérico com ATALHOS e valor livre.
+ *
+ * Os atalhos existem porque a maioria dos veículos cai perto de um deles e um
+ * toque resolve. Mas eles eram a única saída, e isso obrigava o veículo do
+ * usuário a caber num catálogo: uma scooter de 120 km de autonomia
+ * simplesmente não existia no app.
+ *
+ * O campo livre é o caminho principal, não a exceção — por isso fica ABAIXO
+ * dos atalhos e sempre visível, sem depender de tocar em "personalizar". O
+ * valor é gravado enquanto se digita e ajustado à faixa ao sair do campo (ver
+ * NumberField); vazio não grava nada, porque vazio é um estado de digitação,
+ * não uma escolha.
+ */
+function NumericSetting({
+  atalhos,
+  unidade,
+  rotulo,
+  valor,
+  limites,
+  onChange,
+}: {
+  atalhos: number[]
+  unidade: string
+  rotulo: string
+  valor: number
+  limites: { min: number; max: number }
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="px-card pb-3.5 pt-1">
+      <div className="flex flex-wrap gap-2">
+        {atalhos.map((atalho) => (
+          <button
+            key={atalho}
+            type="button"
+            onClick={() => onChange(atalho)}
+            className={`rounded-pill px-3.5 py-2 text-[13.5px] font-bold transition-all duration-fast active:scale-[.97] ${
+              atalho === valor
+                ? 'bg-brand-500 text-content-on-accent'
+                : 'border border-hairline/[.14] bg-surface-tile text-content-secondary'
+            }`}
+          >
+            {atalho} {unidade}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3">
+        <NumberField
+          label={`${rotulo} do seu veículo`}
+          unit={unidade}
+          value={valor}
+          min={limites.min}
+          max={limites.max}
+          onChange={(v) => {
+            if (v != null) onChange(v)
+          }}
+        />
+      </div>
+    </div>
   )
 }

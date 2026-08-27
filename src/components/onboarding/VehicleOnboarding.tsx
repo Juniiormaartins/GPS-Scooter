@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BatteryDial } from '@/components/vehicle/BatteryDial'
 import { Button } from '@/components/ui/Button'
+import { NumberField, RANGE_LIMITS, SPEED_LIMITS } from '@/components/ui/NumberField'
 import { mobilityProfile } from '@/config/mobilityProfiles'
 import { speedAdjustedRangeKm } from '@/services/vehicle/autonomy'
 import { VEHICLE_PRESETS, type UserPreferences, type VehicleModelId } from '@/config/userPreferences'
@@ -12,13 +13,13 @@ import { VEHICLE_PRESETS, type UserPreferences, type VehicleModelId } from '@/co
  * de um GPS comum depende de saber QUAL veículo está embaixo do usuário: as
  * regras de via, o cálculo de tempo, a autonomia, os alertas. Sem essa resposta
  * o app teria que adivinhar, e adivinhar aqui significa recomendar uma avenida
- * arterial para um patinete.
+ * arterial para uma bicicleta.
  *
  * DUAS TELAS, não cinco. Cada campo a mais é uma pessoa a menos que termina, e
  * o que é realmente indispensável cabe em duas perguntas: qual veículo (que já
  * traz velocidade e autonomia de catálogo) e quanto de bateria agora. Os
  * números vêm preenchidos e podem ser ajustados; ninguém precisa saber a
- * autonomia do próprio patinete para começar a usar o app.
+ * autonomia do próprio veículo para começar a usar o app.
  *
  * A SEGUNDA TELA É PULÁVEL. Bateria é a única informação aqui que muda todo
  * dia, e travar a entrada no app por causa dela transformaria a etapa em
@@ -220,7 +221,7 @@ function VehicleStep({
               {/*
                 A frase abaixo é gerada do PERFIL REAL de mobilidade, não escrita
                 à mão: é a mesma tabela que decide as rotas. Se um dia a regra do
-                patinete mudar, este texto muda junto — não vira promessa velha.
+                bicicleta mudar, este texto muda junto — não vira promessa velha.
               */}
               <span className="mt-0.5 block text-[13px] font-semibold text-content-tertiary">
                 {describeProfile(preset.id)} · {preset.topSpeedKmh} km/h · {preset.rangeKm} km
@@ -236,8 +237,8 @@ function VehicleStep({
           Ajuste se souber os números do seu — dá para mudar depois no Perfil.
         </p>
         <div className="mt-3 flex gap-3">
-          <NumberField label="Autonomia" unit="km" value={rangeKm} min={5} max={200} onChange={onRangeChange} />
-          <NumberField label="Velocidade" unit="km/h" value={speedKmh} min={6} max={90} onChange={onSpeedChange} />
+          <NumberField label="Autonomia" unit="km" value={rangeKm} {...RANGE_LIMITS} onChange={onRangeChange} />
+          <NumberField label="Velocidade" unit="km/h" value={speedKmh} {...SPEED_LIMITS} onChange={onSpeedChange} />
         </div>
 
         {/*
@@ -292,77 +293,6 @@ function BatteryStep({
         O app desconta sozinho o que você percorrer e pergunta de novo só quando o dado ficar velho.
       </p>
     </>
-  )
-}
-
-/**
- * Campo numérico que se deixa APAGAR.
- *
- * BUG REAL QUE ISTO CONSERTA, e ele tornava o campo praticamente inutilizável.
- * A versão anterior aplicava `Math.max(min, Math.min(max, n))` a cada tecla.
- * Apagar tudo produz string vazia, `Number('')` é 0, e 0 é finito — então o
- * campo, em vez de ficar em branco, grudava no MÍNIMO (5 km e 6 km/h). A partir
- * daí cada dígito digitado se concatenava com o número preso: digitar "10" num
- * campo travado em 6 dava 610, que o clamp então cortava para o máximo, 90.
- *
- * A CAUSA DE FUNDO é validar durante a DIGITAÇÃO. Um número em construção é
- * quase sempre inválido — "" e "1" são estados legítimos no caminho para "120"
- * — e corrigi-los na hora impede o usuário de chegar ao valor que ele quer.
- *
- * Aqui o campo guarda TEXTO enquanto está sendo editado, aceita vazio, e só
- * ajusta à faixa quando o dedo sai (`onBlur`). A obrigatoriedade continua: em
- * branco, o botão de continuar fica desabilitado — a pergunta tem de ser
- * respondida, mas o caminho até a resposta é livre.
- *
- * `type="text"` com `inputMode="numeric"`, e não `type="number"`: o campo
- * numérico do navegador tem comportamento próprio de incremento, aceita "e" e
- * "-", e em alguns navegadores devolve string vazia para valores que ele julga
- * inválidos — o que reintroduziria exatamente esta classe de bug.
- */
-function NumberField({
-  label,
-  unit,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string
-  unit: string
-  /** null = campo vazio. É um estado válido enquanto se digita. */
-  value: number | null
-  min: number
-  max: number
-  onChange: (value: number | null) => void
-}) {
-  return (
-    <label className="flex-1">
-      <span className="block text-[12px] font-bold uppercase tracking-wide text-content-tertiary">{label}</span>
-      <span className="mt-1 flex items-baseline gap-1 rounded-lg border border-hairline/[.12] bg-surface-tile px-3 py-2">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value == null ? '' : String(value)}
-          onChange={(event) => {
-            const texto = event.target.value.replace(/\D/g, '')
-            if (texto === '') {
-              onChange(null)
-              return
-            }
-            // Sem clamp aqui: "1" a caminho de "120" não pode virar o mínimo.
-            // O ajuste à faixa acontece no blur.
-            onChange(Number(texto))
-          }}
-          onBlur={() => {
-            if (value == null) return
-            const ajustado = Math.max(min, Math.min(max, value))
-            if (ajustado !== value) onChange(ajustado)
-          }}
-          className="w-full min-w-0 bg-transparent text-[18px] font-extrabold text-content-primary outline-none"
-        />
-        <span className="shrink-0 text-[12.5px] font-bold text-content-tertiary">{unit}</span>
-      </span>
-    </label>
   )
 }
 

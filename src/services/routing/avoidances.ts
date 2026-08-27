@@ -85,7 +85,7 @@ export function evaluateAvoidances(
     hits.push({ id, distanceMeters, segmentIndexes })
 
     // O peso depende do veículo: 6% de subida é um problema sério para um
-    // patinete de roda pequena e quase irrelevante para uma bicicleta
+    // scooter de roda pequena e quase irrelevante para uma bicicleta
     // elétrica com assistência — mesma condição detectada, pesos diferentes.
     const weight = AVOIDANCE_WEIGHT_BY_VEHICLE[preferences.vehicleModelId]?.[id] ?? 1
     const raw = (distanceMeters / 1000) * BASE_PENALTY_PER_KM[id] * weight

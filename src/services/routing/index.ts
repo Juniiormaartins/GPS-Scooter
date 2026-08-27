@@ -61,8 +61,8 @@ export async function planRoute(request: RouteRequest): Promise<RouteResult> {
 
   const preferences = getUserPreferences()
   // O veículo do perfil passa a atravessar TODO o pipeline: a mesma via pode
-  // ser adequada para uma scooter de 32 km/h e exigir atenção para um
-  // patinete de 25 (ver applyVehicleAdjustment em roadClassification.ts).
+  // ser adequada para uma scooter de 32 km/h e exigir atenção para uma
+  // bicicleta de 25 (ver applyVehicleAdjustment em roadClassification.ts).
   const vehicle: VehicleClassificationContext = {
     modelId: preferences.vehicleModelId,
     referenceSpeedKmh: preferences.referenceSpeedKmh,
@@ -160,8 +160,8 @@ function exposureMeters(entry: ScoredRoute): number {
  * A rota atravessa algum trecho PROIBIDO?
  *
  * Proibido aqui é sinal explícito (`access=no/private`) ou impossibilidade
- * física (escada) — não é opinião de adequação. Encontrado em teste: para o
- * patinete, a candidata vinda da malha de pedestre cortava 90 m de uma via de
+ * física (escada) — não é opinião de adequação. Encontrado em teste: uma
+ * candidata cortava 90 m de uma via de
  * serviço marcada como privada, e ela foi RECOMENDADA mesmo saindo do
  * pipeline com `eligibility: 'not-allowed'`. Recomendar uma rota que o
  * próprio app classifica como não permitida é contradizer a si mesmo.
@@ -244,8 +244,8 @@ function rankRoutes(scored: ScoredRoute[]): { ranked: ScoredRoute[]; recommended
 /**
  * O nome do VEÍCULO no destaque, não "scooter" fixo.
  *
- * O texto dizia "Recomendada para scooter" mesmo com patinete ou bicicleta
- * elétrica selecionados — e desde que cada veículo passou a ter regras
+ * O texto dizia "Recomendada para scooter" mesmo com bicicleta elétrica
+ * selecionada — e desde que cada veículo passou a ter regras
  * próprias de via (ver mobilityProfiles), isso não é só uma palavra fora do
  * lugar: a recomendação foi calculada com as regras DAQUELE veículo, e nomear
  * outro faz o app parecer estar respondendo sobre outra coisa.

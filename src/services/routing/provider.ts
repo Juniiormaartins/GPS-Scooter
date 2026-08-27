@@ -422,11 +422,6 @@ class CombinedRoutingProvider implements RoutingProvider {
      * - o OSRM "driving" continua entrando, para que a rota mais rápida por
      *   via inadequada EXISTA como opção real e apareça classificada, em vez
      *   de sumir;
-     * - só o patinete recebe também candidatas de PEDESTRE. Elas passam pelo
-     *   mesmo classificador que todas as outras: se o caminho por calçada for
-     *   ruim para patinete, perde no ranking. Não é rota de pedestre
-     *   renomeada — é a malha de pedestre entrando no pool para ser avaliada
-     *   com os parâmetros do patinete.
      */
     const profile = mobilityProfile(getUserPreferences().vehicleModelId)
 
@@ -434,13 +429,6 @@ class CombinedRoutingProvider implements RoutingProvider {
       new ValhallaRoutingProvider(this.useRoads, profile.costing).fetchCandidateRoutes(request),
       this.osrm.fetchCandidateRoutes(request).then((routes) => routes.map((route) => ({ ...route, id: `driving-${route.id}` }))),
     ]
-    if (profile.includePedestrianCandidates) {
-      sources.push(
-        new ValhallaRoutingProvider(this.useRoads, 'pedestrian')
-          .fetchCandidateRoutes(request)
-          .then((routes) => routes.map((route) => ({ ...route, id: `foot-${route.id}` }))),
-      )
-    }
 
     const outcomes = await Promise.allSettled(sources)
     const combined = outcomes.flatMap((outcome) => (outcome.status === 'fulfilled' ? outcome.value : []))

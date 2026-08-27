@@ -63,7 +63,7 @@ const ELEVATION_TIMEOUT_MS = 6000
 export type GradeClass = 'flat' | 'gentle-climb' | 'steep-climb' | 'gentle-descent' | 'steep-descent'
 
 /**
- * Limiares em porcentagem. 6% é onde uma scooter/patinete elétrico começa
+ * Limiares em porcentagem. 6% é onde uma scooter elétrica começa
  * claramente a perder velocidade e autonomia na subida; na descida é onde a
  * frenagem passa a exigir atenção real. Abaixo de 3% é plano na prática.
  */

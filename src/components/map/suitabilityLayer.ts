@@ -116,7 +116,7 @@ export const SUITABILITY_LEGEND: { tier: SuitabilityTier; label: string; color: 
  * SUBCLASS PRIMEIRO, class como padrão do `match` — e não o contrário. O
  * `class` de uma ciclovia é `path`, igual ao de uma trilha de terra; só a
  * `subclass` separa as duas, e essa é justamente a distinção que muda tudo para
- * um patinete. Consultar `class` primeiro apagaria a informação mais útil que o
+ * uma bicicleta. Consultar `class` primeiro apagaria a informação mais útil que o
  * tile tem.
  */
 function tierExpression(vehicleModelId: VehicleModelId, output: (tier: SuitabilityTier) => string | number) {

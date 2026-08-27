@@ -1045,17 +1045,34 @@ export function MapView({
         source: ROUTE_WARN_SOURCE_ID,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': [
-            'match',
-            ['get', 'severity'],
-            'caution',
-            routePalette(themeRef.current).routeByEligibility.discouraged,
-            routePalette(themeRef.current).routeByEligibility['not-allowed'],
-          ],
+          /*
+            HACHURA, NÃO COR PRÓPRIA — e esta é a correção de um bug visual.
+
+            Esta camada marca os trechos que casam com o que o usuário pediu
+            para evitar (via expressa, piso solto, rampa). Ela era pintada com a
+            paleta de ELEGIBILIDADE: âmbar para `caution`, vermelho para o
+            resto. E como ela entra DEPOIS da fita, com 4px de largura sobre um
+            miolo de 7px, ela repintava o centro do traçado.
+
+            O efeito: um trecho CRÍTICO — miolo vermelho, contorno vermelho —
+            que também batesse numa preferência de evitar ganhava uma tira
+            âmbar no meio. Na tela isso vira "amarelo com borda vermelha", que
+            foi exatamente o relato. Duas codificações diferentes disputando o
+            mesmo canal visual, e a mais fraca ganhando por ser desenhada por
+            último.
+
+            A REGRA passa a ser: a COR pertence à severidade, e só a ela. Verde
+            adequado, âmbar atenção, vermelho crítico — sem exceção e sem nada
+            repintando por cima. A preferência de evitar continua marcada, mas
+            noutro canal: um tracejado claro que se lê como textura sobre
+            qualquer cor de fundo, sem trocá-la.
+          */
+          'line-color': '#FFFFFF',
+          'line-dasharray': [1, 2.2],
           // Mais estreita que a rota (que tem 7px quando ativa): fica DENTRO
           // dela, como um trecho marcado, sem virar uma faixa de alerta.
-          'line-width': 4,
-          'line-opacity': 0.95,
+          'line-width': 3,
+          'line-opacity': 0.55,
         },
       })
 
@@ -1124,15 +1141,8 @@ export function MapView({
         })),
     })
 
-    if (map.getLayer(ROUTE_WARN_LAYER_ID)) {
-      map.setPaintProperty(ROUTE_WARN_LAYER_ID, 'line-color', [
-        'match',
-        ['get', 'severity'],
-        'caution',
-        routePalette(theme).routeByEligibility.discouraged,
-        routePalette(theme).routeByEligibility['not-allowed'],
-      ])
-    }
+    // A cor da hachura não depende do tema: branco translúcido funciona sobre
+    // azul, âmbar e vermelho igualmente, nos dois temas. Não há o que repintar.
   }, [routeWarnings, theme])
 
   // Ao SAIR DA NAVEGAÇÃO, desfaz a rotação: fora dela, norte para cima é o
@@ -1251,7 +1261,7 @@ export function MapView({
   /**
    * Liga/desliga a camada de adequação e a reescreve ao trocar de veículo.
    *
-   * Depende dos DOIS: a mesma via tem níveis diferentes para patinete e para
+   * Depende dos DOIS: a mesma via tem níveis diferentes para bicicleta e para
    * scooter, então trocar de veículo com a camada ligada precisa repintar a
    * cidade inteira — é justamente essa diferença que a camada existe para
    * mostrar.
@@ -1401,16 +1411,24 @@ export function MapView({
     // O destaque dos trechos evitados acompanha a rota: fixo, ele sumiria
     // dentro da linha grossa da navegação.
     if (map.getLayer(ROUTE_WARN_LAYER_ID)) {
+      /*
+        ESTREITA — cerca de metade do miolo, não a largura dele.
+        
+        Era 7px no zoom 17, exatamente a largura do traçado ativo: a marcação
+        cobria a fita inteira em vez de ficar dentro dela. Agora ela é uma
+        hachura por dentro, e a cor da severidade permanece visível dos dois
+        lados.
+      */
       map.setPaintProperty(ROUTE_WARN_LAYER_ID, 'line-width', [
         'interpolate',
         ['linear'],
         ['zoom'],
         14,
-        weight === 'navigating' ? 4 : 3,
+        weight === 'navigating' ? 2 : 1.5,
         17,
-        weight === 'navigating' ? 7 : 5,
+        weight === 'navigating' ? 3.5 : 2.5,
         20,
-        weight === 'navigating' ? 12 : 8,
+        weight === 'navigating' ? 6 : 4,
       ] as maplibregl.ExpressionSpecification)
     }
   }, [isRoutePreview, isNavigating, showingOptions])
@@ -2434,7 +2452,7 @@ function applyCartography(map: MapLibreMap, theme: 'dark' | 'light') {
 /**
  * Ajustes de PESO (não de cor) sobre o que o provedor entrega pensando em carro.
  *
- * Este app é para scooter, patinete e bicicleta elétrica: o usuário circula
+ * Este app é para scooter e bicicleta elétrica: o usuário circula
  * majoritariamente em rua residencial e via local, que é justamente a classe
  * que o MapTiler desenha mais fina (4px, contra 8px de uma via principal).
  * Engrossar a classe menor aproxima o peso visual do uso real sem inverter a

@@ -42,6 +42,22 @@ export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEna
     setAlert(null)
   }, [scoredRoute?.route.id])
 
+  /*
+    COMEÇAR UMA NAVEGAÇÃO ESQUECE o que já foi anunciado.
+
+    A memória só era limpa quando a ROTA mudava. Então refazer o mesmo trajeto
+    — sair e iniciar de novo, que é o caso comum de quem repete o percurso de
+    todo dia — corria em silêncio: os trechos já tinham sido anunciados na
+    sessão anterior e nunca mais avisavam.
+
+    A regra certa é "uma vez por navegação", não "uma vez por rota".
+  */
+  useEffect(() => {
+    if (!isNavigating) return
+    announced.current = new Set()
+    lastAlertAt.current = null
+  }, [isNavigating])
+
   useEffect(() => {
     if (!isNavigating) {
       setAlert(null)

@@ -7,7 +7,7 @@ import type { Eligibility, RouteSegment, SuitabilityTier, WayKind } from '@/type
  *
  * O QUE MUDOU E POR QUÊ. Antes existia uma tabela única de adequação
  * (`TIER_BY_ROAD_CLASS`) aplicada aos três veículos, com dois ajustes a
- * posteriori. Isso fazia patinete, bicicleta elétrica e scooter lerem uma
+ * posteriori. Isso fazia bicicleta elétrica e scooter lerem uma
  * avenida arterial exatamente da mesma forma — e nenhum dos três reconhecia
  * ciclovia, calçada, calçadão ou escada, porque esses tipos de via nem
  * chegavam à classificação.
