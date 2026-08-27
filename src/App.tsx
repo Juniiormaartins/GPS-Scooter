@@ -1070,7 +1070,7 @@ export default function App() {
     ponto a ponto, sem depender de altura resolvida.
   */
   return (
-    <div className="absolute inset-0 bg-surface-map">
+    <div className="relative h-screen w-screen overflow-hidden bg-surface">
       <MapView
         originPoint={originPoint}
         destinationPoint={destinationPoint}

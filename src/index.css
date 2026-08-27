@@ -293,87 +293,31 @@
  * sobra tenha a cor do mapa em vez de branco — aí ela deixa de ser uma faixa e
  * passa a ser continuação do mapa.
  */
+/*
+ * GEOMETRIA RESTAURADA ao estado anterior ao commit d63d426.
+ *
+ * A faixa clara no rodapé nasceu ali, quando troquei este bloco por um `body`
+ * fixo dimensionado por `inset: 0`. Seguiram-se oito tentativas de corrigir a
+ * CONSEQUÊNCIA — cor de fundo, `100lvh`, `#root` absoluto, transbordo do mapa,
+ * `overflow` dos ancestrais — e nenhuma resolveu, porque o problema nunca
+ * esteve em nenhuma delas: estava em ter trocado uma geometria que funcionava
+ * por outra.
+ *
+ * `height: 100%` encadeado aqui, e `h-screen` (100vh) na raiz do app. No iOS,
+ * `100vh` é o viewport GRANDE: a página TRANSBORDA em vez de faltar. Transbordo
+ * é recortado e invisível; falta vira faixa. Era assim antes, e não havia faixa.
+ *
+ * O QUE SE PERDE: a trava do arrasto da página, que foi o motivo de eu ter
+ * mexido aqui. Volta a ser possível arrastar a interface segurando fora do
+ * mapa. É um incômodo; a faixa cortando o mapa é um defeito — e o usuário foi
+ * explícito sobre qual dos dois prefere.
+ */
 html,
-body {
+body,
+#root {
   height: 100%;
   margin: 0;
   overscroll-behavior: none;
-  /*
-   * TRAVA A ROLAGEM SEM `position: fixed`.
-   *
-   * `overflow: hidden` no documento faz o mesmo serviço de impedir o arrasto
-   * da página, SEM introduzir um elemento que precise calcular a própria caixa
-   * contra a janela — que foi exatamente o que criou a faixa.
-   */
-  overflow: hidden;
-  background-color: var(--surface-map);
-}
-
-/*
- * O #root NÃO CALCULA A PRÓPRIA CAIXA — herda a do `body`.
- *
- * PROVA CONCRETA (teste de cores no aparelho): pintando `html` de magenta,
- * `body` de ciano e a raiz do app de verde, a faixa clara aparecia CIANO —
- * tanto em cima quanto embaixo. `#root` já usava `position: fixed; inset: 0`,
- * EXATAMENTE igual ao `body`. Se os dois resolvem a mesma regra contra a
- * mesma janela, não deveria sobrar fresta nenhuma entre eles — e sobrava, dos
- * dois lados. Ou seja: dois elementos `fixed` INDEPENDENTES, cada um
- * calculando `inset: 0` por conta própria contra a janela, não estavam
- * batendo exatamente iguais neste aparelho/versão de iOS em modo standalone.
- *
- * A CORREÇÃO: parar de deixar o `#root` calcular sozinho. Com `body` como
- * `position: fixed` (que também estabelece bloco de contenção para
- * descendentes posicionados), `#root` em `position: absolute; inset: 0` para
- * de resolver contra a janela e passa a copiar EXATAMENTE a caixa do `body` —
- * não há mais duas contas em paralelo que possam divergir.
- */
-#root {
-  /*
-   * DIMENSIONADO POR `100vh`, NÃO POR `inset: 0`. Esta é a correção da faixa,
-   * e o motivo está no comportamento do iOS:
-   *
-   *   - `100vh` é o viewport GRANDE: a altura da tela com a interface do
-   *     navegador recolhida. Se sobrar, o excesso transborda e é recortado —
-   *     invisível.
-   *   - `inset: 0` o iOS resolve contra o viewport CURTO em modo standalone.
-   *     Se faltar, o que falta VIRA FAIXA.
-   *
-   * A faixa nasceu no commit em que troquei um pelo outro para travar o
-   * arrasto da página. Foi trocar um transbordo inofensivo por uma falta
-   * visível. Entre errar para mais e errar para menos, aqui só um dos dois
-   * aparece na tela.
-   *
-   * `100lvh` (large viewport height) diz explicitamente "o viewport no seu
-   * tamanho máximo" e é honrado a partir do iOS 15.4; `100vh` fica como
-   * reserva para o que for anterior.
-   */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  height: 100lvh;
-  /*
-    SEM `overflow: hidden` AQUI — e este é o motivo de o transbordo do mapa não
-    ter surtido efeito nenhum.
-
-    O WebKit RECORTA elementos `position: fixed` que estejam dentro de um
-    ancestral com `overflow: hidden`. É comportamento antigo e conhecido do
-    motor, e contraria o que a especificação sugere (um elemento fixo é
-    posicionado contra o viewport e, em tese, escapa do recorte de ancestrais
-    não transformados).
-
-    O container do mapa é `fixed` com inset negativo justamente para pintar
-    além das bordas da página. Com `overflow: hidden` em três ancestrais
-    (`html`/`body`, `#root` e a raiz do app), ele era recortado de volta na
-    borda e o transbordo virava letra morta.
-
-    A rolagem do documento continua travada por `overflow: hidden` em
-    `html, body`, que é onde ela precisa estar — e lá não há nenhum `fixed`
-    para recortar, porque `#root` deixou de ser o elemento que transborda.
-  */
-  overscroll-behavior: none;
-  background-color: var(--surface-map);
 }
 
 
@@ -406,6 +350,7 @@ body {
  */
 body {
   font-family: 'Nunito', 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+  background-color: var(--surface);
   -webkit-tap-highlight-color: transparent;
 }
 

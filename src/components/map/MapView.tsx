@@ -1831,7 +1831,7 @@ export function MapView({
         64px cobre com folga o maior recorte de iPhone (59px de barra de status
         no Pro Max) e o indicador de gesto (34px).
       */}
-      <div ref={containerRef} className="fixed -inset-16" />
+      <div ref={containerRef} className="absolute inset-0" />
 
       {/*
         ATMOSFERA. A referência tem profundidade de campo e vinheta — as bordas
