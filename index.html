@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
     <!--
       Cor inicial da barra do sistema. Vale APENAS até o React montar: a partir
-      daí `useUserPreferences` a sincroniza com o tema escolhido. Branco aqui
-      porque é a cor do splash abaixo — deixá-la escura fazia a barra piscar de
-      preto para branco no instante da abertura.
+      daí `useUserPreferences` a sincroniza com o tema escolhido.
+
+      A COR DO MAPA, não branco. O branco veio da rodada da logo e foi a origem
+      da faixa clara no rodapé: em modo standalone o iOS pinta as áreas
+      reservadas (indicador de gesto) com o `background_color` do manifest, e o
+      splash/meta acompanhavam o mesmo branco. Agora os três valem a cor da
+      cartografia, então a área reservada some dentro do mapa.
     -->
-    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="theme-color" content="#E9EDF2" />
     <title>GPS Scooter</title>
 
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -54,7 +58,7 @@
     -->
     <div
       id="splash"
-      style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #FFFFFF"
+      style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #E9EDF2"
     >
       <img
         src="/icons/icon-192.png"
