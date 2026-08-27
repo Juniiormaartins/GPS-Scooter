@@ -1808,7 +1808,30 @@ export function MapView({
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="absolute inset-0" />
+      {/*
+        O MAPA TRANSBORDA A PÁGINA DE PROPÓSITO — `fixed` com insets negativos.
+
+        MEDIDO no aparelho, em modo standalone: `innerHeight`, `body`, `#root` e
+        o canvas do mapa dão TODOS 797px, e os insets de segurança dão 47px em
+        cima e 34px embaixo. 797 + 47 + 34 = 878, que é a tela física. Ou seja, a
+        página inteira está confinada a 797px e as faixas estão FORA dela, nas
+        duas pontas. Foi por isso que toda medição minha dizia "0px de sobra"
+        enquanto o usuário via faixa: eu media dentro da caixa confinada, e o
+        problema estava fora dela.
+
+        Nenhum ajuste de altura DENTRO da página alcança essa área. Um elemento
+        `fixed` com inset negativo, sim: ele é posicionado contra o viewport e
+        pintado além das bordas da página. O excesso é recortado e nunca
+        aparece — errar para mais aqui é invisível, errar para menos é a faixa.
+
+        SIMÉTRICO nos quatro lados para não deslocar o centro do mapa: a câmera
+        continua enquadrando o mesmo ponto, só há mais cartografia desenhada
+        atrás das bordas.
+
+        64px cobre com folga o maior recorte de iPhone (59px de barra de status
+        no Pro Max) e o indicador de gesto (34px).
+      */}
+      <div ref={containerRef} className="fixed -inset-16" />
 
       {/*
         ATMOSFERA. A referência tem profundidade de campo e vinheta — as bordas
