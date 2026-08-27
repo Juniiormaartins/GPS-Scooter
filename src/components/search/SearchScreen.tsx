@@ -158,13 +158,17 @@ export function SearchScreen({
           <button
             type="button"
             onClick={onUseCurrentLocation}
-            className="mb-3 flex w-full items-center gap-3 rounded-xl border border-hairline/[.08] bg-surface-card px-3.5 py-3 text-left transition-all duration-base active:scale-[.98]"
+            /*
+              CENTRALIZADO, e não alinhado à esquerda. Sem o ícone que abria a
+              linha, o texto encostado na borda esquerda deixava um vazio grande
+              à direita — a linha parecia inacabada. Centralizar devolve o
+              equilíbrio sem reintroduzir o ícone.
+            */
+            className="mb-3 flex w-full flex-col items-center rounded-xl border border-hairline/[.08] bg-surface-card px-3.5 py-3.5 transition-all duration-base active:scale-[.98]"
           >
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-extrabold text-content-primary">Usar minha localização</span>
-              <span className="mt-0.5 block text-[12.5px] font-semibold text-content-tertiary">
-                Volta a partir de onde você está
-              </span>
+            <span className="text-[16px] font-extrabold text-brand-500">Usar minha localização</span>
+            <span className="mt-0.5 text-[13px] font-semibold text-content-tertiary">
+              Volta a partir de onde você está
             </span>
           </button>
         )}

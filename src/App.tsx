@@ -14,6 +14,7 @@ import { SuitabilityLegend } from '@/components/map/SuitabilityLegend'
 import { ExploreSheet } from '@/components/explore/ExploreSheet'
 import { BatteryCheckIn } from '@/components/vehicle/BatteryCheckIn'
 import { useBatteryCheckIn } from '@/hooks/useBatteryCheckIn'
+import { useRouteSimulation } from '@/hooks/useRouteSimulation'
 import { exploreRadiusKm } from '@/services/vehicle/autonomy'
 import { frequentPlaces } from '@/services/storage/travelPatterns'
 import { listActivity } from '@/services/storage/activityHistory'
@@ -772,7 +773,25 @@ export default function App() {
       .map((segment) => ({ path: segment.path, severity: 'caution' as const }))
   })()
 
-  const navigationSession = useNavigationSession(activeScoredRoute?.route ?? null, isNavigating)
+  /**
+   * SIMULAÇÃO quando a partida foi definida à mão.
+   *
+   * Sem isto, iniciar a navegação com origem manual comparava a posição REAL do
+   * aparelho com uma rota que começa longe dali: "saiu da rota" no primeiro
+   * segundo, recálculo, e o trajeto que se queria examinar ia embora. Se a
+   * origem é hipotética, o percurso a partir dela também precisa ser.
+   */
+  const simulatedSample = useRouteSimulation({
+    route: activeScoredRoute?.route ?? null,
+    active: isNavigating && isManualOrigin,
+    speedKmh: preferences.referenceSpeedKmh,
+  })
+
+  const navigationSession = useNavigationSession(
+    activeScoredRoute?.route ?? null,
+    isNavigating,
+    simulatedSample,
+  )
   useVoiceGuidance(navigationSession.progress, voiceEnabled, isNavigating, activeScoredRoute?.route ?? null)
 
   // Desvio de rota sustentado (não ruído pontual do GPS) → recalcula a partir
@@ -1233,7 +1252,20 @@ export default function App() {
           }}
           onFindAlternative={destinationPoint ? handleFindAlternative : undefined}
           isSearchingAlternative={isSearchingAlternative}
-          notice={navigationNotice}
+          /*
+            A SIMULAÇÃO SE ANUNCIA, e tem precedência sobre outros avisos.
+            
+            Navegar com posição sintética é indistinguível de navegar de
+            verdade — mesmas manobras, mesma voz, mesmos alertas de trecho. É
+            justamente por ser convincente que precisa estar escrito: alguém que
+            esqueceu que trocou a partida não pode achar que o app perdeu o
+            rumo, nem confiar naquilo como leitura da posição real.
+          */
+          notice={
+            isManualOrigin
+              ? 'Simulação a partir da partida que você definiu — não é a sua posição real.'
+              : navigationNotice
+          }
           /*
             A PÍLULA SOME ENQUANTO O AVISO ESTÁ NA TELA — e só para o MESMO
             trecho.

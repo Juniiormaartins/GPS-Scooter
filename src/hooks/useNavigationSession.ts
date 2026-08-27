@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useGeolocation } from '@/hooks/useGeolocation'
+import { useGeolocation, type GeolocationSample } from '@/hooks/useGeolocation'
 import { computeNavigationProgress, type NavigationProgress } from '@/services/navigation/progress'
 import { INITIAL_SPEED_STATE, speedKmhForDisplay, trackSpeed } from '@/services/navigation/speedTracker'
 import { getUserPreferences } from '@/config/userPreferences'
@@ -74,8 +74,21 @@ function smoothHeading(previous: number | null, next: number): number {
  * quando o usuário se desviou da rota de forma sustentada — App.tsx decide o
  * que fazer com esse sinal (hoje: recalcular a rota a partir da posição atual).
  */
-export function useNavigationSession(route: CandidateRoute | null, active: boolean) {
-  const { sample, isLocating, error, permission, startWatching, stopWatching } = useGeolocation()
+export function useNavigationSession(
+  route: CandidateRoute | null,
+  active: boolean,
+  /**
+   * Posição SIMULADA que substitui a do GPS enquanto existir.
+   *
+   * Usada quando o ponto de partida foi definido à mão (ver useRouteSimulation):
+   * ali a posição real do aparelho não tem relação com a rota, e compará-las
+   * produziria um "saiu da rota" imediato sobre o trajeto que se queria
+   * examinar. Null = navegação normal, pelo GPS.
+   */
+  simulatedSample?: GeolocationSample | null,
+) {
+  const { sample: gpsSample, isLocating, error, permission, startWatching, stopWatching } = useGeolocation()
+  const sample = simulatedSample ?? gpsSample
   const [progress, setProgress] = useState<NavigationProgress | null>(null)
   const [routeDeviated, setRouteDeviated] = useState(false)
   const offRouteStreakRef = useRef(0)
