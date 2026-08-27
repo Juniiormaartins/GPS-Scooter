@@ -353,7 +353,25 @@ body {
   width: 100%;
   height: 100vh;
   height: 100lvh;
-  overflow: hidden;
+  /*
+    SEM `overflow: hidden` AQUI — e este é o motivo de o transbordo do mapa não
+    ter surtido efeito nenhum.
+
+    O WebKit RECORTA elementos `position: fixed` que estejam dentro de um
+    ancestral com `overflow: hidden`. É comportamento antigo e conhecido do
+    motor, e contraria o que a especificação sugere (um elemento fixo é
+    posicionado contra o viewport e, em tese, escapa do recorte de ancestrais
+    não transformados).
+
+    O container do mapa é `fixed` com inset negativo justamente para pintar
+    além das bordas da página. Com `overflow: hidden` em três ancestrais
+    (`html`/`body`, `#root` e a raiz do app), ele era recortado de volta na
+    borda e o transbordo virava letra morta.
+
+    A rolagem do documento continua travada por `overflow: hidden` em
+    `html, body`, que é onde ela precisa estar — e lá não há nenhum `fixed`
+    para recortar, porque `#root` deixou de ser o elemento que transborda.
+  */
   overscroll-behavior: none;
   background-color: var(--surface-map);
 }
