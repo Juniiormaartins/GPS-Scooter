@@ -109,6 +109,10 @@ export default async function handler(request: RequestLike, response: ResponseLi
     contentType: string | null
   }
 
+  // Rastro de diagnóstico: quem respondeu o quê, e em quanto tempo. Vai num
+  // cabeçalho — sem ele, uma falha do reserva é indistinguível de uma do principal.
+  const rastro: string[] = []
+  const inicio = Date.now()
   const controladores: AbortController[] = []
   const abortaTodos = () => controladores.forEach((c) => c.abort())
   const timer = setTimeout(abortaTodos, UPSTREAM_TIMEOUT_MS)
@@ -116,6 +120,7 @@ export default async function handler(request: RequestLike, response: ResponseLi
   async function consulta(url: string): Promise<Resposta> {
     const controller = new AbortController()
     controladores.push(controller)
+    const host = new URL(url).host
     const upstream = await fetch(url, {
       method: 'POST',
       headers: {
@@ -137,7 +142,11 @@ export default async function handler(request: RequestLike, response: ResponseLi
       },
       body: query,
       signal: controller.signal,
+    }).catch((erro: unknown) => {
+      rastro.push(`${host}:erro(${erro instanceof Error ? erro.name : 'desconhecido'}):${Date.now() - inicio}ms`)
+      throw erro
     })
+    rastro.push(`${host}:${upstream.status}:${Date.now() - inicio}ms`)
     return { status: upstream.status, text: await upstream.text(), contentType: upstream.headers.get('content-type') }
   }
 
@@ -207,6 +216,7 @@ export default async function handler(request: RequestLike, response: ResponseLi
     if (!vencedora) {
       // Ninguém respondeu: 504 e não 500 — a origem não respondeu a tempo, e é
       // isso que o cliente precisa distinguir de uma consulta malformada.
+      response.setHeader('X-Overpass-Trace', rastro.join(' | '))
       response.status(504)
       response.json({ error: 'Overpass não respondeu a tempo.' })
       return
@@ -219,6 +229,7 @@ export default async function handler(request: RequestLike, response: ResponseLi
      * esconderia justamente o que o cliente precisa saber para esperar e
      * tentar de novo. Ver o tratamento em segmentEnrichment.ts.
      */
+    response.setHeader('X-Overpass-Trace', rastro.join(' | '))
     response.status(vencedora.status)
     response.setHeader('Content-Type', vencedora.contentType ?? 'application/json')
     // A malha viária de uma área muda em escala de dias; um cache de borda
