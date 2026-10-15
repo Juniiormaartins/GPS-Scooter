@@ -954,6 +954,13 @@ export default function App() {
     que houve e um botão para tentar outra vez. Cada tentativa é barata quando o
     cache do aparelho já tem a área (ver waysStore).
   */
+  // Refs lidas pelo efeito abaixo SEM virarem dependência: se `activeRouteId` ou
+  // `isNavigating` estivessem no array, mudar de rota reiniciaria a classificação.
+  const activeRouteIdRef = useRef<string | null>(null)
+  activeRouteIdRef.current = activeRouteId
+  const isNavigatingRef = useRef(false)
+  isNavigatingRef.current = isNavigating
+
   const [classification, setClassification] = useState<'ready' | 'loading' | 'failed'>('ready')
   const [classifyNonce, setClassifyNonce] = useState(0)
 
@@ -977,6 +984,18 @@ export default function App() {
         const upgraded = await enrichRouteResult(routeResult)
         if (cancelled) return
         if (upgraded) {
+          /*
+            A classificação REORDENA: a rota que parecia a melhor sem dados pode
+            ser a pior depois deles (visto: a selecionada virou "Pouco
+            recomendada" enquanto outra era a recomendada de verdade). Se a
+            pessoa ainda está na rota padrão — não escolheu outra à mão —, ela
+            acompanha a nova recomendada. Escolha manual fica como está, e em
+            navegação NADA troca: mudar a rota debaixo de quem dirige é pior que
+            qualquer classificação.
+          */
+          const naPadrao =
+            activeRouteIdRef.current == null || activeRouteIdRef.current === routeResult.selected.route.id
+          if (naPadrao && !isNavigatingRef.current) setActiveRouteId(upgraded.selected.route.id)
           setRouteResult(upgraded)
           return
         }

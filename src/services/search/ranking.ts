@@ -67,6 +67,11 @@ export function textRelevance(label: string, query: string): number {
   // Começo do nome vale sempre: quem digita "ban" a caminho de "Banco" está no meio da palavra.
   if (nome.startsWith(busca)) return 80
   if (contemPalavra(nome, busca)) return 60
+  // O NOME INTEIRO está no que foi digitado: "shopping flamboyant goiania" contém
+  // "shopping flamboyant". Quem escreve nome + cidade (o normal) buscou ESTE
+  // lugar — antes ele perdia para "Flat 6 - Goiania prox Shopping Flamboyant",
+  // que "casava" mais palavras só por ser um texto mais comprido.
+  if (nome.length >= 5 && busca.includes(nome)) return 70
 
   const palavras = busca
     .replace(/[,.]/g, ' ')
