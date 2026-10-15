@@ -268,16 +268,30 @@
   cobre o iOS antigo e é ligado por main.tsx no atributo `data-standalone`. As
   duas condições existem porque nenhuma sozinha pega todos os aparelhos.
 */
-@media (display-mode: standalone) {
-  :root {
-    --safe-top: max(env(safe-area-inset-top, 0px), 54px);
-    --safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
-  }
-}
+/*
+  O PISO É SÓ DO iOS.
 
-:root[data-standalone='true'] {
+  Antes valia para QUALQUER app instalado (`display-mode: standalone`), e o
+  comentário acima dizia "cobre Android e o iOS moderno" — como se isso fosse
+  uma qualidade. Era o defeito. O piso existe por um comportamento ESPECÍFICO do
+  iOS: com `black-translucent` a página passa a ocupar a área da barra de
+  status e o sistema para de reportar o recuo.
+
+  No Android a página começa ABAIXO da barra de status (que o Chrome pinta
+  sozinho) e acaba ACIMA da barra de gestos. Não há nada a compensar, e o piso
+  somava 54px de vazio no topo e 34px na base: o espaço em branco medido num
+  aparelho real, de ~110px entre a barra do sistema e o cabeçalho.
+
+  `data-platform` é ligado por main.tsx.
+*/
+:root[data-standalone='true'][data-platform='ios'] {
   --safe-top: max(env(safe-area-inset-top, 0px), 54px);
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
+}
+
+/* Fora do iOS: o inset do aparelho, com um respiro mínimo na base. */
+:root:not([data-platform='ios']) {
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 0.375rem);
 }
 
 :root {

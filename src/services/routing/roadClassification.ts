@@ -1,3 +1,5 @@
+import { inheritsRegime, REGIME_REACH_METERS, roadKey, type RoadRegime } from '@/services/routing/roadKey'
+import { haversineDistanceMeters } from '@/utils/geo'
 import { mobilityProfile, wayTiersFor, type SuitabilityReasonCode } from '@/config/mobilityProfiles'
 import type { VehicleModelId } from '@/config/userPreferences'
 import type { Eligibility, RouteSegment, SuitabilityTier, WayKind } from '@/types/routing'
@@ -40,6 +42,11 @@ const ARTERIAL_NAME_PATTERN = /\bavenida\b|\bav\.\b/i
 export interface VehicleClassificationContext {
   modelId: VehicleModelId
   referenceSpeedKmh: number
+  /**
+   * Regime de cada via (por nome), revelado por TODAS as candidatas da viagem —
+   * ver `roadRegimes.ts`. Ausente = cada trecho vale só pela sua própria tag.
+   */
+  regimes?: ReadonlyMap<string, RoadRegime>
 }
 
 /**
@@ -88,7 +95,33 @@ export function classifySegment(segment: RouteSegment, vehicle?: VehicleClassifi
 
 export function assessSegment(segment: RouteSegment, vehicle?: VehicleClassificationContext): SegmentAssessment {
   const base = assessStructurally(segment, vehicle)
-  return vehicle ? applyVehicleAdjustment(base, segment, vehicle) : base
+  const avaliado = vehicle ? applyVehicleAdjustment(base, segment, vehicle) : base
+  return applyRoadRegime(avaliado, segment, vehicle)
+}
+
+/**
+ * A via inteira vale o que ela é na maior parte (ver `roadRegimes.ts`).
+ *
+ * Só PIORA: um trecho já inadequado ou proibido fica como está, e um trecho de
+ * ciclovia/calçada nunca herda regime de via motorizada. O efeito é que a mesma
+ * avenida deixa de ser "adequada" numa rota e "atenção" noutra por causa de um
+ * pedaço de 150 m que o OSM etiquetou diferente.
+ */
+function applyRoadRegime(
+  avaliado: SegmentAssessment,
+  segment: RouteSegment,
+  vehicle?: VehicleClassificationContext,
+): SegmentAssessment {
+  if (!vehicle?.regimes || avaliado.tier === 'unsuitable' || avaliado.tier === 'prohibited') return avaliado
+  if (!inheritsRegime(segment)) return avaliado
+  const chave = roadKey(segment)
+  const regime = chave ? vehicle.regimes.get(chave) : undefined
+  if (!regime) return avaliado
+  // Só perto de onde a via foi observada inadequada (ver `RoadRegime.anchors`).
+  const meio = segment.path[Math.floor(segment.path.length / 2)] ?? segment.path[0]
+  if (!meio) return avaliado
+  const perto = regime.anchors.some((ancora) => haversineDistanceMeters(ancora, meio) <= REGIME_REACH_METERS)
+  return perto ? { tier: regime.tier, reason: regime.reason } : avaliado
 }
 
 function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificationContext): SegmentAssessment {

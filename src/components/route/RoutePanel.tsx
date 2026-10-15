@@ -21,15 +21,48 @@ const ELIGIBILITY_TONE: Record<Eligibility, 'go' | 'warn' | 'danger'> = {
   'not-allowed': 'danger',
 }
 
-/** Resumo mínimo com o Bottom Sheet recolhido — só a rota ativa. */
-export function RouteSummary({ scoredRoute }: { scoredRoute: ScoredRoute }) {
+/**
+ * Resumo da folha RECOLHIDA — para quem a baixou para ver o mapa.
+ *
+ * Mostra só o que decide: o tempo, a distância, a hora de chegada e o botão de
+ * começar. Antes eram o tempo e a frase "arraste para ver opções", e o botão
+ * principal do app ficava escondido atrás de um gesto — quem recolhia a folha
+ * para olhar o trajeto tinha de reabri-la para poder partir.
+ *
+ * Tocar no resumo reabre a folha; tocar em "Iniciar" começa a navegação.
+ */
+export function RouteSummary({
+  scoredRoute,
+  onExpand,
+  onStart,
+}: {
+  scoredRoute: ScoredRoute
+  onExpand?: () => void
+  onStart?: () => void
+}) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-baseline gap-2.5">
-        <span className="text-metric text-content-primary">{formatEta(scoredRoute.etaMinutes)}</span>
-        <span className="text-body text-content-secondary">{formatDistance(scoredRoute.route.totalDistanceMeters)}</span>
-      </div>
-      <span className="text-caption text-content-tertiary">arraste para ver opções</span>
+    <div className="flex items-center gap-3">
+      <button type="button" onClick={onExpand} className="min-w-0 flex-1 text-left" aria-label="Ver as opções de rota">
+        <span className="flex items-baseline gap-2">
+          <span className="text-metric text-content-primary">{formatEta(scoredRoute.etaMinutes)}</span>
+          <span className="text-body text-content-secondary">{formatDistance(scoredRoute.route.totalDistanceMeters)}</span>
+        </span>
+        <span className="block truncate text-[12.5px] font-semibold text-content-tertiary">
+          chegada {arrivalTime(scoredRoute.etaMinutes)} · opções
+        </span>
+      </button>
+      {onStart && (
+        <button
+          type="button"
+          onClick={onStart}
+          className="btn-sheen flex h-12 shrink-0 items-center gap-2 rounded-pill bg-success-500 px-5 text-[15px] font-extrabold text-content-on-accent shadow-go-btn transition-all duration-fast active:scale-[.97]"
+        >
+          <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor">
+            <path d="M3 11l18-8-8 18-2-8-8-2z" />
+          </svg>
+          Iniciar
+        </button>
+      )}
     </div>
   )
 }

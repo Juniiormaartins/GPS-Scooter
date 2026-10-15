@@ -1,14 +1,25 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 
 export type SheetSnapPoint = 'collapsed' | 'half' | 'expanded'
 
-const SNAP_HEIGHT_VH: Record<SheetSnapPoint, number> = {
-  collapsed: 22,
+/**
+ * Alturas dos pontos de parada, em % da tela.
+ *
+ * O ponto RECOLHIDO não está aqui de propósito: ele não tem altura fixa, tem a
+ * altura do SEU CONTEÚDO. Eram 22% da tela, mas o conteúdo (tempo e distância)
+ * ocupava ~70px — o resto era um vazio branco de quase 100px abaixo das
+ * informações, justamente no estado em que a pessoa recolheu a folha para VER
+ * O MAPA. Ver `COLLAPSED_HEIGHT`.
+ */
+const SNAP_HEIGHT_VH: Record<Exclude<SheetSnapPoint, 'collapsed'>, number> = {
   half: 54,
   expanded: 86,
 }
 
-const MIN_HEIGHT_VH = 14
+/** Alça (28px) + linha de resumo (~64px) + respiro; a base respeita a área segura. */
+const COLLAPSED_HEIGHT = 'calc(5.75rem + max(0.5rem, var(--safe-bottom)))'
+
+const MIN_HEIGHT_VH = 8
 const MAX_HEIGHT_VH = 92
 
 interface BottomSheetProps {
@@ -28,18 +39,27 @@ interface BottomSheetProps {
  */
 export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: BottomSheetProps) {
   const [isDragging, setIsDragging] = useState(false)
-  const [liveHeightVh, setLiveHeightVh] = useState(SNAP_HEIGHT_VH[snap])
+  const [liveHeightVh, setLiveHeightVh] = useState(54)
+  const sheetRef = useRef<HTMLDivElement>(null)
   const dragStartYRef = useRef<number | null>(null)
-  const startHeightVhRef = useRef(SNAP_HEIGHT_VH[snap])
+  const startHeightVhRef = useRef(54)
+  // Altura REAL do estado recolhido, medida no início do arraste: como depende
+  // do conteúdo e da área segura, não existe como constante.
+  const collapsedVhRef = useRef(12)
 
-  useEffect(() => {
-    if (!isDragging) setLiveHeightVh(SNAP_HEIGHT_VH[snap])
-  }, [snap, isDragging])
+  function currentHeightVh(): number {
+    const altura = sheetRef.current?.offsetHeight ?? 0
+    return (altura / window.innerHeight) * 100
+  }
 
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (snap === 'collapsed') collapsedVhRef.current = currentHeightVh()
     setIsDragging(true)
     dragStartYRef.current = e.clientY
-    startHeightVhRef.current = SNAP_HEIGHT_VH[snap]
+    // Parte da altura que a folha TEM agora, não de uma tabela: é o que faz o
+    // arraste começar exatamente sob o dedo, em qualquer ponto de parada.
+    startHeightVhRef.current = currentHeightVh()
+    setLiveHeightVh(startHeightVhRef.current)
     e.currentTarget.setPointerCapture(e.pointerId)
   }
 
@@ -55,9 +75,14 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
     setIsDragging(false)
     dragStartYRef.current = null
 
+    const pontos: [SheetSnapPoint, number][] = [
+      ['collapsed', collapsedVhRef.current],
+      ['half', SNAP_HEIGHT_VH.half],
+      ['expanded', SNAP_HEIGHT_VH.expanded],
+    ]
     let closest: SheetSnapPoint = 'collapsed'
     let closestDiff = Number.POSITIVE_INFINITY
-    for (const [point, vh] of Object.entries(SNAP_HEIGHT_VH) as [SheetSnapPoint, number][]) {
+    for (const [point, vh] of pontos) {
       const diff = Math.abs(vh - liveHeightVh)
       if (diff < closestDiff) {
         closestDiff = diff
@@ -67,12 +92,15 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
     onSnapChange(closest)
   }
 
+  const height = isDragging ? `${liveHeightVh}vh` : snap === 'collapsed' ? COLLAPSED_HEIGHT : `${SNAP_HEIGHT_VH[snap]}vh`
+
   return (
     <div
+      ref={sheetRef}
       className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-hairline/15 bg-surface-card shadow-sheet ${
         isDragging ? '' : 'transition-[height] duration-slow ease-ease-out-soft'
       }`}
-      style={{ height: `${liveHeightVh}vh` }}
+      style={{ height }}
     >
       <div
         className="flex shrink-0 touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
@@ -86,7 +114,7 @@ export function BottomSheet({ snap, onSnapChange, collapsedContent, children }: 
       </div>
 
       {snap === 'collapsed' ? (
-        <div className="px-gutter pb-[max(1.5rem,var(--safe-bottom))]">{collapsedContent}</div>
+        <div className="px-gutter pb-[max(0.5rem,var(--safe-bottom))]">{collapsedContent}</div>
       ) : (
         // `min-h-0` é necessário para que o filho com `flex-1 overflow-y-auto`
         // (a lista de rotas) role de verdade em vez de esticar o container.

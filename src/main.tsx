@@ -21,6 +21,15 @@ const abertoComoApp =
   window.matchMedia('(display-mode: standalone)').matches
 if (abertoComoApp) document.documentElement.dataset.standalone = 'true'
 
+/*
+  QUAL SISTEMA. Os recuos de topo e base têm uma regra do iOS (piso para o
+  `env(safe-area-inset-*)` que ele zera) que no Android só desperdiça espaço —
+  ver index.css. iPadOS se apresenta como Mac: o toque o denuncia.
+*/
+const ehIOS =
+  /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+document.documentElement.dataset.platform = ehIOS ? 'ios' : 'other'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

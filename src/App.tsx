@@ -723,6 +723,20 @@ export default function App() {
   }, [routeResult, autonomy])
   const activeScoredRoute = allRoutes.find((entry) => entry.route.id === activeRouteId) ?? routeResult?.selected ?? null
 
+  /**
+   * Começa a navegação. Existe como função, e não inline no painel, porque agora
+   * há DOIS botões que a disparam: o da folha aberta e o da folha recolhida.
+   */
+  function startNavigation() {
+    if (!activeScoredRoute) return
+    // Destrava o áudio no iOS aproveitando este toque — as instruções
+    // seguintes vêm do GPS, que não conta como gesto do usuário.
+    if (voiceEnabled) primeFromUserGesture()
+    setIsFollowingUser(true)
+    tripStart.current = { at: Date.now(), routeId: activeScoredRoute.route.id }
+    setIsNavigating(true)
+  }
+
   /*
     HANDLE DE DESENVOLVIMENTO da rota ativa. Mesma justificativa do `__gpsMap`
     em MapView: inspecionar as tags do OSM que chegaram a cada trecho é
@@ -1492,7 +1506,13 @@ export default function App() {
         <BottomSheet
           snap={sheetSnap}
           onSnapChange={setSheetSnap}
-          collapsedContent={<RouteSummary scoredRoute={activeScoredRoute} />}
+          collapsedContent={
+            <RouteSummary
+              scoredRoute={activeScoredRoute}
+              onExpand={() => setSheetSnap('half')}
+              onStart={startNavigation}
+            />
+          }
         >
           <RoutePanel
             routes={allRoutes}
@@ -1500,14 +1520,7 @@ export default function App() {
             onSelectRoute={setActiveRouteId}
             classification={classification}
             onRetryClassification={() => setClassifyNonce((n) => n + 1)}
-            onStartNavigation={() => {
-              // Destrava o áudio no iOS aproveitando este toque — as instruções
-              // seguintes vêm do GPS, que não conta como gesto do usuário.
-              if (voiceEnabled) primeFromUserGesture()
-              setIsFollowingUser(true)
-              tripStart.current = { at: Date.now(), routeId: activeScoredRoute.route.id }
-              setIsNavigating(true)
-            }}
+            onStartNavigation={startNavigation}
             autonomyByRouteId={autonomyByRouteId}
             onDismiss={() => {
               setRouteResult(null)

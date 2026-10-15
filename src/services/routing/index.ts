@@ -1,6 +1,7 @@
 import { calculateEtaMinutes, calculateRouteEtaMinutes } from '@/services/routing/eta'
 import { getRoutingProvider } from '@/services/routing/provider'
 import { enrichRouteSegments, prefetchWaysForRoutes } from '@/services/routing/segmentEnrichment'
+import { computeRoadRegimes } from '@/services/routing/roadRegimes'
 import { evaluateRoute } from '@/services/routing/ruleEngine'
 import { describeAvoidanceHit, evaluateAvoidances } from '@/services/routing/avoidances'
 import { fetchRouteElevationProfile } from '@/services/routing/elevation'
@@ -13,7 +14,7 @@ import {
 } from '@/config/userPreferences'
 import { mobilityProfile } from '@/config/mobilityProfiles'
 import { formatDistance, formatEta } from '@/utils/geo'
-import type { RouteRequest, RouteResult, ScoredRoute } from '@/types/routing'
+import type { RouteRequest, RouteResult, RouteSegment, ScoredRoute } from '@/types/routing'
 
 /**
  * Orquestra o pipeline completo de roteamento:
@@ -310,11 +311,13 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
     referenceSpeedKmh: preferences.referenceSpeedKmh,
   }
 
-  const upgrade = async (scored: ScoredRoute): Promise<ScoredRoute> => {
+  const upgrade = (
+    scored: ScoredRoute,
+    enrichedSegments: RouteSegment[] | null,
+    vehicle: VehicleClassificationContext,
+  ): ScoredRoute => {
     // Já classificado (rota reaproveitada do preview): não refaz.
-    if (scored.severity.isReliable) return scored
-
-    const enrichedSegments = await enrichRouteSegments(scored.route)
+    if (!enrichedSegments) return scored
     if (!enrichedSegments.some((segment) => segment.osmTags != null)) return scored
 
     const enrichedRoute = { ...scored.route, segments: enrichedSegments }
@@ -357,10 +360,28 @@ export async function enrichRouteResult(result: RouteResult): Promise<RouteResul
    */
   await prefetchWaysForRoutes([result.selected.route, ...result.alternatives.map((entry) => entry.route)])
 
-  const [selected, ...alternatives] = await Promise.all([
-    upgrade(result.selected),
-    ...result.alternatives.map(upgrade),
-  ])
+  /*
+    DUAS FASES, e a ordem importa.
+
+    1. enriquece os segmentos de TODAS as candidatas;
+    2. só então decide o regime de cada via, olhando o que todas elas revelam, e
+       classifica cada uma com o MESMO critério.
+
+    Classificar uma de cada vez deixava a mesma avenida "adequada" numa rota e
+    "atenção" noutra, conforme o pedaço de OSM em que cada uma caía (ver
+    `roadRegimes.ts`). Os regimes só existem com a visão do conjunto.
+  */
+  const todas = [result.selected, ...result.alternatives]
+  const enriquecidas = await Promise.all(
+    todas.map((scored) => (scored.severity.isReliable ? Promise.resolve(null) : enrichRouteSegments(scored.route))),
+  )
+  const regimes = computeRoadRegimes(
+    todas.map((scored, i) => enriquecidas[i] ?? scored.route.segments),
+    vehicle,
+  )
+  const vehicleComRegimes: VehicleClassificationContext = { ...vehicle, regimes }
+
+  const [selected, ...alternatives] = todas.map((scored, i) => upgrade(scored, enriquecidas[i], vehicleComRegimes))
 
   const changed = selected !== result.selected || alternatives.some((entry, i) => entry !== result.alternatives[i])
   if (!changed) return null
