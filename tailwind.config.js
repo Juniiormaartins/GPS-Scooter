@@ -13,7 +13,7 @@
  * usados onde não dá para aplicar classe Tailwind (paint do MapLibre).
  */
 /** @type {import('tailwindcss').Config} */
-export default {
+const config = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
@@ -138,18 +138,30 @@ export default {
         pill: '999px',
       },
       boxShadow: {
-        // Sombras do tema claro (handoff §4.5): sombra difusa azulada, nunca preta.
-        float: '0 8px 22px rgba(15,23,41,.12)',
-        field: '0 10px 26px rgba(15,23,41,.14)',
-        sheet: '0 -12px 32px rgba(15,23,41,.16)',
-        'sheet-over-scrim': '0 -12px 32px rgba(15,23,41,.24)',
-        tile: '0 2px 6px rgba(15,23,41,.08)',
+        /*
+          ELEVAÇÃO EM CAMADAS. Uma sombra única e larga lê como "recorte
+          flutuando"; três camadas — contato, corpo e sombra longa — leem como
+          objeto com peso, que é o que separa um app polido de um protótipo. A
+          última camada tem raio negativo para a sombra não vazar para os lados.
+
+          `--edge-highlight` é o filete de luz na borda de cima (inset de 1px):
+          branco forte no claro, quase imperceptível no escuro. É ele que dá o
+          acabamento de "vidro" às superfícies flutuantes. Vem de variável para
+          seguir o tema.
+
+          Continuam azuladas, nunca pretas (handoff §4.5).
+        */
+        float: '0 1px 2px rgba(15,23,41,.05), 0 6px 14px rgba(15,23,41,.07), 0 16px 32px -6px rgba(15,23,41,.12), inset 0 1px 0 var(--edge-highlight)',
+        field: '0 1px 2px rgba(15,23,41,.05), 0 8px 18px rgba(15,23,41,.09), 0 22px 40px -8px rgba(15,23,41,.16), inset 0 1px 0 var(--edge-highlight)',
+        sheet: '0 -1px 2px rgba(15,23,41,.04), 0 -12px 32px rgba(15,23,41,.16), inset 0 1px 0 var(--edge-highlight)',
+        'sheet-over-scrim': '0 -12px 32px rgba(15,23,41,.24), inset 0 1px 0 var(--edge-highlight)',
+        tile: '0 1px 2px rgba(15,23,41,.06), 0 3px 8px rgba(15,23,41,.06)',
         // Chrome de navegação: escuro sobre escuro, precisa de mais peso.
-        'nav-banner': '0 14px 34px rgba(15,23,41,.34)',
-        'nav-panel': '0 -14px 34px rgba(15,23,41,.34)',
-        // Botões de ação carregam a sombra na própria cor.
-        primary: '0 10px 24px rgba(14,134,198,.35)',
-        'go-btn': '0 10px 22px rgba(32,180,87,.30)',
+        'nav-banner': '0 2px 4px rgba(5,8,15,.18), 0 14px 34px rgba(15,23,41,.34), inset 0 1px 0 rgba(255,255,255,.06)',
+        'nav-panel': '0 -14px 34px rgba(15,23,41,.34), inset 0 1px 0 rgba(255,255,255,.06)',
+        // Botões de ação carregam a sombra na própria cor, com o filete de luz em cima.
+        primary: '0 1px 2px rgba(14,134,198,.35), 0 8px 18px rgba(14,134,198,.30), inset 0 1px 0 rgba(255,255,255,.28)',
+        'go-btn': '0 1px 2px rgba(32,180,87,.35), 0 8px 18px rgba(32,180,87,.28), inset 0 1px 0 rgba(255,255,255,.28)',
         // Glow só em geometria viva de navegação (linha da rota, marcador).
         route: '0 0 16px rgba(53,183,247,.45)',
         go: '0 0 20px rgba(47,209,106,.35)',
@@ -172,3 +184,42 @@ export default {
   },
   plugins: [],
 }
+
+/**
+ * OPACIDADE EM TOKEN DE COR (`bg-brand-500/[.16]`, `border-danger-500/50`).
+ *
+ * O Tailwind só sabe aplicar o modificador de opacidade a uma cor que ele
+ * consegue DECOMPOR em canais. `var(--brand-500)` é um hex dentro de uma
+ * variável: opaco para ele, então a classe com `/NN` simplesmente NÃO É
+ * GERADA — sem erro, sem aviso, o elemento fica sem a cor. Foi assim que
+ * catorze classes do app (selo verde da chegada, tiles de aviso, ponto neutro
+ * da nota, borda do alerta de trecho) passaram meses transparentes.
+ *
+ * Em vez de converter cada token para trio RGB (como `hairline`, que já é),
+ * qualquer valor `var(--x)` aqui ganha uma função: sem modificador devolve a
+ * variável intacta — a saída para o uso comum é idêntica à de antes — e com
+ * modificador devolve `color-mix` com a mesma variável. Vale para todo token
+ * presente e futuro, e continua seguindo o tema porque a variável é a mesma.
+ */
+function withOpacity(value) {
+  return ({ opacityValue }) =>
+    // Sem modificador o Tailwind passa `undefined` OU a variável interna
+    // `var(--tw-*-opacity)`. Nos dois casos a saída tem de ser a variável pura:
+    // se o uso COMUM virasse `color-mix`, um navegador sem suporte a ele
+    // perderia todas as cores do app, não só as translúcidas.
+    opacityValue === undefined || opacityValue === '1' || String(opacityValue).startsWith('var(--tw-')
+      ? value
+      : `color-mix(in srgb, ${value} calc(${opacityValue} * 100%), transparent)`
+}
+
+function opacityAware(node) {
+  if (typeof node === 'string') return node.startsWith('var(--') ? withOpacity(node) : node
+  if (node && typeof node === 'object') {
+    return Object.fromEntries(Object.entries(node).map(([key, child]) => [key, opacityAware(child)]))
+  }
+  return node
+}
+
+config.theme.extend.colors = opacityAware(config.theme.extend.colors)
+
+export default config

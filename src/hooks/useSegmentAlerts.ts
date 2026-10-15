@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { nextSegmentAlert, type SegmentAlert } from '@/services/navigation/segmentAlerts'
+import { nextSegmentAlert, type BannerAlert } from '@/services/navigation/segmentAlerts'
+import { nextRidingTip } from '@/services/navigation/ridingTips'
+import { fetchRainOutlook, type RainOutlook } from '@/services/weather/rain'
 import { speak } from '@/services/navigation/voiceGuidance'
 import type { NavigationProgress } from '@/services/navigation/progress'
 import type { ScoredRoute } from '@/types/routing'
@@ -15,20 +17,36 @@ import type { ScoredRoute } from '@/types/routing'
 
 /** Quanto tempo o aviso fica visível. Longo o bastante para ler em movimento. */
 const VISIBLE_MS = 9000
+/** Frases curtas (até ~140 caracteres): o tempo de um alerta basta, e menos tempo na tela é menos mapa coberto. */
+const TIP_VISIBLE_MS = 9000
+/** A previsão é de grade larga e muda devagar: reconsultar a cada 10 min basta. */
+const RAIN_REFRESH_MS = 10 * 60_000
 
 interface Options {
   isNavigating: boolean
   scoredRoute: ScoredRoute | null
   progress: NavigationProgress | null
   voiceEnabled: boolean
+  /** Dicas de condução ligadas nas preferências. */
+  tipsEnabled: boolean
+  /** A velocidade do USUÁRIO — as dicas falam dela ("seus 32 por hora"). */
+  referenceSpeedKmh: number
 }
 
-export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEnabled }: Options) {
-  const [alert, setAlert] = useState<SegmentAlert | null>(null)
+export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEnabled, tipsEnabled, referenceSpeedKmh }: Options) {
+  const [alert, setAlert] = useState<BannerAlert | null>(null)
   const announced = useRef<Set<string>>(new Set())
   const lastAlertAt = useRef<number | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const routeId = useRef<string | null>(null)
+  // Dicas têm memória e relógio próprios: uma dica não pode atrasar um alerta
+  // de trecho crítico, e vice-versa só depois de um respiro.
+  const tipsAnnounced = useRef<Set<string>>(new Set())
+  const lastTipAt = useRef<number | null>(null)
+  const tripStartedAt = useRef<number>(Date.now())
+  const rainRef = useRef<RainOutlook | null>(null)
+  const positionRef = useRef(progress?.snappedPosition ?? null)
+  positionRef.current = progress?.snappedPosition ?? null
 
   // Rota nova (inclusive por recálculo) zera a memória: os trechos são outros,
   // e as chaves antigas silenciariam avisos legítimos por coincidência de
@@ -39,6 +57,9 @@ export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEna
     routeId.current = id
     announced.current = new Set()
     lastAlertAt.current = null
+    // As chaves das dicas são posições NESTA rota; em outra rota elas apontam
+    // para lugares diferentes. Só "anoiteceu" vale por viagem, não por rota.
+    tipsAnnounced.current = new Set([...tipsAnnounced.current].filter((key) => key === 'tip:night'))
     setAlert(null)
   }, [scoredRoute?.route.id])
 
@@ -56,7 +77,35 @@ export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEna
     if (!isNavigating) return
     announced.current = new Set()
     lastAlertAt.current = null
+    tipsAnnounced.current = new Set()
+    lastTipAt.current = null
+    tripStartedAt.current = Date.now()
   }, [isNavigating])
+
+  // Previsão de chuva: consulta ao começar e a cada 10 min enquanto navega. Uma
+  // segunda tentativa curta cobre o caso de a posição ainda não existir no
+  // primeiro instante da navegação.
+  useEffect(() => {
+    if (!isNavigating || !tipsEnabled) {
+      rainRef.current = null
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      const position = positionRef.current
+      if (!position) return
+      const outlook = await fetchRainOutlook(position.lat, position.lng)
+      if (!cancelled) rainRef.current = outlook
+    }
+    void load()
+    const retry = setTimeout(() => { if (!rainRef.current) void load() }, 5000)
+    const refresh = setInterval(() => void load(), RAIN_REFRESH_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(retry)
+      clearInterval(refresh)
+    }
+  }, [isNavigating, tipsEnabled])
 
   useEffect(() => {
     if (!isNavigating) {
@@ -72,7 +121,36 @@ export function useSegmentAlerts({ isNavigating, scoredRoute, progress, voiceEna
       announcedRunKeys: announced.current,
       lastAlertAt: lastAlertAt.current,
     })
-    if (!found) return
+    if (!found) {
+      if (!tipsEnabled) return
+
+      const now = Date.now()
+      const tip = nextRidingTip({
+        route: scoredRoute.route,
+        distanceTraveledMeters: progress.distanceTraveledMeters,
+        distanceToNextManeuverMeters: progress.distanceToNextManeuverMeters,
+        referenceSpeedKmh,
+        position: progress.snappedPosition,
+        now,
+        tripStartedAt: tripStartedAt.current,
+        lastTipAt: lastTipAt.current,
+        lastAlertAt: lastAlertAt.current,
+        announced: tipsAnnounced.current,
+        rain: rainRef.current,
+      })
+      if (!tip) return
+
+      tipsAnnounced.current.add(tip.key)
+      lastTipAt.current = now
+      setAlert({ key: tip.key, level: 'tip', text: tip.text, headline: tip.headline })
+      // `calm`: dica é conversa, não instrução — sai um pouco mais devagar, e
+      // nunca fura a fila (só o incompatível fura).
+      if (voiceEnabled) speak(tip.text, { calm: true })
+
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+      hideTimer.current = setTimeout(() => setAlert(null), TIP_VISIBLE_MS)
+      return
+    }
 
     announced.current.add(found.key)
     lastAlertAt.current = Date.now()

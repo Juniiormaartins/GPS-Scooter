@@ -159,7 +159,7 @@ export function SearchBar({ onOpenSearch, value = null }: SearchBarProps) {
         {value ?? 'Para onde você quer ir?'}
       </span>
 
-      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-surface-tile-accent text-brand-500">
+      <span className="btn-sheen flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-brand-500 text-content-on-accent shadow-primary">
         <svg viewBox="0 0 24 24" className="h-[20px] w-[20px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <rect x="9" y="3" width="6" height="11" rx="3" />
           <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />

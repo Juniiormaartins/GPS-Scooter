@@ -753,6 +753,18 @@ export function MapView({
     })
 
     /*
+      ATRIBUIÇÃO RECOLHIDA. No modo compacto o MapLibre nasce com o texto
+      ABERTO ("© MapTiler © OpenStreetMap contributors") e só recolhe depois de
+      um gesto no mapa. Na tela de navegação o mapa é movido pela câmera, não
+      pelo dedo, então ele ficava aberto por cima da barra de adequação do
+      painel inferior. Recolhida, sobra o ícone "i" — a atribuição continua
+      visível e acessível, como a licença exige, sem cobrir a interface.
+    */
+    map.once('load', () => {
+      map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
+    })
+
+    /*
       REDIMENSIONA O CANVAS QUANDO A ÁREA VISÍVEL MUDA.
 
       O MapLibre observa o CONTÊINER (ResizeObserver), o que resolve quase tudo

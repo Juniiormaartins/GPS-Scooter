@@ -34,7 +34,7 @@ export function BottomNavBar({ active, onSelect }: BottomNavBarProps) {
             onClick={() => onSelect(tab.key)}
             aria-current={isActive ? 'page' : undefined}
             className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl py-2 transition-all duration-base ease-standard active:scale-[.97] ${
-              isActive ? 'bg-surface-tile-accent' : ''
+              isActive ? 'bg-surface-tile-accent ring-1 ring-brand-500/20' : ''
             }`}
           >
             <span className={isActive ? 'text-brand-500' : 'text-content-tertiary'}>

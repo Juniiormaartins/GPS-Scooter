@@ -133,6 +133,8 @@ export interface UserPreferences {
    * deixar o app escolher. Nunca listamos vozes que o aparelho não tenha.
    */
   voiceUri: string | null
+  /** Dicas de condução durante o trajeto (ver `ridingTips.ts`). Ligadas por padrão. */
+  ridingTipsEnabled: boolean
   theme: ThemeMode
   vehicleModelId: VehicleModelId
   /** Velocidade de referência efetiva (km/h) — usada no cálculo de ETA. */
@@ -230,6 +232,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   routePreference: 'balanced',
   avoidances: ['express-roads'],
   voiceUri: null,
+  ridingTipsEnabled: true,
   // O redesenho é um produto de tema CLARO (handoff §1): o chrome escuro
   // aparece só na navegação ativa, por tokens próprios, não pelo tema. O
   // seletor de tema continua existindo como preferência do usuário.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AlertLevel, SegmentAlert } from '@/services/navigation/segmentAlerts'
+import type { AlertLevel, BannerAlert } from '@/services/navigation/segmentAlerts'
 
 /**
  * Faixa de aviso de trecho, durante a navegação.
@@ -25,7 +25,7 @@ import type { AlertLevel, SegmentAlert } from '@/services/navigation/segmentAler
  */
 
 const LEVEL: Record<
-  AlertLevel,
+  AlertLevel | 'tip',
   { titulo: string; acento: string; tile: string; borda: string }
 > = {
   attention: {
@@ -40,6 +40,14 @@ const LEVEL: Record<
     tile: 'bg-danger-500 text-content-on-accent',
     borda: 'border-danger-500/50',
   },
+  // Dica não é aviso de perigo: acento da marca (azul), não de gravidade. O que
+  // a separa dos outros três é justamente não gritar.
+  tip: {
+    titulo: 'Dica',
+    acento: 'text-brand-400',
+    tile: 'bg-brand-500 text-content-on-accent',
+    borda: 'border-brand-500/40',
+  },
   incompatible: {
     titulo: 'Incompatível com seu veículo',
     acento: 'text-danger-400',
@@ -48,14 +56,69 @@ const LEVEL: Record<
   },
 }
 
-export function SegmentAlertBanner({ alert, onDismiss }: { alert: SegmentAlert; onDismiss: () => void }) {
+export function SegmentAlertBanner({ alert, onDismiss }: { alert: BannerAlert; onDismiss: () => void }) {
   const [visible, setVisible] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const nivel = LEVEL[alert.level]
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true))
     return () => cancelAnimationFrame(frame)
   }, [alert.key])
+
+  // Dica nova começa recolhida: a anterior pode ter sido aberta para leitura.
+  useEffect(() => setExpanded(false), [alert.key])
+
+  if (alert.level === 'tip') {
+    /*
+      DICA = PÍLULA DE UMA LINHA. O resto do alerta (tile de 44px, eyebrow,
+      texto em quatro linhas) existe para o que é urgente; a dica é conselho que
+      a voz já deu. Medido: a versão grande ocupava 144px de 602 no topo da
+      tela, ao lado do cartão de manobra — quase metade do mapa. Esta ocupa uma
+      linha, e quem quiser ler tudo toca para expandir.
+    */
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-auto rounded-2xl border bg-nav-surface shadow-nav-banner transition-all duration-slow ease-ease-out-soft ${nivel.borda} ${
+          visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 py-1.5 pl-3 pr-1.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500 text-content-on-accent">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5a6 6 0 0 0-12 0c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+              <path d="M9 18h6" />
+              <path d="M10 22h4" />
+            </svg>
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            className="min-w-0 flex-1 py-1.5 text-left"
+          >
+            <span className="sr-only">Dica: </span>
+            <span className="block truncate text-[14px] font-bold text-nav-content">{alert.headline ?? alert.text}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dispensar dica"
+            className="flex h-9 w-9 shrink-0 items-center justify-center text-nav-content-secondary transition-all duration-fast active:scale-[.97]"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.8}>
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        {expanded && (
+          <p className="px-3.5 pb-3 pt-0.5 text-[13.5px] font-semibold leading-snug text-nav-content-secondary">{alert.text}</p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div

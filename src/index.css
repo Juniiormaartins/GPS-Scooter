@@ -83,6 +83,11 @@
   /* Bordas/realces: claros sobre fundo escuro. */
   --hairline: 255 255 255;
 
+  /* Filete de luz na borda de cima das superfícies flutuantes (ver `boxShadow` no Tailwind). */
+  --edge-highlight: rgba(255, 255, 255, 0.07);
+  /* Brilho sobre botões de ação: luz vinda de cima, sem trocar a cor da marca. */
+  --sheen: rgba(255, 255, 255, 0.14);
+
   /*
    * Degradê de leitura no topo (handoff tokens/elevation.css: --scrim-top).
    *
@@ -166,6 +171,9 @@
   --brand-400: #35b7f7;
   --brand-500: #0e86c6;
   --brand-600: #0b6da3;
+
+  --edge-highlight: rgba(255, 255, 255, 0.85);
+  --sheen: rgba(255, 255, 255, 0.22);
 
   --success-400: #2fd16a;
   --success-500: #20b457;
@@ -356,4 +364,16 @@ body {
 
 .maplibregl-ctrl-attrib {
   font-size: 10px;
+}
+
+/*
+ * Brilho de botão de ação.
+ *
+ * Uma camada de luz POR CIMA da cor de fundo: topo mais claro, base levemente
+ * mais escura. A cor da marca não muda (regra do handoff: "a cor de fundo NÃO
+ * muda"), o botão só ganha volume. É `background-image` e não outra cor de
+ * fundo justamente para somar com a que o Tailwind já define.
+ */
+.btn-sheen {
+  background-image: linear-gradient(180deg, var(--sheen) 0%, rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.07) 100%);
 }

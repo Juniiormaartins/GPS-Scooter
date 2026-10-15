@@ -31,6 +31,19 @@ export type AlertLevel =
   /** Via em que o veículo não pode estar: escada, acesso restrito. */
   | 'incompatible'
 
+/**
+ * O que o banner sabe mostrar: um alerta de trecho OU uma dica de condução.
+ * `SegmentAlert` satisfaz isto por estrutura; a dica só precisa de chave, nível
+ * e texto — não tem distância nem motivo de via.
+ */
+export interface BannerAlert {
+  key: string
+  level: AlertLevel | 'tip'
+  text: string
+  /** Só dicas: o essencial em uma linha (ver `RidingTip.headline`). */
+  headline?: string
+}
+
 export interface SegmentAlert {
   /** Identidade estável do trecho dentro da rota — base da regra "avisa uma vez". */
   key: string

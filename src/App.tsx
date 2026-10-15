@@ -1136,6 +1136,8 @@ export default function App() {
     scoredRoute: activeScoredRoute,
     progress: navigationSession.progress,
     voiceEnabled,
+    tipsEnabled: preferences.ridingTipsEnabled,
+    referenceSpeedKmh: preferences.referenceSpeedKmh,
   })
 
   const navPosition = navigationSession.progress?.snappedPosition ?? navigationSession.gpsSample?.position ?? null
@@ -1296,7 +1298,7 @@ export default function App() {
           */
           notice={
             isManualOrigin
-              ? 'Simulação a partir da partida que você definiu — não é a sua posição real.'
+              ? 'Simulação · não é a sua posição real'
               : navigationNotice
           }
           /*

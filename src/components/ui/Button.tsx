@@ -19,8 +19,8 @@ export interface ButtonProps {
 }
 
 const VARIANT: Record<NonNullable<ButtonProps['variant']>, string> = {
-  go: 'bg-success-500 text-content-on-accent shadow-go-btn',
-  primary: 'bg-brand-500 text-content-on-accent shadow-primary',
+  go: 'btn-sheen bg-success-500 text-content-on-accent shadow-go-btn',
+  primary: 'btn-sheen bg-brand-500 text-content-on-accent shadow-primary',
   secondary: 'bg-surface-sunken text-content-primary',
   quiet: 'bg-brand-500/[.16] text-brand-500',
   ghost: 'bg-transparent text-brand-500',

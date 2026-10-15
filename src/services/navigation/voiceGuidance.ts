@@ -26,6 +26,8 @@ interface QueueItem {
   text: string
   /** Instruções urgentes ("vire agora") furam a fila e descartam o que estava pendente. */
   urgent: boolean
+  /** Dica de condução: conversa, não comando — sai um pouco mais devagar. */
+  calm?: boolean
 }
 
 let queue: QueueItem[] = []
@@ -157,13 +159,51 @@ export function setPreferredVoice(voiceUri: string | null) {
   preferredVoiceUri = voiceUri
 }
 
+/**
+ * Quão NATURAL uma voz tende a ser, pelo que o próprio nome/URI diz.
+ *
+ * O padrão anterior era "a primeira pt-BR da lista", e a lista é ordenada com
+ * voz do aparelho antes de online — ou seja, na prática a MAIS ROBÓTICA. Os
+ * marcadores abaixo são os que os sistemas usam de fato: "Natural"/"Neural"
+ * (vozes online da Microsoft), "Premium"/"Siri"/"Enhanced" (iOS), "Google"
+ * (Chrome e Android) e "compact" (a versão reduzida do iOS, a pior).
+ *
+ * Só decide o PADRÃO. Quem escolheu uma voz em Perfil continua com ela.
+ */
+export function voiceNaturalness(voice: Pick<SpeechSynthesisVoice, 'name' | 'voiceURI' | 'lang'>): number {
+  const id = `${voice.name} ${voice.voiceURI}`.toLowerCase()
+  let score = 0
+  if (/natural|neural/.test(id)) score += 40
+  if (/premium|siri/.test(id)) score += 35
+  if (/enhanced|aprimorad/.test(id)) score += 25
+  if (/google/.test(id)) score += 20
+  if (/compact/.test(id)) score -= 30
+  if (voice.lang.toLowerCase() === 'pt-br') score += 10
+  return score
+}
+
 function resolveVoice(): SpeechSynthesisVoice | null {
   const portuguese = listPortugueseVoices()
   if (preferredVoiceUri) {
     const chosen = portuguese.find((voice) => voice.voiceURI === preferredVoiceUri)
     if (chosen) return chosen
   }
-  return portuguese.find((voice) => voice.lang === 'pt-BR') ?? portuguese[0] ?? null
+  // `reduce` mantém a primeira em caso de empate — a ordem da lista (pt-BR,
+  // aparelho, nome) continua valendo como desempate.
+  return portuguese.reduce<SpeechSynthesisVoice | null>(
+    (best, voice) => (best == null || voiceNaturalness(voice) > voiceNaturalness(best) ? voice : best),
+    null,
+  )
+}
+
+/** Melhor voz que NÃO depende de rede — o reserva de uma voz online que falhou. */
+function resolveLocalVoice(): SpeechSynthesisVoice | null {
+  return listPortugueseVoices()
+    .filter((voice) => voice.localService)
+    .reduce<SpeechSynthesisVoice | null>(
+      (best, voice) => (best == null || voiceNaturalness(voice) > voiceNaturalness(best) ? voice : best),
+      null,
+    )
 }
 
 function drainQueue() {
@@ -176,7 +216,7 @@ function drainQueue() {
   // inclusive o texto que veio pronto do provedor de rota.
   const utterance = new SpeechSynthesisUtterance(speakableText(item.text))
   utterance.lang = 'pt-BR'
-  utterance.rate = 1.0
+  utterance.rate = item.calm ? 0.96 : 1.0
   const voice = resolveVoice()
   if (voice) utterance.voice = voice
 
@@ -188,7 +228,24 @@ function drainQueue() {
     }, MIN_GAP_BETWEEN_UTTERANCES_MS)
   }
   utterance.onend = finish
-  utterance.onerror = finish
+  utterance.onerror = (event) => {
+    // Uma voz ONLINE falha sem rede (túnel, sinal ruim) e a instrução se
+    // perderia em silêncio. Uma vez, com a melhor voz do aparelho. `canceled` e
+    // `interrupted` são o próprio app calando a fala, não falha.
+    const reason = (event as SpeechSynthesisErrorEvent).error
+    const fallback = resolveLocalVoice()
+    if (voice && !voice.localService && fallback && reason !== 'canceled' && reason !== 'interrupted') {
+      const retry = new SpeechSynthesisUtterance(utterance.text)
+      retry.lang = 'pt-BR'
+      retry.rate = utterance.rate
+      retry.voice = fallback
+      retry.onend = finish
+      retry.onerror = finish
+      window.speechSynthesis.speak(retry)
+      return
+    }
+    finish()
+  }
 
   window.speechSynthesis.speak(utterance)
 }
@@ -212,18 +269,18 @@ export function primeFromUserGesture() {
  * fala em andamento, porque nesse instante ela já está atrasada. Instruções
  * normais NUNCA interrompem — só entram na fila.
  */
-export function speak(text: string, { urgent = false }: { urgent?: boolean } = {}) {
+export function speak(text: string, { urgent = false, calm = false }: { urgent?: boolean; calm?: boolean } = {}) {
   if (!isSpeechSupported) return
 
   if (urgent) {
-    queue = [{ text, urgent }]
+    queue = [{ text, urgent, calm }]
     window.speechSynthesis.cancel()
     isSpeaking = false
     drainQueue()
     return
   }
 
-  queue.push({ text, urgent })
+  queue.push({ text, urgent, calm })
   drainQueue()
 }
 

@@ -68,11 +68,17 @@ export function VehicleStatusBar({
   const rangeLabel = hasBattery ? 'AUTONOMIA' : estimated != null ? 'AUTONOMIA EST.' : 'ALCANCE EST.'
   const batteryPercent = hasBattery ? bluetooth.batteryPercent! : (autonomy?.estimatedPercent ?? null)
 
+  /*
+    CURTO DE PROPÓSITO. A versão anterior ("Autopropelido · ref. 32 km/h") e o
+    nome com o parêntese do preset ("Scooter elétrica (autopropelido)") não
+    cabiam ao lado da autonomia: o cartão mais visto do app mostrava os dois
+    cortados em reticências. Cada linha agora diz uma coisa só, e cabe.
+  */
   const subtitle = isConnected
     ? hasBattery
-      ? `Autopropelido · pareada · ${bluetooth.batteryPercent}%`
-      : 'Autopropelido · pareada'
-    : `Autopropelido · ref. ${preferences.referenceSpeedKmh} km/h`
+      ? `Pareada · ${bluetooth.batteryPercent}%`
+      : 'Pareada'
+    : `${preferences.referenceSpeedKmh} km/h`
 
   const Element = onOpen ? 'button' : 'div'
 
@@ -92,7 +98,7 @@ export function VehicleStatusBar({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-row-name text-content-primary">{resolveVehicleLabel(preferences)}</span>
+        <span className="block truncate text-[16px] font-bold leading-tight text-content-primary">{resolveVehicleLabel(preferences).replace(/\s*\(.*\)\s*$/, '')}</span>
         <span className="mt-0.5 block truncate text-[13px] font-semibold text-content-secondary">{subtitle}</span>
       </span>
 

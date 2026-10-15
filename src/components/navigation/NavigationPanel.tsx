@@ -127,12 +127,26 @@ export function NavigationPanel({
               <p className="text-[13px] font-extrabold tracking-[0.6px] text-nav-accent">
                 <span className="uppercase">Em</span> {formatDistance(progress.distanceToNextManeuverMeters)}
               </p>
-              <p className="mt-0.5 truncate text-maneuver text-nav-content">{progress.nextStep.instruction}</p>
-              {progress.nextStep.roadName && (
-                <p className="mt-0.5 truncate text-[14px] font-semibold text-nav-content-secondary">
-                  {progress.nextStep.roadName}
-                </p>
-              )}
+              {/*
+                Até DUAS linhas, nunca uma só cortada. "Vire à direita na Rua 84"
+                cabia truncado como "Vire à direit…" — a instrução que o
+                motorista precisa ler inteira, e de relance, era a única que o
+                cartão cortava. Descer uma linha custa 29px de altura; errar a
+                manobra custa o trajeto.
+              */}
+              <p className="mt-0.5 line-clamp-2 break-words text-maneuver text-nav-content">{progress.nextStep.instruction}</p>
+              {/*
+                O nome da via só aparece quando a instrução NÃO o diz. "Vire à
+                direita em Rua 84" seguido de uma linha "Rua 84" repetia a mesma
+                informação no cartão mais importante da tela — uma linha a mais
+                para ler, sem nada de novo nela.
+              */}
+              {progress.nextStep.roadName &&
+                !progress.nextStep.instruction.toLowerCase().includes(progress.nextStep.roadName.toLowerCase()) && (
+                  <p className="mt-0.5 truncate text-[14px] font-semibold text-nav-content-secondary">
+                    {progress.nextStep.roadName}
+                  </p>
+                )}
             </div>
             <div className="flex shrink-0 flex-col gap-2">
               <VoiceToggle enabled={voiceEnabled} onToggle={onToggleVoice} />
@@ -160,7 +174,7 @@ export function NavigationPanel({
         )}
 
         {notice && (
-          <div className="pointer-events-auto rounded-lg border border-hairline/15 bg-surface-overlay px-card py-2.5 text-body text-content-secondary shadow-float backdrop-blur-xl">
+          <div className="pointer-events-auto self-start rounded-pill border border-hairline/15 bg-surface-overlay px-3.5 py-1.5 text-[13px] font-semibold text-content-secondary shadow-float backdrop-blur-xl">
             {notice}
           </div>
         )}
@@ -245,13 +259,16 @@ export function NavigationPanel({
               movimento; ver que falta um bloco âmbar à frente é.
             */}
             {remaining && remaining.totalMeters > 0 && (
-              <div className="mt-2.5 flex flex-col gap-1">
+              /*
+                SEM LEGENDA EM TEXTO. Havia, abaixo da barra, "3,5 km de atenção
+                pela frente" — a terceira vez que a mesma informação aparecia
+                na tela (a barra, o aviso de trecho no topo e esta frase). Em
+                movimento cada linha a mais é tempo olhando para o celular: a
+                barra mostra QUANTO e ONDE, o aviso do topo diz O QUE e a
+                quantos metros.
+              */
+              <div className="mt-2.5">
                 <SuitabilityBar severity={scoredRoute.severity} breakdown={remaining} compact />
-                <p className="truncate text-[12px] font-semibold text-nav-content-secondary">
-                  {remainingAtRisk > 0
-                    ? `${formatDistance(remainingAtRisk)} de atenção pela frente`
-                    : 'Restante todo em vias adequadas'}
-                </p>
               </div>
             )}
           </div>
@@ -305,10 +322,11 @@ function StatPill({
   return (
     <div
       title={title}
-      className="pointer-events-auto inline-flex flex-col gap-1 rounded-lg border border-hairline/15 bg-surface-overlay px-card py-2.5 shadow-float backdrop-blur-xl"
+      className="pointer-events-auto inline-flex items-center rounded-lg border border-hairline/15 bg-surface-overlay px-3.5 py-2.5 shadow-float backdrop-blur-xl"
     >
-      <span className="text-eyebrow uppercase text-content-tertiary">{label}</span>
-      <span className={`text-[24px] font-extrabold ${tone === 'go' ? 'text-success-500' : 'text-content-primary'}`}>
+      {/* O rótulo fica só para leitor de tela: "32 km/h" dispensa a palavra "velocidade" na vista. */}
+      <span className="sr-only">{label}</span>
+      <span className={`text-[24px] font-extrabold leading-none ${tone === 'go' ? 'text-success-500' : 'text-content-primary'}`}>
         {value}
       </span>
     </div>

@@ -120,11 +120,6 @@ export function ProfilePanel({
 
   return (
     <Panel title="Perfil" onClose={onClose}>
-      <AvatarGroup
-        dataUrl={preferences.avatarDataUrl}
-        onChange={(avatarDataUrl) => onUpdatePreferences({ avatarDataUrl })}
-      />
-
       <SettingsGroup
         title="Meu veículo"
         footnote="A velocidade de referência alimenta o tempo estimado das rotas; a autonomia, a estimativa de alcance. Nenhuma das duas autoriza vias inadequadas — as regras de circulação continuam avaliando cada via."
@@ -291,6 +286,20 @@ export function ProfilePanel({
         }}
       />
 
+      <SettingsGroup
+        title="Dicas de condução"
+        footnote="Avisos curtos sobre o que vem pela frente — avenida movimentada, rotatória, curva à esquerda em via cheia, anoitecer. Só aparecem quando o app sabe que a situação existe na sua rota."
+      >
+        <SettingsRow
+          inGroup
+          label="Dicas durante o trajeto"
+          description="Também faladas, se a voz estiver ligada"
+          control="toggle"
+          checked={preferences.ridingTipsEnabled}
+          onChange={(next) => onUpdatePreferences({ ridingTipsEnabled: next })}
+        />
+      </SettingsGroup>
+
       <SettingsGroup title="Aparência">
         <SettingsRow
           inGroup
@@ -302,6 +311,17 @@ export function ProfilePanel({
         />
 
       </SettingsGroup>
+
+      {/*
+        A FOTO FICA POR ÚLTIMO. Era o primeiro bloco do Perfil — num app sem
+        contas, onde o que o motorista de fato ajusta é o veículo, a velocidade
+        e a autonomia, que ficavam abaixo da dobra. A ordem agora segue a
+        frequência de uso.
+      */}
+      <AvatarGroup
+        dataUrl={preferences.avatarDataUrl}
+        onChange={(avatarDataUrl) => onUpdatePreferences({ avatarDataUrl })}
+      />
 
       <p className="mt-group px-1 text-caption text-content-tertiary">
         Distâncias e velocidades em quilômetros. Dados de via do OpenStreetMap; mapa do MapTiler.
