@@ -105,6 +105,8 @@ interface MapViewProps {
    * — a troca é só de asset: âncora, halo e cone são idênticos nos três.
    */
   vehicleModelId?: VehicleModelId
+  /** Velocidade em que o veículo anda — a camada de adequação depende dela (ciclovia só vale para autopropelido). */
+  vehicleSpeedKmh?: number
   /** Camada de adequação das vias ligada (ver suitabilityLayer.ts). */
   suitabilityLayer?: boolean
   /**
@@ -595,6 +597,7 @@ export function MapView({
   isNavigating = false,
   speedKmh = null,
   vehicleModelId = 'scooter-32',
+  vehicleSpeedKmh = 32,
   suitabilityLayer = false,
   rangeRingKm = null,
   resetNorthRequestId = 0,
@@ -663,6 +666,8 @@ export function MapView({
   speedKmhRef.current = speedKmh
   const vehicleRef = useRef(vehicleModelId)
   vehicleRef.current = vehicleModelId
+  const speedRef = useRef(vehicleSpeedKmh)
+  speedRef.current = vehicleSpeedKmh
   const suitabilityRef = useRef(suitabilityLayer)
   suitabilityRef.current = suitabilityLayer
   /** Zoom e inclinação exibidos — perseguem o alvo por quadro, ver cameraRef. */
@@ -880,7 +885,7 @@ export function MapView({
         — a ordem resultante é malha colorida, rótulos do mapa, rota, marcador.
         Invertida, o realce cobriria o próprio traçado da rota.
       */
-      applySuitabilityLayer(map, { enabled: suitabilityRef.current, vehicleModelId: vehicleRef.current })
+      applySuitabilityLayer(map, { enabled: suitabilityRef.current, vehicleModelId: vehicleRef.current, referenceSpeedKmh: speedRef.current })
 
       map.addSource(ROUTE_SOURCE_ID, {
         type: 'geojson',
@@ -1271,8 +1276,8 @@ export function MapView({
     if (!map) return
     // Mesma razão do anel de alcance: desistir por estilo ocupado deixaria o
     // botão de camadas sem efeito, sem nenhuma segunda tentativa.
-    return whenStyleReady(map, () => applySuitabilityLayer(map, { enabled: suitabilityLayer, vehicleModelId }))
-  }, [suitabilityLayer, vehicleModelId])
+    return whenStyleReady(map, () => applySuitabilityLayer(map, { enabled: suitabilityLayer, vehicleModelId, referenceSpeedKmh: vehicleSpeedKmh }))
+  }, [suitabilityLayer, vehicleModelId, vehicleSpeedKmh])
 
   // Repinta o mapa quando o tema muda — sem isso, trocar de tema deixava a
   // interface clara sobre um mapa escuro (e vice-versa).

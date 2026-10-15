@@ -41,13 +41,15 @@ interface ArrivalSheetProps {
   destinationLabel: string | null
   distanceMeters: number
   durationMinutes: number
+  /** Previsto no início; `null` quando o tempo mostrado já É o previsto (viagem não medida). */
+  plannedMinutes: number | null
   onFinish: (feedback: ArrivalFeedback) => void
 }
 
 /** Duração da saída — casa com `duration-slow` dos tokens. */
 const EXIT_MS = 320
 
-export function ArrivalSheet({ destinationLabel, distanceMeters, durationMinutes, onFinish }: ArrivalSheetProps) {
+export function ArrivalSheet({ destinationLabel, distanceMeters, durationMinutes, plannedMinutes, onFinish }: ArrivalSheetProps) {
   const [stars, setStars] = useState<number | null>(null)
   const [quick, setQuick] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
@@ -107,6 +109,12 @@ export function ArrivalSheet({ destinationLabel, distanceMeters, durationMinutes
           <p className="mt-2 text-[13.5px] font-bold text-content-tertiary">
             {formatDistance(distanceMeters)} · {formatEta(durationMinutes)}
           </p>
+          {/* Só aparece quando a diferença é perceptível — "1 min a mais" é ruído. */}
+          {plannedMinutes != null && Math.abs(plannedMinutes - durationMinutes) >= 2 && (
+            <p className="mt-0.5 text-[12.5px] font-semibold text-content-tertiary">
+              Previsto: {formatEta(plannedMinutes)}
+            </p>
+          )}
         </div>
 
         <div className="mt-5">

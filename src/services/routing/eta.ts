@@ -2,6 +2,20 @@ import { mobilityProfile, PEDESTRIAN_WAY_KINDS } from '@/config/mobilityProfiles
 import type { VehicleModelId } from '@/config/userPreferences'
 import type { WayKind } from '@/types/routing'
 import { getUserPreferences } from '@/config/userPreferences'
+import { learnedSpeed } from '@/services/storage/tripLog'
+
+/**
+ * Velocidade que o ETA deve usar: a MÉDIA REAL aprendida das viagens do
+ * usuário, quando já há viagens suficientes, e a de referência (o máximo do
+ * veículo) quando não há. Ver `storage/tripLog.ts` para o porquê.
+ *
+ * É separada da velocidade de referência de propósito: a referência continua
+ * sendo o que o VEÍCULO faz (entra na classificação de tráfego rápido e na
+ * autonomia); esta é o que o USUÁRIO faz, e só o relógio precisa dela.
+ */
+export function etaSpeedKmh(referenceSpeedKmh: number = getUserPreferences().referenceSpeedKmh): number {
+  return learnedSpeed(referenceSpeedKmh)?.kmh ?? referenceSpeedKmh
+}
 
 /**
  * ETA = distância ÷ velocidade de referência do veículo.
@@ -16,7 +30,7 @@ import { getUserPreferences } from '@/config/userPreferences'
  */
 export function calculateEtaMinutes(
   distanceMeters: number,
-  referenceSpeedKmh: number = getUserPreferences().referenceSpeedKmh,
+  referenceSpeedKmh: number = etaSpeedKmh(),
 ): number {
   if (distanceMeters <= 0 || referenceSpeedKmh <= 0) return 0
 
@@ -48,14 +62,16 @@ export function calculateRouteEtaMinutes(
   referenceSpeedKmh: number = getUserPreferences().referenceSpeedKmh,
 ): number {
   const profile = mobilityProfile(vehicleModelId)
+  // `referenceSpeedKmh` é a do veículo; o tempo usa a média aprendida dela.
+  const cruiseKmh = etaSpeedKmh(referenceSpeedKmh)
   const known = segments.filter((segment) => segment.wayKind != null)
-  if (known.length === 0) return calculateEtaMinutes(totalDistanceMeters, referenceSpeedKmh)
+  if (known.length === 0) return calculateEtaMinutes(totalDistanceMeters, cruiseKmh)
 
   let minutes = 0
   let accounted = 0
   for (const segment of segments) {
     const isPedestrianSpace = segment.wayKind != null && PEDESTRIAN_WAY_KINDS.includes(segment.wayKind)
-    const speed = isPedestrianSpace ? profile.pedestrianWaySpeedKmh : referenceSpeedKmh
+    const speed = isPedestrianSpace ? profile.pedestrianWaySpeedKmh : cruiseKmh
     minutes += calculateEtaMinutes(segment.distanceMeters, speed)
     accounted += segment.distanceMeters
   }
@@ -63,7 +79,7 @@ export function calculateRouteEtaMinutes(
   // Os segmentos podem não somar exatamente a distância total (arredondamento
   // do provedor). O resto vai na velocidade de referência.
   const remainder = totalDistanceMeters - accounted
-  if (remainder > 0) minutes += calculateEtaMinutes(remainder, referenceSpeedKmh)
+  if (remainder > 0) minutes += calculateEtaMinutes(remainder, cruiseKmh)
 
   return minutes
 }

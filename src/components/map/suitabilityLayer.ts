@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap, ExpressionSpecification } from 'maplibre-gl'
-import { mobilityProfile } from '@/config/mobilityProfiles'
+import { wayTiersFor } from '@/config/mobilityProfiles'
 import type { VehicleModelId } from '@/config/userPreferences'
 import type { SuitabilityTier, WayKind } from '@/types/routing'
 
@@ -119,8 +119,8 @@ export const SUITABILITY_LEGEND: { tier: SuitabilityTier; label: string; color: 
  * uma bicicleta. Consultar `class` primeiro apagaria a informação mais útil que o
  * tile tem.
  */
-function tierExpression(vehicleModelId: VehicleModelId, output: (tier: SuitabilityTier) => string | number) {
-  const tiers = mobilityProfile(vehicleModelId).wayTiers
+function tierExpression(vehicleModelId: VehicleModelId, referenceSpeedKmh: number, output: (tier: SuitabilityTier) => string | number) {
+  const tiers = wayTiersFor(vehicleModelId, referenceSpeedKmh)
 
   const byClass: (string | number)[] = []
   for (const [className, kind] of Object.entries(CLASS_TO_KIND)) {
@@ -174,9 +174,9 @@ const EXCLUDED_CLASSES = ['ferry', 'rail', 'aerialway', 'platform', 'pier']
 
 export function applySuitabilityLayer(
   map: MapLibreMap,
-  options: { enabled: boolean; vehicleModelId: VehicleModelId },
+  options: { enabled: boolean; vehicleModelId: VehicleModelId; referenceSpeedKmh: number },
 ) {
-  const { enabled, vehicleModelId } = options
+  const { enabled, vehicleModelId, referenceSpeedKmh } = options
 
   if (!enabled) {
     if (map.getLayer(SUITABILITY_LAYER_ID)) map.removeLayer(SUITABILITY_LAYER_ID)
@@ -185,8 +185,8 @@ export function applySuitabilityLayer(
 
   if (!map.getSource(SOURCE_ID)) return
 
-  const color = tierExpression(vehicleModelId, (tier) => TIER_COLOR[tier])
-  const opacity = tierExpression(vehicleModelId, (tier) => TIER_OPACITY[tier])
+  const color = tierExpression(vehicleModelId, referenceSpeedKmh, (tier) => TIER_COLOR[tier])
+  const opacity = tierExpression(vehicleModelId, referenceSpeedKmh, (tier) => TIER_OPACITY[tier])
 
   if (map.getLayer(SUITABILITY_LAYER_ID)) {
     // Trocar de veículo só reescreve as expressões — remover e readicionar a

@@ -51,6 +51,7 @@ import { enrichRouteResult, planRoute } from '@/services/routing'
 import { getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { saveFavorite, listSavedPlaces, type SavedPlace } from '@/services/storage/savedPlaces'
 import { recordActivity, type ActivityEntry } from '@/services/storage/activityHistory'
+import { recordTrip } from '@/services/storage/tripLog'
 import { recordSearch } from '@/services/storage/searchHistory'
 import type { RouteResult, ScoredRoute } from '@/types/routing'
 import type { SeverityRun } from '@/services/routing/segmentSeverity'
@@ -114,7 +115,7 @@ export default function App() {
    * encerrada junto: um quadro depois `activeScoredRoute` já não existe, e a
    * tela mostraria distância e tempo vazios.
    */
-  const [arrival, setArrival] = useState<{ label: string | null; distanceMeters: number; durationMinutes: number } | null>(
+  const [arrival, setArrival] = useState<{ label: string | null; distanceMeters: number; durationMinutes: number; plannedMinutes: number | null } | null>(
     null,
   )
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
@@ -954,6 +955,14 @@ export default function App() {
   }, [routeResult])
 
   /**
+   * Quando e com QUE ROTA a navegação começou — a base do tempo real da viagem.
+   * O id da rota entra porque um recálculo no meio do caminho troca a rota: o
+   * relógio seguiria contando, mas a distância passaria a ser de outro trajeto,
+   * e a média saída daí seria inventada.
+   */
+  const tripStart = useRef<{ at: number; routeId: string } | null>(null)
+
+  /**
    * CHEGADA AO DESTINO.
    *
    * O provedor já anuncia "Chegou ao seu destino" por voz — o que faltava era
@@ -990,10 +999,33 @@ export default function App() {
       })
     }
 
+    /*
+      TEMPO REAL, não o previsto. A tela mostrava `etaMinutes` como se fosse o
+      tempo da viagem — a estimativa vestida de medida.
+
+      Só vale como medida quando a viagem foi de verdade: a simulada (partida
+      manual) anda na velocidade de referência por construção, e a que teve
+      recálculo mudou de rota no caminho. Nesses casos fica o previsto, e a
+      tela não finge que mediu.
+    */
+    const planned = activeScoredRoute?.etaMinutes ?? 0
+    const started = tripStart.current
+    const measurable = !!started && !isManualOrigin && started.routeId === activeScoredRoute?.route.id
+    const elapsedSeconds = measurable ? (Date.now() - started.at) / 1000 : 0
+    if (measurable) {
+      recordTrip({
+        distanceMeters: percorrido,
+        elapsedSeconds,
+        referenceSpeedKmh: preferences.referenceSpeedKmh,
+      })
+    }
+    tripStart.current = null
+
     setArrival({
       label: destinationText || selectedPoi?.label || null,
       distanceMeters: percorrido,
-      durationMinutes: activeScoredRoute?.etaMinutes ?? 0,
+      durationMinutes: measurable ? Math.max(1, Math.round(elapsedSeconds / 60)) : planned,
+      plannedMinutes: measurable ? planned : null,
     })
     // Encerra a navegação de verdade: acompanhamento, comparação e avisos
     // pendentes saem junto, senão a tela de chegada conviveria com um painel
@@ -1177,6 +1209,7 @@ export default function App() {
         isNavigating={isNavigationView}
         // O marcador segue o veículo escolhido no Perfil / seletor de veículo.
         vehicleModelId={preferences.vehicleModelId}
+        vehicleSpeedKmh={preferences.referenceSpeedKmh}
         /*
           A camada de adequação só existe FORA da navegação.
 
@@ -1397,6 +1430,7 @@ export default function App() {
               // seguintes vêm do GPS, que não conta como gesto do usuário.
               if (voiceEnabled) primeFromUserGesture()
               setIsFollowingUser(true)
+              tripStart.current = { at: Date.now(), routeId: activeScoredRoute.route.id }
               setIsNavigating(true)
             }}
             autonomyByRouteId={autonomyByRouteId}
@@ -1651,6 +1685,7 @@ export default function App() {
           destinationLabel={arrival.label}
           distanceMeters={arrival.distanceMeters}
           durationMinutes={arrival.durationMinutes}
+          plannedMinutes={arrival.plannedMinutes}
           onFinish={() => {
             // Nada é enviado nem guardado nesta versão — ver ArrivalSheet.
             // Fechar limpa o destino e devolve o mapa ao estado de exploração,

@@ -35,6 +35,7 @@ import type { SuitabilityTier, WayKind } from '@/types/routing'
 /** Motivo legível da classificação — é o que a interface mostra em vez de só uma cor. */
 export type SuitabilityReasonCode =
   | 'ideal-infrastructure'
+  | 'bicycle-only-infrastructure'
   | 'local-street'
   | 'urban-road'
   | 'shared-with-traffic'
@@ -49,6 +50,7 @@ export type SuitabilityReasonCode =
 
 export const REASON_TEXT: Record<SuitabilityReasonCode, string> = {
   'ideal-infrastructure': 'Infraestrutura própria para o veículo',
+  'bicycle-only-infrastructure': 'Infraestrutura de bicicleta — não é para este veículo',
   'local-street': 'Via local de tráfego lento',
   'urban-road': 'Via urbana comum',
   'shared-with-traffic': 'Compartilhada com tráfego — exige atenção',
@@ -118,9 +120,11 @@ const SCOOTER: MobilityProfile = {
     residential: 'very-good',
     living_street: 'very-good',
     service: 'good',
-    // Ciclovia é infraestrutura de bicicleta; scooter motorizada ali é
-    // conflito, não atalho.
-    cycleway: 'unsuitable',
+    // Ciclovia é permitida a autopropelido (ver `AUTOPROPELIDO_MAX_KMH` e
+    // `wayTiersFor`, que desfaz isto acima do limite). 'good', e não
+    // 'very-good': é infraestrutura de bicicleta compartilhada com bicicleta, e
+    // alguns municípios fixam teto de velocidade nela.
+    cycleway: 'good',
     footway: 'unsuitable',
     pedestrian: 'unsuitable',
     path: 'unsuitable',
@@ -163,6 +167,38 @@ const EBIKE: MobilityProfile = {
     steps: 'prohibited',
     unknown: 'good',
   },
+}
+
+/**
+ * Teto de velocidade de um AUTOPROPELIDO, em km/h (Resolução CONTRAN 996/2023).
+ *
+ * Acima disso o veículo deixa de ser autopropelido — passa a ser ciclomotor,
+ * com registro e habilitação — e as regras de bicicleta deixam de valer para
+ * ele, ciclovia inclusive.
+ *
+ * FONTE E LIMITE DO QUE SE SABE: a regra federal que encontrei, em reportagens
+ * e documentos municipais (o texto integral não estava acessível), equipara
+ * autopropelido à bicicleta e o admite em ciclovia e ciclofaixa. Municípios
+ * podem regulamentar além disso (há quem fixe 20 km/h nelas). Por isso a
+ * ciclovia entra como 'good' e não 'very-good', e vale conferir a norma local.
+ */
+export const AUTOPROPELIDO_MAX_KMH = 32
+
+/**
+ * Tabela de adequação EFETIVA para um veículo e a velocidade em que ele
+ * realmente anda.
+ *
+ * O perfil sozinho não basta: `scooter-32` com a velocidade ajustada para 60
+ * (veículo destravado) continua com o mesmo id, mas não é mais autopropelido —
+ * e uma regra legal que depende da velocidade não pode ler só o id. Toda
+ * leitura de `wayTiers` que decide algo sobre o usuário passa por aqui.
+ */
+export function wayTiersFor(id: VehicleModelId, referenceSpeedKmh: number): Record<WayKind, SuitabilityTier> {
+  const profile = mobilityProfile(id)
+  if (profile.costing === 'motor_scooter' && referenceSpeedKmh > AUTOPROPELIDO_MAX_KMH) {
+    return { ...profile.wayTiers, cycleway: 'unsuitable' }
+  }
+  return profile.wayTiers
 }
 
 /** `custom` herda o perfil da scooter — é de onde o usuário parte ao ajustar à mão. */

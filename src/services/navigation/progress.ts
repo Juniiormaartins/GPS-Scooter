@@ -1,4 +1,4 @@
-import { calculateEtaMinutes } from '@/services/routing/eta'
+import { calculateEtaMinutes, etaSpeedKmh } from '@/services/routing/eta'
 import { computeBearingDegrees, haversineDistanceMeters, projectPointOntoPath } from '@/utils/geo'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, RouteStep } from '@/types/routing'
@@ -78,7 +78,7 @@ export function computeNavigationProgress(
   const offRouteDistanceMeters = projection?.distanceFromPathMeters ?? Number.POSITIVE_INFINITY
 
   const remainingDistanceMeters = Math.max(0, route.totalDistanceMeters - distanceTraveledMeters)
-  const remainingDurationMinutes = calculateEtaMinutes(remainingDistanceMeters, referenceSpeedKmh)
+  const remainingDurationMinutes = calculateEtaMinutes(remainingDistanceMeters, etaSpeedKmh(referenceSpeedKmh))
 
   const nextStep = route.steps.find((step) => step.cumulativeDistanceMeters > distanceTraveledMeters) ?? null
   const currentStepIndex = nextStep ? route.steps.indexOf(nextStep) : Math.max(0, route.steps.length - 1)

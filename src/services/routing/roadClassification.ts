@@ -1,4 +1,4 @@
-import { mobilityProfile, type SuitabilityReasonCode } from '@/config/mobilityProfiles'
+import { mobilityProfile, wayTiersFor, type SuitabilityReasonCode } from '@/config/mobilityProfiles'
 import type { VehicleModelId } from '@/config/userPreferences'
 import type { Eligibility, RouteSegment, SuitabilityTier, WayKind } from '@/types/routing'
 
@@ -134,15 +134,17 @@ function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificati
     return { tier: 'unsuitable', reason: 'expressway' }
   }
 
-  if (profile && wayKind !== 'unknown') {
-    return { tier: profile.wayTiers[wayKind], reason: reasonForWayKind(wayKind, profile.wayTiers[wayKind]) }
+  if (profile && vehicle && wayKind !== 'unknown') {
+    const tier = wayTiersFor(vehicle.modelId, vehicle.referenceSpeedKmh)[wayKind]
+    return { tier, reason: reasonForWayKind(wayKind, tier) }
   }
 
   // Sem enriquecimento: usa o que o provedor deu.
   if (segment.roadClass !== 'unknown') {
     const fromClass = normalizeWayKind(segment.roadClass)
-    if (profile) {
-      return { tier: profile.wayTiers[fromClass], reason: reasonForWayKind(fromClass, profile.wayTiers[fromClass]) }
+    if (profile && vehicle) {
+      const tier = wayTiersFor(vehicle.modelId, vehicle.referenceSpeedKmh)[fromClass]
+      return { tier, reason: reasonForWayKind(fromClass, tier) }
     }
   }
 
@@ -157,7 +159,10 @@ function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificati
 }
 
 function reasonForWayKind(kind: WayKind, tier: SuitabilityTier): SuitabilityReasonCode {
-  if (kind === 'cycleway') return 'ideal-infrastructure'
+  // O motivo tem de concordar com o nível. Antes devolvia sempre "infraestrutura
+  // própria", então uma ciclovia vermelha para a scooter explicava a si mesma
+  // como se fosse o melhor caso.
+  if (kind === 'cycleway') return tier === 'very-good' || tier === 'good' ? 'ideal-infrastructure' : 'bicycle-only-infrastructure'
   if (kind === 'footway' || kind === 'pedestrian') return 'pedestrian-space'
   // Só via de acesso limitado é "rodovia". Uma arterial urbana ruim para o
   // veículo é outra coisa, e descrevê-la como rodovia faria a explicação não
