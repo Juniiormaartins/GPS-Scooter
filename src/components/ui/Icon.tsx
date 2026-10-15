@@ -42,6 +42,7 @@ export type IconName =
   | 'star'
   | 'route'
   | 'bolt'
+  | 'check'
 
 interface Glyph {
   /** Traço do ícone. */
@@ -177,6 +178,7 @@ const GLYPHS: Record<IconName, Glyph> = {
       </>
     ),
   },
+  check: { draw: <path d="M5.5 12.6l4.2 4.2L18.5 7.8" /> },
   bolt: {
     soft: 'M13 3.4L5.8 13.2h5.4l-.9 7.4 7.4-10h-5.4z',
     draw: <path d="M13 3.4L5.8 13.2h5.4l-.9 7.4 7.4-10h-5.4z" />,

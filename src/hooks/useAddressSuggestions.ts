@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { adoptLatePoiCategories, getGeocodingProvider, type GeocodingResult } from '@/services/geocoding'
 import { matchSearchHistory } from '@/services/storage/searchHistory'
+import type { LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
 
 /**
@@ -27,11 +28,38 @@ const DEBOUNCE_MS = 400
 /** Distância abaixo da qual um resultado externo é considerado o mesmo lugar de uma entrada do histórico. */
 const HISTORY_DEDUPE_METERS = 40
 
-export function useAddressSuggestions(query: string) {
+/**
+ * Junta o histórico (primeiro) com os resultados externos, sem repetir o mesmo
+ * lugar. O histórico SOMBREIA o resultado externo do mesmo lugar — e o externo
+ * pode ser o único dos dois que sabe a categoria (entradas antigas do histórico
+ * foram gravadas antes de existir `poiCategory`): antes de descartar, o
+ * histórico adota o que falta, senão o mesmo lugar aparece com badge quando é
+ * novo e com alfinete quando já foi pesquisado.
+ */
+function mergeWithHistory(historyMatches: GeocodingResult[], results: GeocodingResult[]): GeocodingResult[] {
+  const withoutDuplicates = results.filter((result) => {
+    const sombreado = historyMatches.find(
+      (entry) => haversineDistanceMeters(entry.point, result.point) < HISTORY_DEDUPE_METERS,
+    )
+    if (!sombreado) return true
+    if (sombreado.poiCategory == null && result.poiCategory != null) {
+      sombreado.poiCategory = result.poiCategory
+    }
+    return false
+  })
+  return [...historyMatches, ...withoutDuplicates]
+}
+
+export function useAddressSuggestions(query: string, near: LngLat | null = null) {
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
+  // A posição vai por REF, não por dependência do efeito: o GPS atualiza a
+  // cada segundo, e refazer a busca a cada atualização seria bombardear os
+  // provedores (o Nominatim público pede no máximo ~1 requisição/s).
+  const nearRef = useRef(near)
+  nearRef.current = near
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -62,30 +90,24 @@ export function useAddressSuggestions(query: string) {
 
     const timeoutId = setTimeout(() => {
       getGeocodingProvider()
-        .search(trimmed)
+        .search(trimmed, {
+          near: nearRef.current,
+          /*
+            LISTA PROGRESSIVA. As fontes respondem em tempos muito diferentes: o
+            Nominatim em ~1 s, a busca por categoria no Overpass em 10–30 s.
+            Antes a lista só aparecia quando a mais lenta terminava (ou
+            estourava o teto e era descartada); agora aparece com o que já
+            chegou e vai se REORDENANDO — a farmácia da esquina entra na
+            posição certa quando o Overpass responde, sem a tela esperar.
+          */
+          onPartial: (parcial) => {
+            if (requestIdRef.current !== requestId) return
+            setSuggestions(mergeWithHistory(historyMatches, parcial))
+          },
+        })
         .then((results) => {
           if (requestIdRef.current !== requestId) return // resposta obsoleta — uma busca mais nova já está em andamento
-          // Histórico primeiro; resultados externos que apontam para o mesmo
-          // lugar são descartados para não duplicar a linha na lista.
-          /**
-           * O histórico SOMBREIA o resultado externo do mesmo lugar — e o
-           * externo pode ser o único dos dois que sabe a categoria (entradas
-           * antigas do histórico foram gravadas antes de existir `poiCategory`).
-           * Antes de descartar, o histórico adota o que falta, senão o mesmo
-           * lugar aparece com badge quando é novo e com alfinete quando já foi
-           * pesquisado.
-           */
-          const withoutDuplicates = results.filter((result) => {
-            const sombreado = historyMatches.find(
-              (entry) => haversineDistanceMeters(entry.point, result.point) < HISTORY_DEDUPE_METERS,
-            )
-            if (!sombreado) return true
-            if (sombreado.poiCategory == null && result.poiCategory != null) {
-              sombreado.poiCategory = result.poiCategory
-            }
-            return false
-          })
-          const lista = [...historyMatches, ...withoutDuplicates]
+          const lista = mergeWithHistory(historyMatches, results)
           setSuggestions(lista)
           setIsLoading(false)
 

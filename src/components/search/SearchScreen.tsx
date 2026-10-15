@@ -27,8 +27,16 @@ interface SearchScreenProps {
   onUseCurrentLocation?: () => void
 }
 
-/** Categorias rápidas do handoff. O texto vira termo de busca real — não é filtro decorativo. */
-const CATEGORIES = ['Restaurantes', 'Postos', 'Estacionar'] as const
+/**
+ * Atalhos de categoria. O texto vira termo de busca real — e o termo é
+ * reconhecido como TIPO de lugar (ver search/placeIntent.ts), então tocar em
+ * "Farmácias" lista as farmácias mais próximas de você, pela distância.
+ *
+ * A ordem segue o que quem anda de veículo elétrico mais procura no dia a dia:
+ * abastecer a rotina (farmácia, mercado, comer) e o que é do veículo (recarga,
+ * estacionar).
+ */
+const CATEGORIES = ['Farmácias', 'Mercados', 'Postos', 'Restaurantes', 'Padarias', 'Hospitais', 'Estacionar', 'Recarga'] as const
 
 export function SearchScreen({
   onBack,
@@ -44,7 +52,7 @@ export function SearchScreen({
   const [history, setHistory] = useState(() => listSearchHistory())
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { suggestions, isLoading, error } = useAddressSuggestions(query)
+  const { suggestions, isLoading, error } = useAddressSuggestions(query, userPoint)
 
   // Abre já com o teclado pronto — a tela existe para digitar um destino.
   useEffect(() => {
@@ -123,7 +131,7 @@ export function SearchScreen({
         </div>
 
         {/* Chip ativo em #0F1729 com texto branco; inativos brancos com hairline. */}
-        <div className="flex gap-2 overflow-x-auto pb-0.5">
+        <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {CATEGORIES.map((category) => {
             const selected = activeCategory === category
             return (

@@ -940,20 +940,63 @@ export default function App() {
    * `routeResult` é comparado por identidade: o upgrade substitui o objeto, e
    * a segunda passada vê `isReliable` já verdadeiro e não refaz nada.
    */
+  /*
+    CLASSIFICAÇÃO DAS VIAS, COM INSISTÊNCIA.
+
+    Os dados das vias vêm de um serviço público e gratuito que falha de vez em
+    quando (medido: 504 depois de 10 s numa consulta de 4 km²). O que acontecia
+    quando falhava: UMA tentativa, e a rota ficava para sempre sem classificação
+    — o app não sabia dizer qual era a mais recomendada, e o usuário não tinha
+    nem como pedir de novo.
+
+    Agora: tenta, e se não conseguir tenta de novo sozinho (8 s, 20 s, 45 s),
+    enquanto a rota estiver na tela. Esgotadas as tentativas, a folha mostra o
+    que houve e um botão para tentar outra vez. Cada tentativa é barata quando o
+    cache do aparelho já tem a área (ver waysStore).
+  */
+  const [classification, setClassification] = useState<'ready' | 'loading' | 'failed'>('ready')
+  const [classifyNonce, setClassifyNonce] = useState(0)
+
   useEffect(() => {
-    if (!routeResult) return
+    if (!routeResult) {
+      setClassification('ready')
+      return
+    }
+    if (routeResult.selected.severity.isReliable) {
+      setClassification('ready')
+      return
+    }
+
     let cancelled = false
-    enrichRouteResult(routeResult)
-      .then((upgraded) => {
-        if (upgraded && !cancelled) setRouteResult(upgraded)
-      })
-      .catch(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const ESPERAS_MS = [0, 8000, 20000, 45000]
+
+    const tentar = async (indice: number) => {
+      setClassification('loading')
+      try {
+        const upgraded = await enrichRouteResult(routeResult)
+        if (cancelled) return
+        if (upgraded) {
+          setRouteResult(upgraded)
+          return
+        }
+      } catch {
         // Falhou: a rota continua utilizável, só sem classificação por trecho.
-      })
+      }
+      if (cancelled) return
+      if (indice + 1 < ESPERAS_MS.length) {
+        timer = setTimeout(() => void tentar(indice + 1), ESPERAS_MS[indice + 1])
+      } else {
+        setClassification('failed')
+      }
+    }
+
+    void tentar(0)
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
     }
-  }, [routeResult])
+  }, [routeResult, classifyNonce])
 
   /**
    * Quando e com QUE ROTA a navegação começou — a base do tempo real da viagem.
@@ -1436,6 +1479,8 @@ export default function App() {
             routes={allRoutes}
             activeRouteId={activeScoredRoute.route.id}
             onSelectRoute={setActiveRouteId}
+            classification={classification}
+            onRetryClassification={() => setClassifyNonce((n) => n + 1)}
             onStartNavigation={() => {
               // Destrava o áudio no iOS aproveitando este toque — as instruções
               // seguintes vêm do GPS, que não conta como gesto do usuário.

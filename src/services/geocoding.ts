@@ -3,6 +3,9 @@ import { SUPPORTED_REGION, type LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
 
 import { POI_FALLBACK, poiCategoryForClass, resolvePoiCategory, type PoiCategory } from '@/components/map/poiLibrary'
+import { foldText, parseIntent, type ParsedIntent } from '@/services/search/placeIntent'
+import { isSamePlace, mergeInto } from '@/services/search/dedupe'
+import { rankCandidates, type RankCandidate } from '@/services/search/ranking'
 
 export interface GeocodingResult {
   label: string
@@ -32,6 +35,30 @@ export interface GeocodingResult {
    * terminal. Bairro não é estabelecimento, e nenhuma distância muda isso.
    */
   isArea?: boolean
+  /**
+   * Uso interno da ordenação: o resultado veio de uma busca por CATEGORIA e é do
+   * tipo pedido ("farmácia" → uma farmácia de verdade, não uma rua com o nome).
+   * A interface não lê isto; só `ranking.ts`.
+   */
+  intentMatch?: boolean
+}
+
+/**
+ * Opções de uma busca.
+ *
+ * `near` é a posição do USUÁRIO. Antes nenhuma fonte a recebia — a
+ * "proximidade" enviada ao MapTiler era o centro fixo da cidade, e o
+ * Nominatim/Overpass buscavam na região inteira. É por isso que digitar
+ * "farmácia" trazia uma a 7 km antes de uma a 2 km.
+ *
+ * `onPartial` entrega a lista PARCIAL conforme cada fonte responde. As fontes
+ * têm velocidades muito diferentes (Nominatim ~1 s, categoria no Overpass 10–30
+ * s), e esperar a mais lenta para mostrar qualquer coisa seria trocar uma
+ * lista boa em 1 s por uma excelente em 20.
+ */
+export interface SearchOptions {
+  near?: LngLat | null
+  onPartial?: (results: GeocodingResult[]) => void
 }
 
 /**
@@ -60,7 +87,7 @@ function adoptCategory(survivor: GeocodingResult, discarded: GeocodingResult): v
 
 export interface GeocodingProvider {
   isConfigured: boolean
-  search(query: string): Promise<GeocodingResult[]>
+  search(query: string, options?: SearchOptions): Promise<GeocodingResult[]>
   /** Geocodificação reversa (coordenada → endereço/nome aproximado). Retorna null se não conseguir resolver — nunca lança para não quebrar o fluxo de localização atual. */
   reverseGeocode(point: LngLat): Promise<string | null>
 }
@@ -75,7 +102,7 @@ export interface GeocodingProvider {
  */
 export interface PoiProvider {
   isConfigured: boolean
-  search(query: string): Promise<GeocodingResult[]>
+  search(query: string, options?: SearchOptions): Promise<GeocodingResult[]>
 }
 
 class UnconfiguredGeocodingProvider implements GeocodingProvider {
@@ -194,12 +221,94 @@ function describeNominatimResult(result: NominatimResult): {
  * ("Flamboy" não encontra "Flamboyant" sozinho) — por isso é combinado com o
  * MapTiler no CombinedGeocodingProvider, não usado isoladamente por padrão.
  */
+/**
+ * Espaçamento entre consultas ao Nominatim público.
+ *
+ * A política de uso pede no máximo ~1 requisição por segundo. A busca agora faz
+ * duas (região inteira, para nomes específicos distantes, e a vizinhança do
+ * usuário, para termos genéricos), então elas passam por esta fila de 1,1 s em
+ * vez de saírem juntas.
+ */
+let nominatimLiberadoEm = 0
+async function nominatimGate(): Promise<void> {
+  const agora = Date.now()
+  const espera = Math.max(0, nominatimLiberadoEm - agora)
+  nominatimLiberadoEm = Math.max(agora, nominatimLiberadoEm) + 1100
+  if (espera > 0) await new Promise((resolve) => setTimeout(resolve, espera))
+}
+
+const nominatimNearbyCache = new Map<string, { at: number; promise: Promise<GeocodingResult[]> }>()
+
+/** Meia-largura da vizinhança consultada em volta do usuário, em graus (~7,7 km). */
+const NEARBY_HALF_SPAN_DEG = 0.07
+
 class NominatimGeocodingProvider implements GeocodingProvider {
   isConfigured = true
 
   constructor(private readonly baseUrl: string) {}
 
+  /**
+   * A VIZINHANÇA do usuário, com limite geográfico FIRME.
+   *
+   * Medido: com a restrição solta (`bounded=0`) o Nominatim devolve, para
+   * "farmacia", lugares chamados "Farmacia" a 935 km — o viewbox sozinho é um
+   * empurrão fraco. Com `bounded=1` e a caixa em volta de quem busca, a mesma
+   * consulta devolve Drogasil a 304 m, Drogaria Zarpoli a 496 m.
+   *
+   * Pede 20, não 5: a lista é reordenada por distância depois, e as 5 de
+   * "maior importância" nem sempre são as 5 mais próximas.
+   *
+   * Com uma INTENÇÃO (categoria), descarta o que não é do tipo: o Nominatim
+   * responde "banco" com bancos de praça (`amenity=bench`).
+   */
+  async searchNearby(query: string, near: LngLat, parsed: ParsedIntent | null): Promise<GeocodingResult[]> {
+    // A pessoa digita "farm", "farma", "farmac"… e cada pausa dispara uma busca
+    // IGUAL (todas viram o termo "farmacia"). Sem este cache, são várias
+    // consultas idênticas a um serviço que pede no máximo uma por segundo.
+    const chave = `${parsed ? `${parsed.term} ${parsed.nameFilter}` : query}|${near.lat.toFixed(2)},${near.lng.toFixed(2)}`
+    const emMemoria = nominatimNearbyCache.get(chave)
+    if (emMemoria && Date.now() - emMemoria.at < 120_000) return emMemoria.promise
+    const promise = this.fetchNearby(query, near, parsed)
+    nominatimNearbyCache.set(chave, { at: Date.now(), promise })
+    promise.catch(() => nominatimNearbyCache.delete(chave))
+    return promise
+  }
+
+  private async fetchNearby(query: string, near: LngLat, parsed: ParsedIntent | null): Promise<GeocodingResult[]> {
+    await nominatimGate()
+    const d = NEARBY_HALF_SPAN_DEG
+    const params = new URLSearchParams({
+      q: parsed ? `${parsed.term} ${parsed.nameFilter}`.trim() : query,
+      format: 'json',
+      limit: '20',
+      viewbox: `${near.lng - d},${near.lat + d},${near.lng + d},${near.lat - d}`,
+      bounded: '1',
+    })
+
+    const response = await fetch(`${this.baseUrl}/search?${params.toString()}`, { headers: { Accept: 'application/json' } })
+    if (!response.ok) throw new Error('Nominatim indisponível')
+
+    const tipos = parsed ? new Set(parsed.intent.nominatim) : null
+    const filtro = parsed?.nameFilter ? foldText(parsed.nameFilter) : ''
+    const raw = (await response.json()) as NominatimResult[]
+    return raw
+      .filter((result) => !tipos || tipos.has(`${result.class}:${result.type}`))
+      .filter((result) => !filtro || foldText(result.display_name.split(',')[0]).includes(filtro))
+      .map((result) => {
+        const { label, secondaryLabel, poiCategory, isArea } = describeNominatimResult(result)
+        return {
+          label,
+          secondaryLabel,
+          poiCategory,
+          isArea,
+          intentMatch: parsed != null,
+          point: { lng: Number(result.lon), lat: Number(result.lat) },
+        }
+      })
+  }
+
   async search(query: string): Promise<GeocodingResult[]> {
+    await nominatimGate()
     const { southWest, northEast } = SUPPORTED_REGION.bounds
     const params = new URLSearchParams({
       q: query,
@@ -287,15 +396,18 @@ class MapTilerGeocodingProvider implements GeocodingProvider {
 
   constructor(private readonly apiKey: string) {}
 
-  async search(query: string): Promise<GeocodingResult[]> {
+  async search(query: string, options: SearchOptions = {}): Promise<GeocodingResult[]> {
     const { southWest, northEast } = SUPPORTED_REGION.bounds
+    // Proximidade da PESSOA, não do centro da cidade: é o parâmetro que faz o
+    // MapTiler preferir a rua da esquina à de mesmo nome do outro lado da cidade.
+    const ancora = options.near ?? SUPPORTED_REGION.center
     const params = new URLSearchParams({
       key: this.apiKey,
       autocomplete: 'true',
       language: 'pt',
       limit: '5',
       bbox: `${southWest.lng},${southWest.lat},${northEast.lng},${northEast.lat}`,
-      proximity: `${SUPPORTED_REGION.center.lng},${SUPPORTED_REGION.center.lat}`,
+      proximity: `${ancora.lng},${ancora.lat}`,
     })
 
     const response = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params.toString()}`)
@@ -384,7 +496,7 @@ const OVERPASS_CATEGORY_LABEL: Record<string, string> = {
 }
 
 interface OverpassPoiElement {
-  type: 'node' | 'way'
+  type: 'node' | 'way' | 'relation'
   lat?: number
   lon?: number
   center?: { lat: number; lon: number }
@@ -410,11 +522,63 @@ function describeOverpassElement(tags: Record<string, string>): {
   // O valor da tag (`amenity=pharmacy`, `shop=bakery`) É o vocabulário de
   // classe da biblioteca — passa direto pela mesma função de fallback.
   const categoryKey = OVERPASS_POI_TAG_KEYS.map((key) => tags[key]).find(Boolean)
-  const secondaryLabel = (categoryKey && OVERPASS_CATEGORY_LABEL[categoryKey]) || 'Ponto de interesse'
+  const categoria = (categoryKey && OVERPASS_CATEGORY_LABEL[categoryKey]) || 'Ponto de interesse'
+  // O ENDEREÇO, quando o OSM o tem: duas "Drogasil" na lista só se distinguem
+  // pela rua — e é pela rua que a pessoa reconhece a que está na esquina.
+  const rua = tags['addr:street']
+  const numero = tags['addr:housenumber']
+  const bairro = tags['addr:suburb']
+  const endereco = rua ? `${rua}${numero ? `, ${numero}` : ''}` : bairro
+  const secondaryLabel = endereco ? `${categoria} · ${endereco}` : categoria
   return { label, secondaryLabel, poiCategory: poiCategoryForClass(categoryKey) }
 }
 
 const overpassPoiCache = new Map<string, Promise<GeocodingResult[]>>()
+
+/**
+ * Resultados de busca por categoria, guardados no aparelho por uma semana.
+ *
+ * A consulta é a mais lenta e a mais sujeita a falha de todo o app (o servidor
+ * público chega a levar 30 s ou devolver 504), e o conteúdo quase nunca muda:
+ * as farmácias em volta de casa de hoje são as de ontem. Guardado, "farmácia"
+ * volta na hora na segunda vez — e continua funcionando com o Overpass fora.
+ */
+const INTENT_CACHE_PREFIX = 'gps-scooter:intent:'
+const INTENT_CACHE_FRESH_MS = 7 * 24 * 60 * 60 * 1000
+const INTENT_CACHE_MAX_KEYS = 30
+
+function readIntentCache(chave: string): { results: GeocodingResult[]; fresh: boolean } | null {
+  try {
+    const raw = localStorage.getItem(INTENT_CACHE_PREFIX + chave)
+    if (!raw) return null
+    const { at, results } = JSON.parse(raw) as { at: number; results: GeocodingResult[] }
+    return { results, fresh: Date.now() - at < INTENT_CACHE_FRESH_MS }
+  } catch {
+    return null
+  }
+}
+
+function writeIntentCache(chave: string, results: GeocodingResult[]) {
+  try {
+    localStorage.setItem(INTENT_CACHE_PREFIX + chave, JSON.stringify({ at: Date.now(), results: results.slice(0, 60) }))
+    // Sem crescer para sempre: descarta as mais antigas além do limite.
+    const chaves = Object.keys(localStorage).filter((k) => k.startsWith(INTENT_CACHE_PREFIX))
+    if (chaves.length > INTENT_CACHE_MAX_KEYS) {
+      const idade = chaves
+        .map((k) => {
+          try {
+            return { k, at: (JSON.parse(localStorage.getItem(k) ?? '{}') as { at?: number }).at ?? 0 }
+          } catch {
+            return { k, at: 0 }
+          }
+        })
+        .sort((a, b) => a.at - b.at)
+      for (const { k } of idade.slice(0, chaves.length - INTENT_CACHE_MAX_KEYS)) localStorage.removeItem(k)
+    }
+  } catch {
+    // localStorage cheio ou indisponível: sem cache, só isso.
+  }
+}
 
 /**
  * Provedor complementar de POIs via Overpass API (mesmo serviço já usado em
@@ -463,6 +627,77 @@ class OverpassPoiProvider implements PoiProvider {
       return await Promise.race([this.request(trimmed), budget])
     } finally {
       if (timer) clearTimeout(timer)
+    }
+  }
+
+  /**
+   * BUSCA POR CATEGORIA, em volta do usuário.
+   *
+   * É a que acha a Droga Raia quando se digita "farmácia": pergunta ao OSM pelas
+   * `amenity=pharmacy` num raio, em vez de procurar a palavra no nome. Completa
+   * mas lenta (10–30 s no servidor público) — por isso o chamador a trata como
+   * fonte que chega DEPOIS, e por isso o resultado fica guardado no aparelho:
+   * a farmácia da esquina não muda de uma semana para outra.
+   */
+  async searchIntent(parsed: ParsedIntent, near: LngLat): Promise<GeocodingResult[]> {
+    const chave = `${parsed.intent.id}|${parsed.nameFilter}|${near.lat.toFixed(2)},${near.lng.toFixed(2)}`
+    const guardado = readIntentCache(chave)
+    if (guardado?.fresh) return guardado.results
+
+    const emMemoria = overpassPoiCache.get(`intent:${chave}`)
+    if (emMemoria) return emMemoria
+
+    const promise = this.fetchIntent(parsed, near)
+      .then((results) => {
+        if (results.length > 0) writeIntentCache(chave, results)
+        return results
+      })
+      .catch((erro) => {
+        // Rede falhou: dado velho serve de reserva.
+        if (guardado) return guardado.results
+        throw erro
+      })
+    overpassPoiCache.set(`intent:${chave}`, promise)
+    promise.catch(() => overpassPoiCache.delete(`intent:${chave}`))
+    return promise
+  }
+
+  private async fetchIntent(parsed: ParsedIntent, near: LngLat): Promise<GeocodingResult[]> {
+    const { intent, nameFilter } = parsed
+    const ao = `(around:${intent.radiusM},${near.lat},${near.lng})`
+    const nome = nameFilter ? `["name"~"${escapeOverpassRegex(nameFilter)}",i]` : ''
+    const clausulas = intent.overpass.map((filtro) => `nwr[${filtro}]${nome}${ao};`)
+    if (intent.nameAlt && intent.nameTags && !nameFilter) {
+      clausulas.push(
+        `nwr["name"~"${intent.nameAlt.replace(/"/g, '\\"')}"]["amenity"~"^(${intent.nameTags})$"]${ao};`,
+      )
+    }
+    const ql = `[out:json][timeout:25];(${clausulas.join('')});out center tags 80;`
+
+    const abortController = new AbortController()
+    const abortTimer = setTimeout(() => abortController.abort(), OVERPASS_HARD_TIMEOUT_MS)
+    try {
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: ql,
+        signal: abortController.signal,
+      })
+      if (!response.ok) throw new Error('Overpass (categoria) indisponível')
+      const data = (await response.json()) as OverpassPoiResponse
+      return (data.elements ?? [])
+        // Sem nome não há o que mostrar: "Local" 40 vezes não ajuda ninguém.
+        .filter((element) => element.tags?.name)
+        .map((element) => {
+          const point =
+            element.type === 'node'
+              ? { lat: element.lat as number, lng: element.lon as number }
+              : { lat: (element.center as { lat: number; lon: number }).lat, lng: (element.center as { lat: number; lon: number }).lon }
+          const { label, secondaryLabel, poiCategory } = describeOverpassElement(element.tags as Record<string, string>)
+          return { label, secondaryLabel, poiCategory, point, intentMatch: true }
+        })
+    } finally {
+      clearTimeout(abortTimer)
     }
   }
 
@@ -704,45 +939,66 @@ class CombinedPoiProvider implements PoiProvider {
     private readonly mapbox: MapboxPoiProvider | null,
   ) {}
 
-  async search(query: string): Promise<GeocodingResult[]> {
-    const [nominatimOutcome, overpassOutcome, mapboxOutcome] = await Promise.allSettled([
-      this.nominatim.search(query),
-      this.overpass.search(query),
-      this.mapbox ? this.mapbox.search(query) : Promise.resolve([]),
-    ])
+  async search(query: string, options: SearchOptions = {}): Promise<GeocodingResult[]> {
+    const near = options.near ?? null
+    const parsed = parseIntent(query)
+    const categoryOnly = parsed != null && parsed.nameFilter === ''
 
-    const nominatimResults = nominatimOutcome.status === 'fulfilled' ? nominatimOutcome.value : []
-    const overpassResults = overpassOutcome.status === 'fulfilled' ? overpassOutcome.value : []
-    const mapboxResults = mapboxOutcome.status === 'fulfilled' ? mapboxOutcome.value : []
-
-    const combined: { result: GeocodingResult; bonus: number }[] = nominatimResults.map((result) => ({ result, bonus: 0 }))
-    for (const candidate of overpassResults) {
-      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      if (duplicate) adoptCategory(duplicate.result, candidate)
-      else combined.push({ result: candidate, bonus: OVERPASS_OVER_NOMINATIM_BONUS })
-    }
-    for (const candidate of mapboxResults) {
-      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      if (duplicate) adoptCategory(duplicate.result, candidate)
-      else combined.push({ result: candidate, bonus: MAPBOX_OVER_NOMINATIM_BONUS })
+    const candidates: RankCandidate[] = []
+    const addAll = (results: GeocodingResult[], sourceBonus: number) => {
+      for (const candidate of results) {
+        const duplicate = candidates.find((existing) => isSamePlace(existing.result, candidate))
+        if (duplicate) {
+          mergeInto(duplicate.result, candidate, query, near)
+          if (candidate.intentMatch) duplicate.intentMatch = true
+        } else {
+          candidates.push({ result: candidate, sourceBonus, intentMatch: candidate.intentMatch })
+        }
+      }
     }
 
-    const allFailed =
-      nominatimOutcome.status === 'rejected' && overpassOutcome.status === 'rejected' && mapboxOutcome.status === 'rejected'
-    if (combined.length === 0 && allFailed) {
+    const ranked = () => rankCandidates([...candidates], { query, near: near ?? (categoryOnly ? SUPPORTED_REGION.center : null), categoryOnly })
+    const emit = () => options.onPartial?.(ranked())
+    let succeeded = 0
+    const run = (promise: Promise<GeocodingResult[]>, sourceBonus: number) =>
+      promise
+        .then((results) => {
+          succeeded += 1
+          addAll(results, sourceBonus)
+          emit()
+        })
+        .catch(() => undefined)
+
+    // Fontes RÁPIDAS (~1 s): o que a lista espera.
+    const rapidas = [
+      // Região inteira: nomes específicos, onde quer que estejam.
+      run(this.nominatim.search(query), 0),
+      // Vizinhança de quem busca: termos genéricos e filiais próximas.
+      near ? run(this.nominatim.searchNearby(query, near, parsed), 0) : Promise.resolve(),
+      run(this.overpass.search(query), OVERPASS_OVER_NOMINATIM_BONUS),
+      this.mapbox ? run(this.mapbox.search(query), MAPBOX_OVER_NOMINATIM_BONUS) : Promise.resolve(),
+    ]
+
+    // Fonte LENTA (10–30 s): a categoria no Overpass. Sem posição não há "perto",
+    // então cai no centro da região — a lista ainda sai por distância, ao centro.
+    const lenta = parsed
+      ? run(this.overpass.searchIntent(parsed, near ?? SUPPORTED_REGION.center), 0)
+      : Promise.resolve()
+
+    await Promise.all(rapidas)
+    // Espera a categoria só um pouco: se ela demorar, a lista sai sem ela e ela
+    // entra DEPOIS, pelo mesmo `onPartial` — a busca não fica refém do mais lento.
+    await Promise.race([lenta, new Promise((resolve) => setTimeout(resolve, INTENT_PATIENCE_MS))])
+
+    if (succeeded === 0 && candidates.length === 0) {
       throw new Error('Não foi possível buscar estabelecimentos agora. Tente novamente.')
     }
-
-    const withScore = combined.map((entry, index) => ({
-      result: entry.result,
-      index,
-      score: relevanceScore(entry.result.label, query) + entry.bonus,
-    }))
-    withScore.sort((a, b) => b.score - a.score || a.index - b.index)
-
-    return withScore.map((entry) => entry.result)
+    return ranked()
   }
 }
+
+/** Quanto a busca espera pela categoria (a fonte lenta) antes de entregar a lista sem ela. */
+const INTENT_PATIENCE_MS = 3500
 
 /**
  * Combina um GeocodingProvider de endereço (MapTiler — prefixo, ruas/bairros)
@@ -760,45 +1016,72 @@ class CombinedGeocodingProvider implements GeocodingProvider {
     private readonly reverseGeocodeFallback: GeocodingProvider,
   ) {}
 
-  async search(query: string): Promise<GeocodingResult[]> {
+  async search(query: string, options: SearchOptions = {}): Promise<GeocodingResult[]> {
+    const near = options.near ?? null
+    const parsed = parseIntent(query)
+    const categoryOnly = parsed != null && parsed.nameFilter === ''
+
+    let addressResults: GeocodingResult[] = []
+    let poiResults: GeocodingResult[] = []
+    let addressOk = false
+    let poiOk = false
+
+    /**
+     * Ordenação por TEXTO + DISTÂNCIA (ver search/ranking.ts).
+     *
+     * Um estabelecimento real (PoiProvider) ganha um bônus sobre um endereço
+     * puro (GeocodingProvider) em caso de empate textual — sem isso, "Flor" bate
+     * igualmente em "Rua Flor da Acácia" e em "Florênça" (a farmácia), e a rua
+     * ocupava a vaga enquanto o estabelecimento nunca aparecia — bug real
+     * encontrado em teste. O que mudou é que agora a distância também pesa, e
+     * pesa MAIS quando o pedido é um tipo de lugar ("farmácia").
+     */
+    const combine = (): GeocodingResult[] => {
+      const candidates: RankCandidate[] = addressResults.map((result) => ({
+        result,
+        sourceBonus: 0,
+        intentMatch: result.intentMatch,
+      }))
+      for (const candidate of poiResults) {
+        const duplicate = candidates.find((existing) => isSamePlace(existing.result, candidate))
+        // O endereço sobrevive por estar primeiro, mas é o POI que sabe QUE
+        // tipo de lugar é aquilo — e `mergeInto` deixa o melhor texto vencer.
+        if (duplicate) {
+          mergeInto(duplicate.result, candidate, query, near)
+          if (candidate.intentMatch) duplicate.intentMatch = true
+        } else candidates.push({ result: candidate, sourceBonus: POI_OVER_ADDRESS_BONUS, intentMatch: candidate.intentMatch })
+      }
+      const limite = categoryOnly ? MAX_COMBINED_RESULTS + 4 : MAX_COMBINED_RESULTS
+      return rankCandidates(candidates, { query, near: near ?? (categoryOnly ? SUPPORTED_REGION.center : null), categoryOnly }).slice(0, limite)
+    }
+    const emit = () => options.onPartial?.(combine())
+
     const [addressOutcome, poiOutcome] = await Promise.allSettled([
-      this.addressProvider.search(query),
-      this.poiProvider.search(query),
+      this.addressProvider.search(query, options).then((results) => {
+        addressResults = results
+        addressOk = true
+        emit()
+      }),
+      this.poiProvider
+        .search(query, {
+          ...options,
+          // A cada fonte do POI que responde, a lista inteira é recombinada.
+          onPartial: (parcial) => {
+            poiResults = parcial
+            poiOk = true
+            emit()
+          },
+        })
+        .then((results) => {
+          poiResults = results
+          poiOk = true
+        }),
     ])
 
-    const addressResults = addressOutcome.status === 'fulfilled' ? addressOutcome.value : []
-    const poiResults = poiOutcome.status === 'fulfilled' ? poiOutcome.value : []
-
-    // Um estabelecimento real (PoiProvider) ganha um bônus sobre um endereço
-    // puro (GeocodingProvider) em caso de empate textual — sem isso, "Flor"
-    // bate igualmente em "Rua Flor da Acácia" e em "Florênça" (a farmácia), e
-    // a rua ocupava a vaga na lista enquanto o estabelecimento nunca
-    // aparecia — bug real encontrado em teste (ver relatório), não hipotético.
-    const combined: { result: GeocodingResult; sourceBonus: number }[] = addressResults.map((result) => ({ result, sourceBonus: 0 }))
-    for (const candidate of poiResults) {
-      const duplicate = combined.find((existing) => haversineDistanceMeters(existing.result.point, candidate.point) < DEDUPE_DISTANCE_METERS)
-      // O endereço sobrevive por estar primeiro, mas é o POI que sabe QUE
-      // tipo de lugar é aquilo. Sem esta linha o badge se perdia aqui.
-      if (duplicate) adoptCategory(duplicate.result, candidate)
-      else combined.push({ result: candidate, sourceBonus: POI_OVER_ADDRESS_BONUS })
-    }
-
-    const allFailed = addressOutcome.status === 'rejected' && poiOutcome.status === 'rejected'
-    if (combined.length === 0 && allFailed) {
+    if (!addressOk && !poiOk && addressOutcome.status === 'rejected' && poiOutcome.status === 'rejected') {
       throw new Error('Não foi possível buscar o endereço agora. Tente novamente.')
     }
-
-    // Ordenação estável por relevância — preserva a ordem original entre
-    // empates, mas garante que o melhor match textual (mais o bônus de
-    // fonte) apareça primeiro, independente de qual fonte o encontrou.
-    const withScore = combined.map((entry, index) => ({
-      result: entry.result,
-      index,
-      score: relevanceScore(entry.result.label, query) + entry.sourceBonus,
-    }))
-    withScore.sort((a, b) => b.score - a.score || a.index - b.index)
-
-    return withScore.slice(0, MAX_COMBINED_RESULTS).map((entry) => entry.result)
+    return combine()
   }
 
   async reverseGeocode(point: LngLat): Promise<string | null> {

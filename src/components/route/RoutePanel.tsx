@@ -41,6 +41,9 @@ interface RoutePanelProps {
   onSelectRoute: (routeId: string) => void
   onStartNavigation: () => void
   onDismiss: () => void
+  /** Estado da classificação das vias da rota ativa (ver App). */
+  classification?: 'ready' | 'loading' | 'failed'
+  onRetryClassification?: () => void
   /**
    * Veredito de autonomia POR ROTA, indexado pelo id.
    *
@@ -72,6 +75,8 @@ export function RoutePanel({
   onSelectRoute,
   onStartNavigation,
   onDismiss,
+  classification = 'ready',
+  onRetryClassification,
   autonomyByRouteId,
 }: RoutePanelProps) {
   const activeRoute = routes.find((entry) => entry.route.id === activeRouteId) ?? routes[0]
@@ -110,6 +115,32 @@ export function RoutePanel({
                 onSelect={() => onSelectRoute(entry.route.id)}
               />
             ))}
+          </div>
+        )}
+
+        {!activeRoute.severity.isReliable && classification !== 'ready' && (
+          <div className="flex shrink-0 items-center gap-3 rounded-xl bg-surface-sunken px-3.5 py-3">
+            {classification === 'loading' ? (
+              <>
+                <span className="h-[18px] w-[18px] shrink-0 animate-spin rounded-pill border-2 border-brand-500 border-t-transparent" />
+                <p className="text-[13.5px] font-semibold text-content-secondary">Classificando as vias do trajeto…</p>
+              </>
+            ) : (
+              <>
+                <p className="min-w-0 flex-1 text-[13.5px] font-semibold text-content-secondary">
+                  Sem os dados das vias agora — não dá para dizer qual rota é a mais recomendada.
+                </p>
+                {onRetryClassification && (
+                  <button
+                    type="button"
+                    onClick={onRetryClassification}
+                    className="shrink-0 rounded-pill bg-brand-500 px-3.5 py-2 text-[13px] font-extrabold text-content-on-accent transition-all duration-fast active:scale-[.97]"
+                  >
+                    Tentar de novo
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
 

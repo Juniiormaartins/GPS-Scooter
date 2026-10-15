@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 import { useState } from 'react'
 import { BatteryDial } from '@/components/vehicle/BatteryDial'
 import { Button } from '@/components/ui/Button'
@@ -97,6 +98,24 @@ export function VehicleOnboarding({ preferences, onFinish }: VehicleOnboardingPr
   return (
     <div className="absolute inset-0 z-[60] flex flex-col bg-surface px-gutter pb-[calc(var(--safe-bottom)+1.25rem)] pt-[max(2rem,var(--safe-top))]">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/*
+        MARCA E PASSO. A primeira tela do app era um título e uma lista, sem a
+        logo em lugar nenhum — a primeira impressão não dizia de quem era o app.
+        A logo (o pino com a scooter) abre a tela, e os dois pontos dizem que
+        são DOIS passos, e em qual deles se está: quem não sabe quantas telas
+        faltam desiste mais fácil.
+      */}
+      <div className="mb-6 flex shrink-0 items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <img src="/icons/icon-192.png" alt="" width={40} height={40} className="h-10 w-10 rounded-[12px] shadow-tile" />
+          <span className="text-[15px] font-extrabold tracking-[-0.2px] text-content-primary">GPS Scooter</span>
+        </div>
+        <div className="flex items-center gap-1.5" role="img" aria-label={`Passo ${step === 'vehicle' ? 1 : 2} de 2`}>
+          <span className={`h-1.5 rounded-pill transition-all duration-base ${step === 'vehicle' ? 'w-6 bg-brand-500' : 'w-1.5 bg-hairline/20'}`} />
+          <span className={`h-1.5 rounded-pill transition-all duration-base ${step === 'battery' ? 'w-6 bg-brand-500' : 'w-1.5 bg-hairline/20'}`} />
+        </div>
+      </div>
+
         {step === 'vehicle' ? (
           <VehicleStep
             modelId={modelId}
@@ -213,18 +232,34 @@ function VehicleStep({
               type="button"
               onClick={() => onSelect(preset.id)}
               aria-pressed={isActive}
-              className={`w-full rounded-xl px-4 py-3.5 text-left transition-all duration-base active:scale-[.98] ${
-                isActive ? 'border-2 border-brand-500 bg-surface-selected' : 'border border-hairline/[.08] bg-surface-card'
+              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left transition-all duration-base active:scale-[.98] ${
+                isActive ? 'border-2 border-brand-500 bg-surface-selected' : 'border-2 border-transparent bg-surface-card shadow-tile'
               }`}
             >
-              <span className="block text-[16px] font-extrabold text-content-primary">{preset.label}</span>
-              {/*
-                A frase abaixo é gerada do PERFIL REAL de mobilidade, não escrita
-                à mão: é a mesma tabela que decide as rotas. Se um dia a regra do
-                bicicleta mudar, este texto muda junto — não vira promessa velha.
-              */}
-              <span className="mt-0.5 block text-[13px] font-semibold text-content-tertiary">
-                {describeProfile(preset.id)} · {preset.topSpeedKmh} km/h · {preset.rangeKm} km
+              <span
+                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-all duration-base ${
+                  isActive ? 'btn-sheen bg-brand-500 text-content-on-accent shadow-primary' : 'bg-surface-tile text-content-secondary'
+                }`}
+              >
+                <Icon name={preset.id === 'ebike-25' ? 'bike' : 'scooter'} size={26} active={isActive} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-extrabold text-content-primary">{preset.label}</span>
+                {/*
+                  A frase abaixo é gerada do PERFIL REAL de mobilidade, não escrita
+                  à mão: é a mesma tabela que decide as rotas. Se um dia a regra do
+                  bicicleta mudar, este texto muda junto — não vira promessa velha.
+                */}
+                <span className="mt-0.5 block text-[13px] font-semibold text-content-tertiary">
+                  {describeProfile(preset.id)} · {preset.topSpeedKmh} km/h · {preset.rangeKm} km
+                </span>
+              </span>
+              <span
+                className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-pill ${
+                  isActive ? 'bg-brand-500 text-white' : 'border-2 border-hairline/[.14]'
+                }`}
+              >
+                {isActive && <Icon name="check" size={15} strokeWidth={3} />}
               </span>
               <span className="sr-only">{profile.label}</span>
             </button>
