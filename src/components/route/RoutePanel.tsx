@@ -6,6 +6,7 @@ import { gradeRoute } from '@/services/routing/routeGrade'
 import type { AutonomyAssessment } from '@/services/vehicle/autonomy'
 import type { Eligibility, ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta } from '@/utils/geo'
+import { Icon } from '@/components/ui/Icon'
 
 const LABEL_TEXT: Record<NonNullable<ScoredRoute['label']>, string> = {
   recommended: 'Recomendada',
@@ -52,13 +53,18 @@ interface RoutePanelProps {
 }
 
 /**
- * Bottom sheet de escolha de rota (tela 3 do handoff): eyebrow "OPÇÕES DE
- * ROTA", os cards de candidata com gap de 12px e, no fim, o CTA verde
- * "Iniciar Navegação" com margem superior de 20px.
+ * Bottom sheet de escolha de rota.
  *
- * Cada card traz selo, distância, **o motivo em uma frase** e o ETA em
- * 26px/800 à direita — o "porquê" da classificação é regra do handoff e vem
- * do ruleEngine real (highlights), não de texto fixo.
+ * ESTRUTURA: uma FILEIRA de opções para comparar de relance e UM cartão de
+ * detalhe da selecionada. A versão anterior empilhava um cartão por rota, cada
+ * um do tamanho de um terço da folha; só um cabia sem rolar, e comparar rotas
+ * obrigava a rolar entre elas — o contrário do que a escolha pede. O próprio
+ * comentário do componente já dizia que "comparar exige ver as opções lado a
+ * lado"; a implementação é que não fazia isso.
+ *
+ * Agora as opções ficam numa linha (tempo, distância e um selo de cor) e o
+ * "porquê" da escolhida — grau, trechos, autonomia — aparece uma vez, embaixo.
+ * O "porquê" continua vindo do ruleEngine real, não de texto fixo.
  */
 export function RoutePanel({
   routes,
@@ -72,8 +78,8 @@ export function RoutePanel({
   if (!activeRoute) return null
 
   return (
-    // Altura total do sheet: só a LISTA rola; o CTA fica ancorado embaixo,
-    // sempre visível, sem depender de o usuário rolar até o fim.
+    // Altura total do sheet: só o MIOLO rola, se precisar; o CTA fica ancorado
+    // embaixo, sempre visível, sem depender de o usuário rolar até o fim.
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between">
         <SectionLabel>{routes.length > 1 ? 'Opções de rota' : 'Rota'}</SectionLabel>
@@ -84,27 +90,34 @@ export function RoutePanel({
           /*
             ALVO DE TOQUE de 44px. O ícone continua com 20px — o que cresce é a
             área sensível, e o `-m-2.5` devolve o espaço para o layout não se
-            mexer. Medido na auditoria: este botão tinha 28×28, bem abaixo do
-            mínimo confortável.
+            mexer.
           */
           className="-m-2.5 flex h-11 w-11 items-center justify-center p-2.5 text-content-tertiary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
         >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
-            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-          </svg>
+          <Icon name="close" size={20} strokeWidth={2.2} />
         </button>
       </div>
 
-      <div className="-mx-1 mt-stack flex min-h-0 flex-1 flex-col gap-stack overflow-y-auto px-1 pb-2">
-        {routes.map((entry) => (
-          <RouteOptionCard
-            key={entry.route.id}
-            scoredRoute={entry}
-            isSelected={entry.route.id === activeRouteId}
-            autonomy={autonomyByRouteId?.[entry.route.id]}
-            onSelect={() => onSelectRoute(entry.route.id)}
-          />
-        ))}
+      <div className="-mx-1 mt-stack flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 pb-2">
+        {routes.length > 1 && (
+          <div role="radiogroup" aria-label="Opções de rota" className="-mx-1 flex shrink-0 snap-x gap-2.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {routes.map((entry, index) => (
+              <RouteChip
+                key={entry.route.id}
+                position={index + 1}
+                scoredRoute={entry}
+                isSelected={entry.route.id === activeRoute.route.id}
+                onSelect={() => onSelectRoute(entry.route.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        <RouteDetail
+          scoredRoute={activeRoute}
+          showMetrics={routes.length === 1}
+          autonomy={autonomyByRouteId?.[activeRoute.route.id]}
+        />
       </div>
 
       <Button
@@ -124,109 +137,133 @@ export function RoutePanel({
   )
 }
 
-function RouteOptionCard({
+const TONE_DOT: Record<'go' | 'warn' | 'danger', string> = {
+  go: 'bg-success-500',
+  warn: 'bg-warning-500',
+  danger: 'bg-danger-500',
+}
+
+/** Uma opção na fileira: o mínimo para COMPARAR — tempo, distância e a cor do veredito. */
+function RouteChip({
   scoredRoute,
+  position,
   isSelected,
-  autonomy,
   onSelect,
 }: {
   scoredRoute: ScoredRoute
+  /** Posição na fileira, para numerar as alternativas sem nome. */
+  position: number
   isSelected: boolean
-  autonomy?: AutonomyAssessment
   onSelect: () => void
+}) {
+  const tone = ELIGIBILITY_TONE[scoredRoute.eligibility]
+  const label = scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : `Opção ${position}`
+
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={isSelected}
+      onClick={onSelect}
+      className={`min-w-[116px] flex-1 shrink-0 snap-start rounded-xl px-3 py-2.5 text-left transition-all duration-base ease-standard active:scale-[.97] ${
+        isSelected
+          ? 'border-2 border-brand-500 bg-surface-selected shadow-tile'
+          : 'border-2 border-transparent bg-surface-sunken'
+      }`}
+    >
+      <span className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-pill ${TONE_DOT[tone]}`} aria-hidden="true" />
+        <span className="truncate text-[12px] font-bold text-content-tertiary">{label}</span>
+      </span>
+      <span className="mt-1 block text-[21px] font-black leading-none tracking-[-0.3px] text-content-primary">
+        {formatEta(scoredRoute.etaMinutes)}
+      </span>
+      <span className="mt-1 block text-[13px] font-semibold text-content-secondary">
+        {formatDistance(scoredRoute.route.totalDistanceMeters)}
+      </span>
+    </button>
+  )
+}
+
+/** O "porquê" da rota selecionada — aparece UMA vez, em vez de uma por candidata. */
+function RouteDetail({
+  scoredRoute,
+  showMetrics,
+  autonomy,
+}: {
+  scoredRoute: ScoredRoute
+  /** Só quando NÃO há fileira de opções: com ela, tempo e distância já estão no chip selecionado. */
+  showMetrics: boolean
+  autonomy?: AutonomyAssessment
 }) {
   const tone = ELIGIBILITY_TONE[scoredRoute.eligibility]
   const reason = scoredRoute.highlights[0]
   const grade = gradeRoute(scoredRoute)
 
-  /*
-    CARD COMPACTO. A versão anterior dava o mesmo peso a todas as candidatas —
-    selo, motivo em 16px, barra e resumo em cada uma —, e com três rotas a
-    lista não cabia na tela sem rolar. Comparar exige ver as opções LADO A
-    LADO; se é preciso rolar entre elas, a comparação se perde.
-
-    A hierarquia agora é: toda candidata mostra o essencial para comparar
-    (tempo, distância, composição do trajeto). Só a SELECIONADA se expande com
-    o motivo por extenso e os trechos citados um a um — que é a informação de
-    quem já escolheu e quer conferir.
-  */
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`flex w-full items-center gap-3.5 rounded-xl px-3.5 py-3 text-left transition-all duration-base ease-standard active:scale-[.97] ${
-        isSelected ? 'border-2 border-brand-500 bg-surface-selected' : 'border border-hairline/[.08] bg-surface-card'
-      }`}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+    <div className="shrink-0 rounded-xl border border-hairline/[.08] bg-surface-card px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Tag tone={tone}>{scoredRoute.label ? LABEL_TEXT[scoredRoute.label] : 'Alternativa'}</Tag>
           {/*
-            O GRAU no lugar do percentual.
-
-            "49% adequada" é uma média, e média esconde concentração: o mesmo
-            49% pode ser a cidade toda meio ruim ou 4 km de rodovia no meio de
-            um trajeto ótimo. O grau é calculado sobre a EXPOSIÇÃO CRÍTICA (ver
-            routeGrade), que é o que de fato decide se dá para ir. O percentual
-            não some — continua abaixo, na candidata selecionada.
+            O GRAU no lugar do percentual: "49% adequada" é uma média, e média
+            esconde concentração — o mesmo 49% pode ser a cidade toda meio ruim
+            ou 4 km de rodovia no meio de um trajeto ótimo. O grau é calculado
+            sobre a EXPOSIÇÃO CRÍTICA (ver routeGrade).
           */}
           <RouteGradeBadge grade={grade} />
         </div>
+      </div>
 
-        <div className="mt-1 flex items-baseline gap-2.5">
+      {showMetrics && (
+        <div className="mt-2 flex items-baseline gap-2.5">
           <span className="text-metric-card text-content-primary">{formatEta(scoredRoute.etaMinutes)}</span>
           <span className="text-[17px] font-semibold text-content-secondary">
             {formatDistance(scoredRoute.route.totalDistanceMeters)}
           </span>
         </div>
+      )}
 
-        <div className="mt-2">
-          <SuitabilityBar severity={scoredRoute.severity} compact={!isSelected} />
-        </div>
-
-        {/* Só a selecionada explica: nas outras isso viraria parede de texto. */}
-        {isSelected && (
-          <>
-            <p className="mt-2 text-[13.5px] font-semibold text-content-secondary">{grade.detail}</p>
-            {reason && reason !== grade.detail && (
-              <p className="mt-1 text-[13px] font-semibold text-content-tertiary">{reason}</p>
-            )}
-            <div className="mt-1 flex items-center gap-2">
-              <SuitabilitySummary severity={scoredRoute.severity} />
-              {scoredRoute.severity.isReliable && (
-                <span className="shrink-0 text-[12.5px] font-bold text-content-tertiary">
-                  · {scoredRoute.suitabilityScore}% adequada
-                </span>
-              )}
-            </div>
-            {autonomy && autonomy.verdict !== 'unknown' && (
-              <p
-                className={`mt-1.5 text-[13px] font-bold ${
-                  autonomy.verdict === 'insufficient'
-                    ? 'text-danger-text'
-                    : autonomy.verdict === 'tight'
-                      ? 'text-warning-text'
-                      : 'text-success-600'
-                }`}
-              >
-                {autonomy.message}
-              </p>
-            )}
-          </>
-        )}
+      <div className="mt-2.5">
+        <SuitabilityBar severity={scoredRoute.severity} />
       </div>
 
-      <span
-        className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-pill ${
-          isSelected ? 'bg-brand-500 text-white' : 'border-2 border-hairline/[.14]'
-        }`}
-      >
-        {isSelected && (
-          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth={3}>
-            <path d="M5 12l4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <p className="mt-2 text-[13.5px] font-semibold text-content-secondary">{grade.detail}</p>
+      {reason && reason !== grade.detail && (
+        <p className="mt-1 text-[13px] font-semibold text-content-tertiary">{reason}</p>
+      )}
+      <div className="mt-1 flex items-center gap-2">
+        <SuitabilitySummary severity={scoredRoute.severity} />
+        {scoredRoute.severity.isReliable && (
+          <span className="shrink-0 text-[12.5px] font-bold text-content-tertiary">
+            · {scoredRoute.suitabilityScore}% adequada
+          </span>
         )}
-      </span>
-    </button>
+        <span className="ml-auto shrink-0 text-[12.5px] font-bold text-content-tertiary">
+          chegada {arrivalTime(scoredRoute.etaMinutes)}
+        </span>
+      </div>
+      {autonomy && autonomy.verdict !== 'unknown' && (
+        <p
+          className={`mt-1.5 text-[13px] font-bold ${
+            autonomy.verdict === 'insufficient'
+              ? 'text-danger-text'
+              : autonomy.verdict === 'tight'
+                ? 'text-warning-text'
+                : 'text-success-600'
+          }`}
+        >
+          {autonomy.message}
+        </p>
+      )}
+    </div>
   )
+}
+
+/** Hora prevista de chegada, derivada do tempo estimado — 24h. */
+function arrivalTime(etaMinutes: number): string {
+  return new Date(Date.now() + etaMinutes * 60_000).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }

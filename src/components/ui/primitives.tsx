@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Icon } from '@/components/ui/Icon'
 
 /**
  * Primitivos visuais do handoff (design/gps-scooter-ui/components/core/).
@@ -160,13 +161,13 @@ export function ListRow({
   return (
     <Element
       {...(onClick ? { type: 'button' as const, onClick } : {})}
-      className={`flex min-h-row w-full items-center gap-4 px-card py-3 text-left transition-all duration-fast ease-standard ${
+      className={`flex min-h-row w-full items-center gap-3 px-4 py-3 text-left transition-all duration-fast ease-standard ${
         divider ? 'border-b border-hairline/10' : 'rounded-xl border border-hairline/10 bg-surface-card'
       } ${onClick ? 'active:scale-[.97] active:opacity-[.88]' : ''}`}
     >
       {icon && (
         <span
-          className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center ${
             bareIcon ? '' : `${iconShape === 'circle' ? 'rounded-pill' : 'rounded-md'} ${TILE}`
           }`}
         >
@@ -174,14 +175,17 @@ export function ListRow({
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-row-title text-content-primary">{title}</span>
+        {/*
+          Até DUAS linhas no título. Com a distância ao lado, o nome do lugar era
+          cortado em "Shopping Fla…" — justamente o dado que identifica o
+          resultado. O subtítulo, que é secundário, continua em uma linha.
+        */}
+        <span className="line-clamp-2 break-words text-row-title text-content-primary">{title}</span>
         {subtitle && <span className="mt-[3px] block truncate text-body text-content-secondary">{subtitle}</span>}
       </span>
-      {trailing && <span className="shrink-0 text-[16px] font-bold text-content-secondary">{trailing}</span>}
+      {trailing && <span className="shrink-0 text-[13px] font-bold text-content-tertiary">{trailing}</span>}
       {chevron && (
-        <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <Icon name="chevron-right" size={20} className="shrink-0 text-content-tertiary" />
       )}
     </Element>
   )

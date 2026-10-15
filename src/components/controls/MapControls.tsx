@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 interface MapControlsProps {
   onCenterOnUser: () => void
   isLocating: boolean
@@ -47,19 +48,7 @@ export function MapControls({
           active={suitabilityActive}
         >
           {/* Camadas empilhadas — o símbolo convencional de "camada de mapa". */}
-          <svg
-            viewBox="0 0 24 24"
-            className="h-[22px] w-[22px]"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          >
-            <path d="M12 3l9 4.6-9 4.6-9-4.6L12 3z" fill={suitabilityActive ? 'currentColor' : 'none'} fillOpacity={suitabilityActive ? 0.25 : 0} />
-            <path d="M3 12.4l9 4.6 9-4.6" />
-            <path d="M3 16.9l9 4.6 9-4.6" />
-          </svg>
+          <Icon name="layers" active={suitabilityActive} />
         </ControlButton>
       )}
       <ControlButton
@@ -76,15 +65,7 @@ export function MapControls({
             }`}
           />
         ) : (
-          <svg
-            viewBox="0 0 24 24"
-            className="h-[22px] w-[22px]"
-            fill={isFollowing ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path d="M21 3L3 10.5l7.5 3.2L13.5 21 21 3z" strokeLinejoin="round" strokeLinecap="round" />
-          </svg>
+          <Icon name="locate" active={isFollowing} />
         )}
       </ControlButton>
 
@@ -95,18 +76,9 @@ export function MapControls({
             aponta para cima; girado, ela mostra onde o norte ficou. Sem essa
             rotação o ícone seria só um enfeite estático.
           */}
-          <svg
-            viewBox="0 0 24 24"
-            className="h-[22px] w-[22px] transition-transform duration-base ease-standard"
-            style={{ transform: `rotate(${-bearingDeg}deg)` }}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.9}
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M15.2 8.8 13.4 13.4 8.8 15.2 10.6 10.6Z" fill="currentColor" />
-          </svg>
+          <span className="flex transition-transform duration-base ease-standard" style={{ transform: `rotate(${-bearingDeg}deg)` }}>
+            <Icon name="compass" />
+          </span>
         </ControlButton>
       )}
     </div>

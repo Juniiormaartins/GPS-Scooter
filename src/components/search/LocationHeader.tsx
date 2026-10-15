@@ -1,3 +1,5 @@
+import { Icon } from '@/components/ui/Icon'
+
 interface LocationHeaderProps {
   /** Via em que o usuário está. null enquanto a localização não foi resolvida. */
   currentStreet: string | null
@@ -57,9 +59,7 @@ export function LocationHeader({
         aria-label="Abrir menu"
         className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-card text-content-primary shadow-float transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
       >
-        <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-          <path d="M4 7h16M4 12h16M4 17h16" />
-        </svg>
+        <Icon name="menu" size={22} strokeWidth={2.1} />
       </button>
 
       <Bloco
@@ -117,10 +117,7 @@ export function LocationHeader({
         {avatarDataUrl ? (
           <img src={avatarDataUrl} alt="" aria-hidden="true" className="h-full w-full object-cover" />
         ) : (
-          <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="3.6" />
-            <path d="M4.8 20a7.6 7.6 0 0 1 14.4 0" />
-          </svg>
+          <Icon name="profile" size={22} />
         )}
       </button>
     </div>
@@ -148,10 +145,7 @@ export function SearchBar({ onOpenSearch, value = null }: SearchBarProps) {
       onClick={onOpenSearch}
       className="pointer-events-auto flex h-[58px] w-full items-center gap-3 rounded-field border border-hairline/[.06] bg-surface-card pl-[18px] pr-2 text-left shadow-field transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
     >
-      <svg viewBox="0 0 24 24" className="h-[22px] w-[22px] shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.6-3.6" />
-      </svg>
+      <Icon name="search" size={22} className="text-brand-500" />
 
       <span
         className={`min-w-0 flex-1 truncate text-field-text ${value ? 'text-content-primary' : 'text-content-tertiary'}`}
@@ -160,10 +154,7 @@ export function SearchBar({ onOpenSearch, value = null }: SearchBarProps) {
       </span>
 
       <span className="btn-sheen flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-brand-500 text-content-on-accent shadow-primary">
-        <svg viewBox="0 0 24 24" className="h-[20px] w-[20px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <rect x="9" y="3" width="6" height="11" rx="3" />
-          <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-        </svg>
+        <Icon name="mic" size={20} strokeWidth={2} />
       </span>
     </button>
   )

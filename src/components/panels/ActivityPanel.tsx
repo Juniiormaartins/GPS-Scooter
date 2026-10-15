@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 import { Panel } from '@/components/panels/Panel'
 import { ListRow, SectionLabel } from '@/components/ui/primitives'
 import { listActivity, type ActivityEntry } from '@/services/storage/activityHistory'
@@ -71,9 +72,15 @@ export function ActivityPanel({ onClose, onRepeatTrip }: ActivityPanelProps) {
   return (
     <Panel title="Atividade" onClose={onClose}>
       {entries.length === 0 ? (
-        <p className="text-body text-content-secondary">
-          Toda vez que você calcular uma rota, ela fica registrada neste histórico automaticamente.
-        </p>
+        <div className="flex flex-col items-center rounded-xl border border-dashed border-hairline/[.18] px-6 py-10 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-pill bg-brand-500/[.14] text-brand-500">
+            <Icon name="activity" size={24} active />
+          </span>
+          <p className="mt-3 text-row-title text-content-primary">Nenhuma rota ainda</p>
+          <p className="mt-1 max-w-[260px] text-[14px] font-semibold leading-snug text-content-secondary">
+            Toda rota que você calcular fica registrada aqui, e depois dá para refazer com um toque.
+          </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-group">
           {temPadroes && (
@@ -139,7 +146,7 @@ export function ActivityPanel({ onClose, onRepeatTrip }: ActivityPanelProps) {
                 {group.entries.map((entry) => (
                   <ListRow
                     key={entry.id}
-                    icon={<RouteIcon />}
+                    icon={<Icon name="route" size={24} />}
                     // Verde nas recentes (hoje/ontem), neutro no histórico mais antigo — regra do handoff.
                     tone={group.label === 'Hoje' || group.label === 'Ontem' ? 'go' : 'neutral'}
                     title={`${entry.originLabel} → ${entry.destinationLabel}`}
@@ -156,16 +163,6 @@ export function ActivityPanel({ onClose, onRepeatTrip }: ActivityPanelProps) {
         </div>
       )}
     </Panel>
-  )
-}
-
-function RouteIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="6" r="2.5" />
-      <circle cx="18" cy="18" r="2.5" />
-      <path d="M8.5 6H14a4 4 0 010 8H10a4 4 0 000 8h5.5" />
-    </svg>
   )
 }
 
@@ -204,9 +201,7 @@ function PatternRow({
         </span>
         <span className="mt-0.5 block truncate text-[13px] font-semibold text-content-tertiary">{subtitle}</span>
       </span>
-      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.6}>
-        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <Icon name="chevron-right" size={16} className="shrink-0 text-content-tertiary" />
     </button>
   )
 }

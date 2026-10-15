@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 import { BatteryGauge } from '@/components/vehicle/BatteryDial'
 import { resolveVehicleLabel, type UserPreferences } from '@/config/userPreferences'
 import type { AutonomyState } from '@/services/vehicle/autonomy'
@@ -19,6 +20,12 @@ interface VehicleStatusBarProps {
   autonomy?: AutonomyState
   /** Variante compacta (raio 22px), usada abaixo da sheet de destino — handoff tela 03. */
   compact?: boolean
+  /**
+   * Dentro da DOCA: sem superfície própria (fundo, borda, sombra e raio vêm do
+   * contêiner). Duas superfícies flutuantes empilhadas, cada uma com sua sombra,
+   * liam como dois objetos soltos; uma só lê como um painel.
+   */
+  embedded?: boolean
 }
 
 /**
@@ -44,6 +51,7 @@ export function VehicleStatusBar({
   onOpen,
   autonomy,
   compact = false,
+  embedded = false,
 }: VehicleStatusBarProps) {
   const isConnected = bluetooth.status === 'connected'
   /*
@@ -85,16 +93,14 @@ export function VehicleStatusBar({
   return (
     <Element
       {...(onOpen ? { type: 'button' as const, onClick: onOpen } : {})}
-      className={`pointer-events-auto flex w-full items-center gap-3 border border-hairline/[.06] bg-surface-overlay px-4 py-3 text-left shadow-field backdrop-blur-xl transition-all duration-fast ease-standard ${
-        compact ? 'rounded-bar' : 'rounded-2xl'
-      } ${onOpen ? 'active:scale-[.97] active:opacity-[.88]' : ''}`}
+      className={`pointer-events-auto flex w-full items-center gap-3 px-4 py-3 text-left transition-all duration-fast ease-standard ${
+        embedded
+          ? ''
+          : `border border-hairline/[.06] bg-surface-overlay shadow-field backdrop-blur-xl ${compact ? 'rounded-bar' : 'rounded-2xl'}`
+      } ${onOpen ? (embedded ? 'active:opacity-[.88]' : 'active:scale-[.97] active:opacity-[.88]') : ''}`}
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-surface-tile-accent text-brand-500">
-        <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="6" cy="17" r="2.5" />
-          <circle cx="17" cy="17" r="2.5" />
-          <path d="M6 17h6l3-8h3M9 9h4l2 4" />
-        </svg>
+        <Icon name={preferences.vehicleModelId === 'ebike-25' ? 'bike' : 'scooter'} size={24} active />
       </span>
 
       <span className="min-w-0 flex-1">
@@ -117,9 +123,7 @@ export function VehicleStatusBar({
       </span>
 
       {onOpen && (
-        <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 15l-6-6-6 6" />
-        </svg>
+        <Icon name="chevron-up" size={20} className="text-content-tertiary" />
       )}
     </Element>
   )

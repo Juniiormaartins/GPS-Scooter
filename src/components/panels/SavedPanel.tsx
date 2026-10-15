@@ -1,26 +1,60 @@
 import { useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
+import { AddressAutocompleteInput } from '@/components/search/AddressAutocompleteInput'
+import { Icon } from '@/components/ui/Icon'
 import { ListRow, SectionLabel } from '@/components/ui/primitives'
-import { listSavedPlaces, removeSavedPlace, type SavedPlace } from '@/services/storage/savedPlaces'
+import type { GeocodingResult } from '@/services/geocoding'
+import {
+  listSavedPlaces,
+  removeSavedPlace,
+  saveSinglePlace,
+  type SavedPlace,
+} from '@/services/storage/savedPlaces'
 
 interface SavedPanelProps {
   onClose: () => void
   onTraceRoute: (place: SavedPlace) => void
 }
 
+type SlotKind = 'home' | 'work'
+
+const SLOT_LABEL: Record<SlotKind, string> = { home: 'Casa', work: 'Trabalho' }
+
 /**
- * Tela "Salvos" do handoff: dois atalhos lado a lado (Casa / Trabalho) e,
- * abaixo, a lista de favoritos com estrela âmbar e chevron.
+ * Tela "Salvos": dois atalhos lado a lado (Casa / Trabalho) e, abaixo, a lista
+ * de favoritos.
  *
- * Estado vazio segue a regra do handoff — o rótulo de ação toma o lugar do
- * valor ("Definir endereço"), sem ilustração de vazio.
+ * O BOTÃO QUE NÃO FUNCIONAVA. Os cartões Casa e Trabalho mostravam "Definir
+ * endereço" em azul, com cara de link — e estavam `disabled` quando não havia
+ * endereço. Ou seja: o único jeito de preencher o cartão era um botão que não
+ * respondia. `saveSinglePlace` existia desde o início e nunca era chamada, então
+ * Casa e Trabalho NÃO PODIAM SER DEFINIDOS por caminho nenhum do app.
+ *
+ * Agora tocar no cartão vazio abre o seletor de endereço, e um cartão preenchido
+ * ganha "Alterar". É o atalho que mais pesa para quem faz o mesmo trajeto todo
+ * dia: ir para casa passa a ser um toque.
  */
 export function SavedPanel({ onClose, onTraceRoute }: SavedPanelProps) {
   const [places, setPlaces] = useState(listSavedPlaces())
+  const [editing, setEditing] = useState<SlotKind | null>(null)
+  const [query, setQuery] = useState('')
 
   function handleRemove(id: string) {
     removeSavedPlace(id)
     setPlaces(listSavedPlaces())
+  }
+
+  function startEditing(kind: SlotKind) {
+    setQuery('')
+    setEditing(kind)
+  }
+
+  function handlePick(result: GeocodingResult) {
+    if (!editing) return
+    saveSinglePlace(editing, result.label, result.secondaryLabel, result.point)
+    setPlaces(listSavedPlaces())
+    setEditing(null)
+    setQuery('')
   }
 
   const home = places.find((place) => place.kind === 'home')
@@ -29,23 +63,49 @@ export function SavedPanel({ onClose, onTraceRoute }: SavedPanelProps) {
 
   return (
     <Panel title="Salvos" onClose={onClose}>
+      {editing && (
+        <div className="mb-group rounded-xl border-2 border-brand-500 bg-surface-card p-4 shadow-tile">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-row-title text-content-primary">Endereço de {SLOT_LABEL[editing]}</p>
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              aria-label="Cancelar"
+              className="-m-2 flex h-9 w-9 items-center justify-center text-content-tertiary active:scale-[.97]"
+            >
+              <Icon name="close" size={20} />
+            </button>
+          </div>
+          <AddressAutocompleteInput
+            value={query}
+            placeholder={editing === 'home' ? 'Rua, número, bairro…' : 'Onde você trabalha?'}
+            onChangeText={setQuery}
+            onSelect={handlePick}
+            autoFocus
+            leftIcon={<Icon name="search" size={18} className="text-brand-500" />}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-stack">
-        <QuickSlot kind="home" place={home} onTraceRoute={onTraceRoute} />
-        <QuickSlot kind="work" place={work} onTraceRoute={onTraceRoute} />
+        <QuickSlot kind="home" place={home} onTraceRoute={onTraceRoute} onEdit={() => startEditing('home')} />
+        <QuickSlot kind="work" place={work} onTraceRoute={onTraceRoute} onEdit={() => startEditing('work')} />
       </div>
 
       <SectionLabel className="mb-stack mt-group">Locais favoritos</SectionLabel>
 
       {favorites.length === 0 ? (
-        <p className="text-body text-content-secondary">
-          Pesquise um destino, abra a ficha do local e toque em "Salvar" para adicionar um favorito aqui.
-        </p>
+        <EmptyHint
+          icon="star"
+          title="Nenhum favorito ainda"
+          text='Pesquise um destino, abra a ficha do local e toque em "Salvar" para guardá-lo aqui.'
+        />
       ) : (
         <div className="flex flex-col gap-stack">
           {favorites.map((place) => (
             <div key={place.id} className="relative">
               <ListRow
-                icon={<StarIcon />}
+                icon={<Icon name="star" size={22} active />}
                 tone="warn"
                 title={place.label}
                 subtitle={place.secondaryLabel}
@@ -58,9 +118,7 @@ export function SavedPanel({ onClose, onTraceRoute }: SavedPanelProps) {
                 aria-label={`Remover ${place.label}`}
                 className="absolute right-11 top-1/2 -translate-y-1/2 p-2 text-content-tertiary transition-all duration-fast active:scale-[.97] active:text-danger-500"
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                </svg>
+                <Icon name="close" size={18} />
               </button>
             </div>
           ))}
@@ -70,59 +128,60 @@ export function SavedPanel({ onClose, onTraceRoute }: SavedPanelProps) {
   )
 }
 
-/** Atalho Casa/Trabalho — ícone azul, rótulo 17/700 e o endereço (ou a ação de definir) abaixo. */
+/** Atalho Casa/Trabalho. Vazio: toca para definir. Preenchido: toca para ir, "Alterar" para trocar. */
 function QuickSlot({
   kind,
   place,
   onTraceRoute,
+  onEdit,
 }: {
-  kind: 'home' | 'work'
+  kind: SlotKind
   place: SavedPlace | undefined
   onTraceRoute: (place: SavedPlace) => void
+  onEdit: () => void
 }) {
-  const label = kind === 'home' ? 'Casa' : 'Trabalho'
+  const label = SLOT_LABEL[kind]
 
   return (
-    <button
-      type="button"
-      onClick={() => place && onTraceRoute(place)}
-      disabled={!place}
-      className="flex flex-col items-start gap-2.5 rounded-xl border border-hairline/10 bg-surface-card p-card text-left transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88] disabled:active:scale-100"
-    >
-      <span className="text-brand-500">{kind === 'home' ? <HomeIcon /> : <WorkIcon />}</span>
-      <span className="w-full">
-        <span className="block text-row-title text-content-primary">{label}</span>
-        <span className={`mt-0.5 block truncate text-[14px] ${place ? 'text-content-secondary' : 'text-brand-500'}`}>
-          {place ? place.label : 'Definir endereço'}
+    <div className="flex flex-col rounded-xl border border-hairline/10 bg-surface-card shadow-tile">
+      <button
+        type="button"
+        onClick={() => (place ? onTraceRoute(place) : onEdit())}
+        className="flex flex-1 flex-col items-start gap-3 p-4 text-left transition-all duration-fast ease-standard active:opacity-[.88]"
+      >
+        <span className="flex h-11 w-11 items-center justify-center rounded-md bg-brand-500/[.14] text-brand-500">
+          <Icon name={kind} size={24} active />
         </span>
+        <span className="w-full">
+          <span className="block text-row-title text-content-primary">{label}</span>
+          <span className={`mt-0.5 block truncate text-[14px] ${place ? 'text-content-secondary' : 'font-bold text-brand-500'}`}>
+            {place ? place.label : 'Definir endereço'}
+          </span>
+        </span>
+      </button>
+
+      {place && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="border-t border-hairline/[.07] px-4 py-2.5 text-left text-[13px] font-bold text-brand-500 transition-all duration-fast active:opacity-[.88]"
+        >
+          Alterar
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Estado vazio: ícone, título e uma frase que diz o que fazer — não um parágrafo solto. */
+function EmptyHint({ icon, title, text }: { icon: 'star' | 'route'; title: string; text: string }) {
+  return (
+    <div className="flex flex-col items-center rounded-xl border border-dashed border-hairline/[.18] px-6 py-8 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-pill bg-warning-500/[.16] text-warning-text">
+        <Icon name={icon} size={24} active />
       </span>
-    </button>
-  )
-}
-
-const ICON = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-
-function HomeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...ICON}>
-      <path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9z" />
-    </svg>
-  )
-}
-
-function WorkIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...ICON}>
-      <rect x="3" y="7" width="18" height="13" rx="1.5" />
-      <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
-    </svg>
-  )
-}
-
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...ICON}>
-      <path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6L12 3z" />
-    </svg>
+      <p className="mt-3 text-row-title text-content-primary">{title}</p>
+      <p className="mt-1 max-w-[260px] text-[14px] font-semibold leading-snug text-content-secondary">{text}</p>
+    </div>
   )
 }

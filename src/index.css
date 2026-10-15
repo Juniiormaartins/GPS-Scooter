@@ -44,7 +44,7 @@
   --success-500: #2fd16a;
   --success-600: #20b457;
 
-  --warning-500: #f5a623;
+  --warning-500: #f6b500;
   --danger-500: #f04545;
 
   --content-primary: #ffffff;
@@ -180,7 +180,7 @@
   --success-600: #178b44;
 
   /* Âmbar: fundo/traço #F5A623; para TEXTO sobre claro o handoff pede #B87400. */
-  --warning-500: #f5a623;
+  --warning-500: #f6b500;
   --warning-text: #b87400;
   --danger-500: #f04545;
   --danger-text: #c93636;

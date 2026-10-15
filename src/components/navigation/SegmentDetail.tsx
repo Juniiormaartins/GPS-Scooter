@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button'
 import type { SeverityRun } from '@/services/routing/segmentSeverity'
 import { formatDistance } from '@/utils/geo'
 import type { RouteSegment } from '@/types/routing'
+import { Icon } from '@/components/ui/Icon'
 
 /**
  * Aviso antecipado e detalhe de trecho classificado (handoff telas 04 e 07).
@@ -53,9 +54,7 @@ export function SegmentWarningPill({ run, distanceAheadMeters, onOpen }: Segment
         Em {formatDistance(distanceAheadMeters)}: {formatDistance(run.distanceMeters)}{' '}
         {critical ? 'não recomendados' : 'de atenção'}
       </span>
-      <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 6l6 6-6 6" />
-      </svg>
+      <Icon name="chevron-right" size={18} className="shrink-0 text-content-tertiary" />
     </button>
   )
 }

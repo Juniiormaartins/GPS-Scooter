@@ -9,6 +9,8 @@ interface AddressAutocompleteInputProps {
   onSelect: (result: GeocodingResult) => void
   leftIcon?: ReactNode
   rightAdornment?: ReactNode
+  /** Foca o campo ao montar — para telas cujo único propósito é digitar um endereço. */
+  autoFocus?: boolean
   /**
    * 'primary'   — linha de destaque ("Para onde?"): texto maior, em negrito, sem caixa.
    * 'secondary' — linha auxiliar ("Sua localização"): texto menor e discreto, sem caixa.
@@ -43,6 +45,7 @@ export function AddressAutocompleteInput({
   onSelect,
   leftIcon,
   rightAdornment,
+  autoFocus = false,
   variant = 'boxed',
 }: AddressAutocompleteInputProps) {
   const [isFocused, setIsFocused] = useState(false)
@@ -63,6 +66,7 @@ export function AddressAutocompleteInput({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 150)}
           placeholder={placeholder}
+          autoFocus={autoFocus}
           className={VARIANT_INPUT[variant]}
         />
         {rightAdornment}

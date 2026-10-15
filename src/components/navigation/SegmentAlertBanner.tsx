@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AlertLevel, BannerAlert } from '@/services/navigation/segmentAlerts'
+import { Icon } from '@/components/ui/Icon'
 
 /**
  * Faixa de aviso de trecho, durante a navegação.
@@ -108,9 +109,7 @@ export function SegmentAlertBanner({ alert, onDismiss }: { alert: BannerAlert; o
             aria-label="Dispensar dica"
             className="flex h-9 w-9 shrink-0 items-center justify-center text-nav-content-secondary transition-all duration-fast active:scale-[.97]"
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.8}>
-              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-            </svg>
+            <Icon name="close" size={16} strokeWidth={2.2} />
           </button>
         </div>
         {expanded && (
@@ -155,9 +154,7 @@ export function SegmentAlertBanner({ alert, onDismiss }: { alert: BannerAlert; o
         aria-label="Dispensar aviso"
         className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center p-2 text-nav-content-secondary transition-all duration-fast active:scale-[.97]"
       >
-        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2.8}>
-          <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-        </svg>
+        <Icon name="close" size={18} strokeWidth={2.2} />
       </button>
     </div>
   )

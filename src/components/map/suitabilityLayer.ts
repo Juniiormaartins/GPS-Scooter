@@ -80,7 +80,7 @@ const SUBCLASS_TO_KIND: Partial<Record<string, WayKind>> = {
 const TIER_COLOR: Record<SuitabilityTier, string> = {
   'very-good': '#22A45D',
   good: '#22A45D',
-  caution: '#E8901A',
+  caution: '#F5B700',
   unsuitable: '#DE3B3B',
   prohibited: '#B01818',
 }

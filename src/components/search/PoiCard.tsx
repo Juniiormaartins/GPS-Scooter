@@ -5,6 +5,7 @@ import type { LngLat } from '@/config/region'
 import type { GeocodingResult } from '@/services/geocoding'
 import type { ScoredRoute } from '@/types/routing'
 import { formatDistance, formatEta, haversineDistanceMeters } from '@/utils/geo'
+import { Icon } from '@/components/ui/Icon'
 
 interface PoiCardProps {
   poi: GeocodingResult
@@ -87,9 +88,7 @@ export function PoiCard({
           aria-label="Fechar"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-surface-tile text-content-secondary transition-all duration-fast active:scale-[.97] active:opacity-[.88]"
         >
-          <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2.5}>
-            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-          </svg>
+          <Icon name="close" size={18} strokeWidth={2.2} />
         </button>
       </div>
 

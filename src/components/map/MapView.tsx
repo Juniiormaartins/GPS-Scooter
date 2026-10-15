@@ -3,7 +3,16 @@ import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FALLBACK_DEMO_STYLE_URL, env, isMapConfigured } from '@/config/env'
 import { SUPPORTED_REGION, type LngLat } from '@/config/region'
-import { ACCENT, MAP_COLORS, MAP_COLORS_LIGHT, ROUTE_RIBBON, SEVERITY_RIM, SEVERITY_SHEEN } from '@/config/theme'
+import {
+  ACCENT,
+  MAP_COLORS,
+  MAP_COLORS_LIGHT,
+  ROUTE_ATTENTION,
+  ROUTE_RIBBON,
+  ROUTE_SUITABLE,
+  SEVERITY_RIM,
+  SEVERITY_SHEEN,
+} from '@/config/theme'
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
 import { applySuitabilityLayer } from '@/components/map/suitabilityLayer'
@@ -492,9 +501,11 @@ function severityColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecificat
     'critical',
     palette.routeByEligibility['not-allowed'],
     'attention',
-    palette.routeByEligibility.discouraged,
-    // Trecho adequado: azul da FITA, não `routeSelected`. Mesma família, mais
-    // saturado — ver ROUTE_RIBBON em config/theme.ts.
+    ROUTE_ATTENTION[theme].core,
+    // Trecho VERIFICADO como adequado: verde. O azul da fita (ROUTE_RIBBON)
+    // ficou para o que não foi classificado — o caso `default`.
+    'suitable',
+    ROUTE_SUITABLE[theme].core,
     ribbon(theme).core,
   ]
 }
@@ -513,6 +524,8 @@ function severityRimColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecifi
     SEVERITY_RIM.critical,
     'attention',
     SEVERITY_RIM.attention,
+    'suitable',
+    SEVERITY_RIM.suitable[theme],
     ribbon(theme).rim,
   ]
 }
@@ -532,6 +545,8 @@ function severitySheenColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpeci
     SEVERITY_SHEEN.critical,
     'attention',
     SEVERITY_SHEEN.attention,
+    'suitable',
+    SEVERITY_SHEEN.suitable[theme],
     ribbon(theme).sheen,
   ]
 }
@@ -551,7 +566,9 @@ function severityGlowColor(theme: 'dark' | 'light'): maplibregl.ExpressionSpecif
     'critical',
     palette.routeByEligibility['not-allowed'],
     'attention',
-    palette.routeByEligibility.discouraged,
+    ROUTE_ATTENTION[theme].glow,
+    'suitable',
+    ROUTE_SUITABLE[theme].glow,
     ribbon(theme).glow,
   ]
 }
@@ -1536,10 +1553,10 @@ export function MapView({
     segmentSource.setData({
       type: 'FeatureCollection',
       // Sem classificação por trecho (ainda chegando, ou provedor sem
-      // resposta), desenha a rota inteira como adequada em vez de deixar o
-      // mapa sem traçado — "adequada" aqui é ausência de dado, e é por isso
-      // que o painel diz explicitamente que a classificação não está
-      // disponível em vez de a cor afirmar sozinha.
+      // resposta), desenha a rota inteira em AZUL NEUTRO em vez de deixar o
+      // mapa sem traçado. Antes ela saía "adequada", e com a escala em verde
+      // isso seria o app afirmando um veredito que não verificou: verde só
+      // para o que foi de fato classificado como adequado.
       features: usable.length
         ? usable.map((segment, index) => ({
             type: 'Feature' as const,
@@ -1558,7 +1575,7 @@ export function MapView({
           ? [
               {
                 type: 'Feature' as const,
-                properties: { severity: 'suitable' },
+                properties: { severity: 'unknown' },
                 geometry: { type: 'LineString' as const, coordinates: fallback },
               },
             ]

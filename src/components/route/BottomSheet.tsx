@@ -4,7 +4,7 @@ export type SheetSnapPoint = 'collapsed' | 'half' | 'expanded'
 
 const SNAP_HEIGHT_VH: Record<SheetSnapPoint, number> = {
   collapsed: 22,
-  half: 48,
+  half: 54,
   expanded: 86,
 }
 

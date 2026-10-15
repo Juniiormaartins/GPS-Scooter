@@ -5,6 +5,7 @@ import { haversineDistanceMeters } from '@/utils/geo'
 import type { LngLat } from '@/config/region'
 import type { SavedPlace } from '@/services/storage/savedPlaces'
 import type { FrequentPlace } from '@/services/storage/travelPatterns'
+import { Icon } from '@/components/ui/Icon'
 
 /**
  * MODO EXPLORAR MOBILIDADE ELÉTRICA.
@@ -131,9 +132,7 @@ export function ExploreSheet({
             aria-label="Fechar"
             className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center p-2.5 text-content-tertiary transition-all duration-fast active:scale-[.97]"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-            </svg>
+            <Icon name="close" size={20} strokeWidth={2.2} />
           </button>
         </div>
 
@@ -213,9 +212,7 @@ function PlaceRow({ label, detail, onClick }: { label: string; detail: string; o
         <span className="block truncate text-[14.5px] font-extrabold text-content-primary">{label}</span>
         <span className="mt-0.5 block text-[12.5px] font-semibold text-content-tertiary">{detail}</span>
       </span>
-      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-content-tertiary" fill="none" stroke="currentColor" strokeWidth={2.6}>
-        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <Icon name="chevron-right" size={16} className="shrink-0 text-content-tertiary" />
     </button>
   )
 }

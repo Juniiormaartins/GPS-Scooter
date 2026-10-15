@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import {
@@ -158,23 +159,5 @@ export function VehicleSheet({ preferences, onSave, onDismiss }: VehicleSheetPro
 }
 
 function VehicleIcon({ id }: { id: VehicleModelId }) {
-  const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-
-  if (id === 'ebike-25') {
-    return (
-      <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" {...stroke}>
-        <circle cx="5.5" cy="17" r="3.5" />
-        <circle cx="18.5" cy="17" r="3.5" />
-        <path d="M5.5 17 10 8h5l3.5 9M9 8h5" />
-      </svg>
-    )
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" {...stroke}>
-      <circle cx="6" cy="17" r="2.5" />
-      <circle cx="17" cy="17" r="2.5" />
-      <path d="M6 17h6l3-8h3M9 9h4l2 4" />
-    </svg>
-  )
+  return <Icon name={id === 'ebike-25' ? 'bike' : 'scooter'} size={22} />
 }

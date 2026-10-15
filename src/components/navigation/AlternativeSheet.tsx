@@ -4,6 +4,7 @@ import { describeRun } from '@/services/routing/segmentSeverity'
 import { describeComparison, type RouteComparison } from '@/services/routing/alternatives'
 import { formatDistance, formatEta } from '@/utils/geo'
 import type { ScoredRoute } from '@/types/routing'
+import { Icon } from '@/components/ui/Icon'
 
 /**
  * Duração da saída. Casa com `duration-slow` dos tokens — a sheet e a pílula
@@ -115,9 +116,7 @@ export function AlternativeSheet({
           className="pointer-events-auto flex items-center gap-2 rounded-pill bg-nav-surface px-4 py-2 text-[13px] font-extrabold text-nav-content shadow-float transition-all duration-fast active:scale-[.97]"
         >
           Comparando alternativas · navegação pausada
-          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
+          <Icon name="close" size={16} strokeWidth={2.2} className="shrink-0" />
         </button>
       </div>
 

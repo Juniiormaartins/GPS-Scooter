@@ -12,7 +12,7 @@
 export const ACCENT = {
   primary: '#35B7F7', // navegação, links, seleção, rota ativa
   go: '#2FD16A', // confirmar/iniciar, bateria, rota segura
-  warn: '#F5A623', // locais salvos, rota alternativa
+  warn: '#F6B500', // atenção, locais salvos, rota alternativa
   danger: '#F04545', // destrutivo, via não recomendada
 } as const
 
@@ -110,8 +110,14 @@ export const ROUTE_RIBBON = {
  * permanece inequivocamente VERMELHO em qualquer espessura.
  */
 export const SEVERITY_RIM = {
-  attention: '#7A4B05',
+  // Âmbar profundo, NÃO marrom: o contorno responde por quase metade da largura
+  // da fita em zoom de bairro, e um contorno #7A4B05 fazia o miolo amarelo ler
+  // como marrom, e #B07A00 ainda lia laranja ocre em zoom afastado, onde o
+  // contorno domina a largura. #D9A300 é mais escuro que o miolo (a borda
+  // existe, e o vinco branco por fora completa a separação) e continua AMARELO.
+  attention: '#D9A300',
   critical: '#A81620',
+  suitable: { light: '#12803F', dark: '#0F6B33' },
 } as const
 
 /**
@@ -137,8 +143,30 @@ export const SEVERITY_RIM = {
  * o miolo (o volume permanece) sem deixar de ser vermelho. O âmbar do nível de
  * atenção fica como estava — lá o resultado marrom é o desejado.
  */
+/**
+ * TRECHO ADEQUADO: VERDE.
+ *
+ * Era azul — a cor da fita —, enquanto a barra de adequação, a legenda e a
+ * camada de vias já usavam verde para a MESMA coisa. A escala agora é a de
+ * semáforo que o resto do app fala: verde (adequado), amarelo (atenção),
+ * vermelho (crítico). O azul fica para o que NÃO foi classificado — ver
+ * `unknown` em MapView: dizer "adequado" sem saber seria o app afirmando algo
+ * que não verificou.
+ */
+export const ROUTE_SUITABLE = {
+  light: { core: '#1FAE57', glow: '#2BC46C' },
+  dark: { core: '#2FD16A', glow: '#3EE07D' },
+} as const
+
+/** Atenção: AMARELO dourado. O marrom anterior vinha de miolo #B3730A + contorno #7A4B05. */
+export const ROUTE_ATTENTION = {
+  light: { core: '#F5B700', glow: '#F5B700' },
+  dark: { core: '#FFC21F', glow: '#FFC21F' },
+} as const
+
 export const SEVERITY_SHEEN = {
-  attention: '#FFE0A3',
+  attention: '#FFE585',
+  suitable: { light: '#9BE8BA', dark: '#B8F5CF' },
   critical: '#F2585E',
 } as const
 
@@ -196,7 +224,7 @@ export const MAP_COLORS_LIGHT = {
   routeCasing: '#FFFFFF',
   routeByEligibility: {
     allowed: '#17A34A',
-    discouraged: '#B3730A',
+    discouraged: '#E8A800',
     'not-allowed': '#D92626',
   },
 } as const

@@ -9,6 +9,7 @@ import { MapControls } from '@/components/controls/MapControls'
 import { RoutePanel, RouteSummary } from '@/components/route/RoutePanel'
 import { BottomSheet, type SheetSnapPoint } from '@/components/route/BottomSheet'
 import { BottomNavBar } from '@/components/layout/BottomNavBar'
+import { QuickDestinations } from '@/components/search/QuickDestinations'
 import { SegmentAlertBanner } from '@/components/navigation/SegmentAlertBanner'
 import { SuitabilityLegend } from '@/components/map/SuitabilityLegend'
 import { ExploreSheet } from '@/components/explore/ExploreSheet'
@@ -1384,6 +1385,14 @@ export default function App() {
 
         <SearchBar onOpenSearch={() => setIsSearchOpen(true)} value={destinationText || null} />
 
+        {userPosition && !destinationText && !activeScoredRoute && (
+          <QuickDestinations
+            places={listSavedPlaces()}
+            onGo={(place) => handleTraceRouteToPlace(place.label, place.point)}
+            onSetup={() => setActivePanel('saved')}
+          />
+        )}
+
         {!userPosition && (
           <OriginFallbackCard
             originText={originText}
@@ -1503,7 +1512,14 @@ export default function App() {
               alinhado à esquerda, oposto à coluna de controles do mapa, para
               não virar mais um botão redondo no meio dos outros.
             */}
-            <div className="mb-1 flex justify-start">
+            {/*
+              UMA LINHA SÓ para o atalho do modo Explorar e os controles do mapa.
+              Eram duas faixas separadas — a pílula numa, a coluna de botões
+              noutra — e cada uma custava uma faixa de mapa. Lado a lado, o
+              atalho fica à esquerda, alinhado ao último botão da coluna, e a
+              pilha inteira perde uma linha de altura.
+            */}
+            <div className="mb-2.5 flex items-end justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setIsExploreOpen(true)}
@@ -1515,9 +1531,7 @@ export default function App() {
                 </svg>
                 <span className="text-[13.5px] font-extrabold text-content-primary">Até onde dá para ir</span>
               </button>
-            </div>
 
-            <div className="mb-3 flex justify-end">
               <MapControls
                 onCenterOnUser={handleCenterOnUser}
                 isLocating={isLocating}
@@ -1544,20 +1558,31 @@ export default function App() {
 
               A barra volta assim que a camada é desligada, no mesmo lugar.
             */}
-            {preferences.suitabilityLayerEnabled ? (
-              <SuitabilityLegend vehicleLabel={mobilityProfile(preferences.vehicleModelId).label.toLowerCase()} />
-            ) : (
-              <VehicleStatusBar
-                bluetooth={vehicleBluetooth}
-                preferences={preferences}
-                autonomy={autonomy}
-                onOpen={() => setIsVehicleSheetOpen(true)}
+            {/*
+              A DOCA: cartão do veículo (ou legenda) e abas numa superfície só.
+              Eram dois blocos flutuantes empilhados, cada um com a sua sombra e
+              o seu vazio em volta — pesava o rodapé e tirava mapa. Um filete
+              separa as duas partes; o conteúdo e o comportamento são os mesmos.
+            */}
+            <div className="pointer-events-auto overflow-hidden rounded-2xl border border-hairline/[.06] bg-surface-overlay shadow-field backdrop-blur-xl">
+              {preferences.suitabilityLayerEnabled ? (
+                <SuitabilityLegend embedded vehicleLabel={mobilityProfile(preferences.vehicleModelId).label.toLowerCase()} />
+              ) : (
+                <VehicleStatusBar
+                  embedded
+                  bluetooth={vehicleBluetooth}
+                  preferences={preferences}
+                  autonomy={autonomy}
+                  onOpen={() => setIsVehicleSheetOpen(true)}
+                />
+              )}
+              <div className="mx-4 border-t border-hairline/[.07]" />
+              <BottomNavBar
+                embedded
+                active={activePanel ?? 'explore'}
+                onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
               />
-            )}
-            <BottomNavBar
-              active={activePanel ?? 'explore'}
-              onSelect={(tab) => setActivePanel(tab === 'explore' ? null : tab)}
-            />
+            </div>
           </div>
         )
       )}

@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon'
 import { useEffect, useRef, useState } from 'react'
 import { Panel } from '@/components/panels/Panel'
 import { BatteryDial, useDeferredPercent } from '@/components/vehicle/BatteryDial'
@@ -120,6 +121,43 @@ export function ProfilePanel({
 
   return (
     <Panel title="Perfil" onClose={onClose}>
+      {/*
+        CARTÃO-RESUMO DO VEÍCULO. O Perfil abria direto numa lista de
+        configurações — igual a qualquer app. O que o motorista quer saber ao
+        abrir esta tela é "com o que estou rodando": o veículo e os dois números
+        que o app usa para tudo (velocidade e autonomia). No mesmo azul-marinho
+        da navegação, para o app ter uma identidade só.
+      */}
+      <div className="mb-group rounded-2xl bg-nav-surface p-4 shadow-nav-banner">
+        <div className="flex items-center gap-3.5">
+          <span className="btn-sheen flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-content-on-accent shadow-primary">
+            <Icon name={preferences.vehicleModelId === 'ebike-25' ? 'bike' : 'scooter'} size={30} active />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[20px] font-black leading-tight text-nav-content">
+              {vehicleLabel.replace(/\s*\(.*\)\s*$/, '')}
+            </p>
+            <p className="mt-0.5 text-[13px] font-semibold text-nav-content-secondary">Mobilidade elétrica</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
+          <div className="rounded-lg bg-nav-control px-3.5 py-2.5">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.6px] text-nav-content-secondary">Velocidade</p>
+            <p className="mt-0.5 text-[22px] font-black leading-none text-nav-content">
+              {preferences.referenceSpeedKmh}
+              <span className="ml-1 text-[13px] font-bold text-nav-content-secondary">km/h</span>
+            </p>
+          </div>
+          <div className="rounded-lg bg-nav-control px-3.5 py-2.5">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.6px] text-nav-content-secondary">Autonomia</p>
+            <p className="mt-0.5 text-[22px] font-black leading-none text-success-400">
+              {preferences.rangeKm}
+              <span className="ml-1 text-[13px] font-bold text-nav-content-secondary">km</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
       <SettingsGroup
         title="Meu veículo"
         footnote="A velocidade de referência alimenta o tempo estimado das rotas; a autonomia, a estimativa de alcance. Nenhuma das duas autoriza vias inadequadas — as regras de circulação continuam avaliando cada via."
@@ -127,8 +165,8 @@ export function ProfilePanel({
         <SettingsRow
           inGroup
           label={vehicleLabel}
-          description={`${preferences.referenceSpeedKmh} km/h · ≈${preferences.rangeKm} km de autonomia`}
-          icon={<ScooterIcon />}
+          description="Toque em Alterar para trocar o modelo"
+          icon={<Icon name={preferences.vehicleModelId === 'ebike-25' ? 'bike' : 'scooter'} size={24} />}
           control="action"
           action="Alterar"
           expanded={openPicker === 'vehicle'}
@@ -618,16 +656,6 @@ function BluetoothRow({ bluetooth }: { bluetooth: ReturnType<typeof useVehicleBl
 }
 
 const ICON = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-
-function ScooterIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...ICON}>
-      <circle cx="6" cy="17" r="2.5" />
-      <circle cx="17" cy="17" r="2.5" />
-      <path d="M6 17h6l3-8h3M9 9h4l2 4" />
-    </svg>
-  )
-}
 
 function BluetoothIcon() {
   return (

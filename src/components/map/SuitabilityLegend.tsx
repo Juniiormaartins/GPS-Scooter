@@ -21,9 +21,13 @@ import { SUITABILITY_LEGEND } from '@/components/map/suitabilityLayer'
  * dizer isso, uma rua verde aqui que vira âmbar na rota parece contradição do
  * app, quando na verdade são duas perguntas diferentes.
  */
-export function SuitabilityLegend({ vehicleLabel }: { vehicleLabel: string }) {
+export function SuitabilityLegend({ vehicleLabel, embedded = false }: { vehicleLabel: string; embedded?: boolean }) {
   return (
-    <div className="pointer-events-auto w-full rounded-2xl border border-hairline/[.06] bg-surface-overlay px-4 py-3 shadow-field backdrop-blur-xl">
+    <div
+      className={`pointer-events-auto w-full px-4 py-3 ${
+        embedded ? '' : 'rounded-2xl border border-hairline/[.06] bg-surface-overlay shadow-field backdrop-blur-xl'
+      }`}
+    >
       <p className="truncate text-[10.5px] font-extrabold uppercase tracking-[0.6px] text-content-quaternary">
         Vias para {vehicleLabel}
       </p>

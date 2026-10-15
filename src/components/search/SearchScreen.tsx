@@ -6,6 +6,7 @@ import { useAddressSuggestions } from '@/hooks/useAddressSuggestions'
 import type { GeocodingResult } from '@/services/geocoding'
 import { clearSearchHistory, listSearchHistory, removeSearchHistoryEntry } from '@/services/storage/searchHistory'
 import { formatDistance, haversineDistanceMeters } from '@/utils/geo'
+import { Icon } from '@/components/ui/Icon'
 
 interface SearchScreenProps {
   onBack: () => void
@@ -114,9 +115,7 @@ export function SearchScreen({
                   aria-label="Limpar"
                   className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-surface-tile-accent text-brand-500 transition-all duration-fast active:scale-[.97]"
                 >
-                  <svg viewBox="0 0 24 24" className="h-[20px] w-[20px]" fill="none" stroke="currentColor" strokeWidth={2.4}>
-                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                  </svg>
+                  <Icon name="close" size={20} strokeWidth={2.2} />
                 </button>
               )
             )}
@@ -211,9 +210,7 @@ export function SearchScreen({
                     aria-label={`Remover ${entry.label} do histórico`}
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-content-tertiary transition-all duration-fast active:scale-[.97] active:text-danger-500"
                   >
-                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                    </svg>
+                    <Icon name="close" size={18} strokeWidth={2.2} />
                   </button>
                 </div>
               ))}
