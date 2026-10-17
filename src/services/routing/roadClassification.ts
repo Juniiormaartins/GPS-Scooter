@@ -237,6 +237,9 @@ function reasonForWayKind(kind: WayKind, tier: SuitabilityTier): SuitabilityReas
   // própria", então uma ciclovia vermelha para a scooter explicava a si mesma
   // como se fosse o melhor caso.
   if (kind === 'cycleway') return tier === 'very-good' || tier === 'good' ? 'ideal-infrastructure' : 'bicycle-only-infrastructure'
+  // Proibido (veículo motorizado em calçada/passarela/caminho) tem motivo próprio:
+  // "circule devagar e dê preferência" descreveria um trecho que o app não recomenda.
+  if ((kind === 'footway' || kind === 'pedestrian' || kind === 'path') && tier === 'prohibited') return 'pedestrian-only'
   if (kind === 'footway' || kind === 'pedestrian') return 'pedestrian-space'
   // Só via de acesso limitado é "rodovia". Uma arterial urbana ruim para o
   // veículo é outra coisa, e descrevê-la como rodovia faria a explicação não

@@ -43,6 +43,7 @@ export type SuitabilityReasonCode =
   | 'arterial-road'
   | 'expressway'
   | 'tunnel-underpass'
+  | 'pedestrian-only'
   | 'pedestrian-space'
   | 'loose-surface'
   | 'not-rideable'
@@ -65,6 +66,7 @@ export const REASON_TEXT: Record<SuitabilityReasonCode, string> = {
   'arterial-road': 'Via arterial de tráfego intenso para este veículo',
   expressway: 'Via expressa ou rodovia — inadequada para este veículo',
   'tunnel-underpass': 'Túnel ou passagem em desnível — carros bem mais rápidos e subida de saída que tira a força do veículo',
+  'pedestrian-only': 'Calçada ou passagem de pedestre — este veículo segue pela pista, junto com os carros',
   'pedestrian-space': 'Espaço de pedestre — circule devagar e dê preferência',
   'loose-surface': 'Piso solto — pouca aderência para as rodas deste veículo',
   'not-rideable': 'Trecho impossível de percorrer sobre o veículo',
@@ -127,9 +129,15 @@ const SCOOTER: MobilityProfile = {
     // 'very-good': é infraestrutura de bicicleta compartilhada com bicicleta, e
     // alguns municípios fixam teto de velocidade nela.
     cycleway: 'good',
-    footway: 'unsuitable',
-    pedestrian: 'unsuitable',
-    path: 'unsuitable',
+    // Calçada, passarela e caminho: a scooter anda NA PISTA, com os carros.
+    // Era 'unsuitable' (desaconselhado, mas elegível); passou a 'prohibited' —
+    // uma rota que usa um trecho desses nunca é recomendada nem entra como
+    // escolha automática, só aparece (em vermelho) se não houver outra. É o que
+    // a pessoa que pilota pede: prefere o asfalto, mesmo mais longo, a subir num
+    // meio-fio ou cortar por onde só bicicleta passa com tranquilidade.
+    footway: 'prohibited',
+    pedestrian: 'prohibited',
+    path: 'prohibited',
     track: 'caution',
     steps: 'prohibited',
     unknown: 'good',
