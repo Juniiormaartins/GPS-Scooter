@@ -347,6 +347,9 @@ function toOsmTags(tags: Record<string, string> = {}): OsmWayTags {
     oneway: tags.oneway,
     surface: tags.surface,
     access: tags.access,
+    tunnel: tags.tunnel,
+    layer: tags.layer,
+    bridge: tags.bridge,
   }
 }
 

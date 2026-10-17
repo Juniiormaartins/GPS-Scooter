@@ -42,6 +42,7 @@ export type SuitabilityReasonCode =
   | 'high-speed-traffic'
   | 'arterial-road'
   | 'expressway'
+  | 'tunnel-underpass'
   | 'pedestrian-space'
   | 'loose-surface'
   | 'not-rideable'
@@ -63,6 +64,7 @@ export const REASON_TEXT: Record<SuitabilityReasonCode, string> = {
   */
   'arterial-road': 'Via arterial de tráfego intenso para este veículo',
   expressway: 'Via expressa ou rodovia — inadequada para este veículo',
+  'tunnel-underpass': 'Túnel ou passagem em desnível — carros bem mais rápidos e subida de saída que tira a força do veículo',
   'pedestrian-space': 'Espaço de pedestre — circule devagar e dê preferência',
   'loose-surface': 'Piso solto — pouca aderência para as rodas deste veículo',
   'not-rideable': 'Trecho impossível de percorrer sobre o veículo',

@@ -89,6 +89,12 @@ export interface OsmWayTags {
   oneway?: string
   surface?: string
   access?: string
+  /** `tunnel=yes` (e variantes) — túnel ou passagem em desnível; ver `isUnderpass` em roadClassification. */
+  tunnel?: string
+  /** `layer=-1`, `-2`… — abaixo do nível do chão; junto com `tunnel`, marca a passagem em desnível. */
+  layer?: string
+  /** `bridge=yes` — viaduto. Só usado para NÃO confundir um `layer` negativo de via que passa por baixo dele. */
+  bridge?: string
   /** `bicycle=yes/designated/no` — sinal mais próximo de "compatível com scooter" que existe no OSM hoje. */
   bicycle?: string
   /** `foot=yes/no` — usado apenas como sinal auxiliar de via de baixa velocidade (ex: calçadão), não como regra primária. */

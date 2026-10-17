@@ -154,6 +154,11 @@ function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificati
     return { tier: 'prohibited', reason: 'access-restricted' }
   }
 
+  // Túnel / passagem em desnível numa via de tráfego rápido (ver `isUnderpass`).
+  if (isUnderpass(tags) && underpassIsSerious(wayKind, tags)) {
+    return { tier: 'unsuitable', reason: 'tunnel-underpass' }
+  }
+
   // Infraestrutura designada: melhor caso para quem ela serve.
   const designatedForBicycle = tags?.bicycle != null && /^(yes|designated)$/i.test(tags.bicycle.trim())
   if (designatedForBicycle && (!profile || ridesAsBicycle)) {
@@ -189,6 +194,42 @@ function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificati
     return { tier: 'good', reason: 'urban-road' }
   }
   return { tier: 'good', reason: 'no-data' }
+}
+
+/**
+ * TÚNEL E PASSAGEM EM DESNÍVEL.
+ *
+ * Caso real, relatado na rua: o Waze mandou a scooter (32 km/h) por uma
+ * passagem em desnível — desce, passa por baixo e sobe — numa avenida onde os
+ * carros andam muito mais rápido. Dentro dela não há acostamento, não dá para
+ * sair do caminho dos outros, e a subida de saída tira a força de um motor
+ * pequeno justamente quando a velocidade já é baixa. É um dos piores lugares
+ * para este veículo, e nada na classificação por tipo de via o enxergava: a via
+ * é uma `primary`/`secondary` comum, só que por baixo.
+ *
+ * COMO O OSM MARCA: `tunnel=yes` na maioria dos casos; às vezes só `layer=-1`.
+ * Fora da conta: `building_passage` (passagem por dentro de prédio) e `culvert`
+ * (bueiro, não é via), e `tunnel=no` explícito. `bridge` junto com `layer`
+ * negativo é dado inconsistente — na dúvida, não afirma túnel.
+ */
+function isUnderpass(tags: RouteSegment['osmTags']): boolean {
+  if (!tags) return false
+  const tunnel = tags.tunnel?.trim().toLowerCase()
+  if (tunnel === 'no') return false
+  if (tunnel && tunnel !== 'building_passage' && tunnel !== 'culvert') return true
+  if (tags.bridge && !/^no$/i.test(tags.bridge.trim())) return false
+  const layer = Number.parseInt(tags.layer ?? '', 10)
+  return Number.isFinite(layer) && layer < 0
+}
+
+/** Só pesa onde há tráfego rápido: um túnel de pedestre ou uma travessa sob a linha do trem não é o problema. */
+function underpassIsSerious(wayKind: WayKind, tags: RouteSegment['osmTags']): boolean {
+  if (wayKind === 'trunk' || wayKind === 'primary' || wayKind === 'secondary') return true
+  if (wayKind === 'tertiary') {
+    const maxSpeed = tags?.maxspeed ? Number.parseInt(tags.maxspeed, 10) : NaN
+    return Number.isFinite(maxSpeed) && maxSpeed >= 50
+  }
+  return false
 }
 
 function reasonForWayKind(kind: WayKind, tier: SuitabilityTier): SuitabilityReasonCode {

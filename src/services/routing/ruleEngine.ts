@@ -1,5 +1,5 @@
 import {
-  classifySegment,
+  assessSegment,
   TIER_ELIGIBILITY,
   TIER_LABEL,
   TIER_PENALTY_PER_KM,
@@ -21,6 +21,9 @@ import type { CandidateRoute, Eligibility, RouteSuitabilityIssue, SuitabilityTie
  * Também produz um resumo por nível (breakdown) e alertas (issues).
  */
 
+/** Pontos descontados da nota por túnel/passagem em desnível atravessado (a nota vai de 0 a 100). */
+const TUNNEL_PENALTY_POINTS = 12
+
 const ELIGIBILITY_SEVERITY_RANK: Record<Eligibility, number> = {
   allowed: 0,
   discouraged: 1,
@@ -40,12 +43,20 @@ export function evaluateRoute(route: CandidateRoute, vehicle?: VehicleClassifica
   }
 
   const distanceByTier = new Map<SuitabilityTier, number>()
+  let tunnelCount = 0
+  let previousWasTunnel = false
   for (const segment of route.segments) {
-    const tier = classifySegment(segment, vehicle)
+    const { tier, reason } = assessSegment(segment, vehicle)
     distanceByTier.set(tier, (distanceByTier.get(tier) ?? 0) + segment.distanceMeters)
+    const isTunnel = reason === 'tunnel-underpass'
+    if (isTunnel && !previousWasTunnel) tunnelCount += 1
+    previousWasTunnel = isTunnel
   }
 
-  let penaltyPoints = 0
+  // Penalidade por km não basta para um túnel: são 300–500 m, ~5 pontos, e uma
+  // rota 4 km mais longa parece "pior" que atravessá-lo. O risco de um túnel
+  // não cresce com o comprimento — está em entrar. Então cada um custa um valor fixo.
+  let penaltyPoints = tunnelCount * TUNNEL_PENALTY_POINTS
   let eligibility: Eligibility = 'allowed'
   const breakdown: TierBreakdownEntry[] = []
   for (const [tier, distanceMeters] of distanceByTier) {

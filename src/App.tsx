@@ -293,6 +293,49 @@ export default function App() {
   }, [locationError, pendingCenter])
 
   /**
+   * Localização que não chega na abertura do app instalado (Android).
+   *
+   * No app, a PRIMEIRA leitura dispara o pedido de permissão do Android, e a
+   * pessoa leva alguns segundos para tocar em "Permitir" — mais que os 10 s da
+   * leitura. Ela falhava e nunca mais era tentada: o app abria sem localização e
+   * com o aviso na tela, mesmo com o GPS ligado e a permissão já concedida.
+   *
+   * Duas saídas, as duas só enquanto ainda NÃO há posição:
+   *  1. tentar de novo, em silêncio, algumas vezes (o aviso só aparece depois da
+   *     última tentativa — ver `idleLocationMessage`);
+   *  2. tentar quando o app volta para a frente (vindo da tela de permissão ou
+   *     das configurações do celular).
+   * Um `setPendingCenter` junto com cada tentativa faz a origem e o
+   * enquadramento do mapa acontecerem sozinhos quando a posição chegar.
+   */
+  const [autoLocateRetries, setAutoLocateRetries] = useState(3)
+  useEffect(() => {
+    if (!locationError || sample || permission === 'denied' || autoLocateRetries <= 0) return
+    const timer = setTimeout(() => {
+      setAutoLocateRetries((restantes) => restantes - 1)
+      setFollowUserAsOrigin(true)
+      setPendingCenter(true)
+      locate()
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [locationError, sample, permission, autoLocateRetries, locate])
+
+  useEffect(() => {
+    const aoVoltarParaOApp = () => {
+      if (document.visibilityState === 'hidden' || sample || isLocating) return
+      setFollowUserAsOrigin(true)
+      setPendingCenter(true)
+      locate()
+    }
+    document.addEventListener('visibilitychange', aoVoltarParaOApp)
+    window.addEventListener('focus', aoVoltarParaOApp)
+    return () => {
+      document.removeEventListener('visibilitychange', aoVoltarParaOApp)
+      window.removeEventListener('focus', aoVoltarParaOApp)
+    }
+  }, [sample, isLocating, locate])
+
+  /**
    * Tira o aviso de localização quando a localização VOLTA.
    *
    * Bug real, reproduzido: com a permissão bloqueada o aviso aparecia, o
@@ -313,6 +356,8 @@ export default function App() {
 
   const idleLocationMessage = useMemo(() => {
     if (isLocating) return 'Localizando você…'
+    // Ainda há tentativas silenciosas pela frente: não mostra erro que pode se resolver sozinho.
+    if (locationError && !sample && permission !== 'denied' && autoLocateRetries > 0) return 'Localizando você…'
     if (locationError) return locationError
     if (!sample && permission === 'denied') {
       return 'Localização bloqueada — permita o acesso para usar localização atual, origem automática e navegação. Você ainda pode pesquisar uma origem manualmente.'
@@ -321,7 +366,7 @@ export default function App() {
       return `Localização com baixa precisão (±${Math.round(sample.accuracyMeters)} m).`
     }
     return null
-  }, [isLocating, locationError, sample, permission])
+  }, [isLocating, locationError, sample, permission, autoLocateRetries])
 
   const warningMessage = useMemo(() => {
     if (idleLocationMessage) return idleLocationMessage

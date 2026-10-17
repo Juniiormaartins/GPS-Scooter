@@ -71,7 +71,31 @@ const FRESH_MS = 21 * 24 * 60 * 60 * 1000
 /** Áreas guardadas. Cada uma pode ter alguns MB; dez cobrem os corredores de uso diário. */
 const MAX_AREAS = 10
 
-const KEPT_TAGS = ['highway', 'ref', 'name', 'maxspeed', 'motorroad', 'bicycle', 'foot', 'lanes', 'oneway', 'surface', 'access']
+const KEPT_TAGS = [
+  'highway',
+  'ref',
+  'name',
+  'maxspeed',
+  'motorroad',
+  'bicycle',
+  'foot',
+  'lanes',
+  'oneway',
+  'surface',
+  'access',
+  'tunnel',
+  'layer',
+  'bridge',
+]
+
+/**
+ * Áreas guardadas ANTES deste instante não têm as tags `tunnel`/`layer`/`bridge`.
+ * Elas continuam valendo como reserva se a rede falhar, mas deixam de ser
+ * "frescas" — então a próxima rota naquela área baixa de novo e passa a enxergar
+ * túneis e passagens em desnível. Sem isto, um túnel só seria visto depois de até
+ * 21 dias (a validade normal do cache).
+ */
+const TAGS_SCHEMA_SINCE_MS = Date.UTC(2026, 9, 17, 21, 0)
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -172,7 +196,7 @@ export async function findStoredWays(bbox: BoundingBox): Promise<StoredWays | nu
         | StoredArea
         | undefined
       if (!stored) continue
-      return { ways: expand(stored.ways), fresh: Date.now() - stored.savedAt < FRESH_MS }
+      return { ways: expand(stored.ways), fresh: stored.savedAt >= TAGS_SCHEMA_SINCE_MS && Date.now() - stored.savedAt < FRESH_MS }
     }
     return null
   } catch {
