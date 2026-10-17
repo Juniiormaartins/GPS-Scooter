@@ -284,6 +284,11 @@ function navigationZoomForSpeed(speedKmh: number | null, currentZoom: number | n
  * deles. Reservar ~200px empurra o marcador para ~56% da altura: acima do
  * chrome de baixo, com o caminho à frente ocupando a metade superior.
  */
+/** Janela flutuante: só o cartão da manobra no topo; o marcador fica no meio do que sobra. */
+const PIP_PADDING = { top: 56, bottom: 8, left: 0, right: 0 }
+const navigationPadding = () =>
+  typeof document !== 'undefined' && document.documentElement.hasAttribute('data-pip') ? PIP_PADDING : NAVIGATION_PADDING
+
 const NAVIGATION_PADDING = { top: 300, bottom: 200, left: 0, right: 0 }
 
 /**
@@ -1771,7 +1776,7 @@ export function MapView({
         center: [frame.lng, frame.lat],
         zoom: camera.zoom,
         pitch: camera.pitch,
-        padding: NAVIGATION_PADDING,
+        padding: navigationPadding(),
         // Sem rumo conhecido, mantém o ângulo atual em vez de forçar o norte —
         // evita o mapa "pular" de volta toda vez que o GPS perde a direção.
         bearing: frame.headingDeg ?? map.getBearing(),
@@ -1841,7 +1846,7 @@ export function MapView({
         // mapa com dois dedos, o toque devolve o enquadramento de navegação
         // inteiro, não só a posição.
         pitch: NAVIGATION_PITCH,
-        padding: NAVIGATION_PADDING,
+        padding: navigationPadding(),
         // Sem heading confiável, preserva o ângulo atual em vez de forçar o
         // norte — girar o mapa para uma direção que não é a do movimento
         // desorienta mais do que não girar.
