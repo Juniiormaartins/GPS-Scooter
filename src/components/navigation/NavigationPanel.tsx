@@ -114,7 +114,7 @@ export function NavigationPanel({
             navegação como escura sempre, para imersão — por isso as cores saem
             dos tokens --nav-*, que não invertem com o tema escolhido.
           */
-          <div className="pointer-events-auto flex items-center gap-3.5 rounded-2xl bg-nav-surface px-4 py-3.5 shadow-nav-banner">
+          <div className="pip-banner pointer-events-auto flex items-center gap-3.5 rounded-2xl bg-nav-surface px-4 py-3.5 shadow-nav-banner">
             <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-lg bg-nav-control text-nav-content">
               <ManeuverIcon maneuver={progress.nextStep.maneuver} />
             </span>
@@ -148,7 +148,7 @@ export function NavigationPanel({
                   </p>
                 )}
             </div>
-            <div className="flex shrink-0 flex-col gap-2">
+            <div className="pip-hide flex shrink-0 flex-col gap-2">
               <VoiceToggle enabled={voiceEnabled} onToggle={onToggleVoice} />
             </div>
           </div>
