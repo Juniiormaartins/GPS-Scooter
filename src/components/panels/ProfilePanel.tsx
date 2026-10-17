@@ -507,7 +507,7 @@ function VoiceGroup({
           label="Voz das instruções"
           control="value"
           value={describeNativeSpeechStatus(status)}
-          onClick={() => nativeBridge.speak('Navegação por voz funcionando.', 1, true)}
+          onClick={() => nativeBridge?.speak('Navegação por voz funcionando.', 1, true)}
         />
       </SettingsGroup>
     )
