@@ -332,7 +332,7 @@ function refineArterialForScooter(
   base: SegmentAssessment,
   segment: RouteSegment,
   vehicle: VehicleClassificationContext,
-): SegmentAssessment | null {
+): { tier: NonProhibitedTier; reason: SuitabilityReasonCode } | null {
   if (mobilityProfile(vehicle.modelId).costing !== 'motor_scooter') return null
   if (base.reason !== 'urban-road' && base.reason !== 'shared-with-traffic' && base.reason !== 'arterial-road') return null
 
