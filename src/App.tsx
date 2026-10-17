@@ -38,6 +38,7 @@ import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
 import { ArrivalSheet } from '@/components/navigation/ArrivalSheet'
 import { SegmentDetailSheet, SegmentWarningPill } from '@/components/navigation/SegmentDetail'
 import { compareRoutes, pickAlternatives, type RouteComparison } from '@/services/routing/alternatives'
+import { useBackToClose } from '@/hooks/useBackToClose'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
 import { ActivityPanel } from '@/components/panels/ActivityPanel'
@@ -151,6 +152,8 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   /** Tela de busca em tela cheia (SearchScreen do handoff) — aberta pelo campo "Para onde?" e pela lupa. */
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  useBackToClose(activePanel !== null, () => setActivePanel(null))
+  useBackToClose(isSearchOpen, () => setIsSearchOpen(false))
   /**
    * O que a tela de busca está escolhendo: destino (padrão) ou PARTIDA.
    *
