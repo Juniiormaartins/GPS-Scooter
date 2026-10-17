@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.gpsscooter.app",
+  "appName": "GPS Scooter",
+  "webDir": "www",
+  "server": {
+    "url": "https://gps-scooter.vercel.app",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "backgroundColor": "#E9EDF2"
+  }
+}

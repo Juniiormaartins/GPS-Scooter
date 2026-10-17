@@ -1,0 +1,23 @@
+name: Web check
+
+# Confere que o site compila (tipos + build) antes de uma mudanca chegar na main,
+# que a Vercel publica sozinha a cada push.
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build

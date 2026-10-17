@@ -23,6 +23,7 @@ import { mobilityProfile } from '@/config/mobilityProfiles'
 import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
 import { runKey } from '@/services/navigation/segmentAlerts'
 import { currentSpeedLimit } from '@/services/navigation/speedLimit'
+import { consumeIncomingDestination } from '@/native/incomingDestination'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import {
@@ -212,6 +213,23 @@ export default function App() {
 
     triggerAutoLocate()
   }, [permission, sample, isLocating, locate])
+
+  // Destino vindo de outro app (casca Android): um endereço compartilhado ou
+  // um geo:/google.navigation:. Ponto conhecido → traça a rota direto (herda o
+  // caso de ainda não haver GPS, igual a "Traçar rota" de um POI); só texto →
+  // abre a busca já com o endereço preenchido. Roda uma vez, ao abrir.
+  useEffect(() => {
+    const incoming = consumeIncomingDestination()
+    if (!incoming) return
+    if (incoming.kind === 'place') {
+      handleTraceRouteToPlace(incoming.label, incoming.point)
+      return
+    }
+    setSearchSeed(incoming.text)
+    setSearchMode('destination')
+    setIsSearchOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Quando a posição chega após um pedido pendente (botão "minha localização",
   // seja o da barra de busca ou o flutuante do mapa): preenche origem +

@@ -1,0 +1,59 @@
+package %%PACKAGE%%;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+
+import com.getcapacitor.BridgeActivity;
+
+/**
+ * Casca do GPS Scooter. O app em si e o site publicado (ver capacitor.config.json);
+ * esta classe so faz UMA coisa a mais: quando outro app manda abrir um endereco
+ * (geo:, google.navigation: ou "Compartilhar" de texto), converte o pedido numa
+ * navegacao do WebView para <site>/?entrada=<texto cru>. O site le esse parametro
+ * (src/native/incomingDestination.ts). Sem ponte JavaScript de proposito.
+ */
+public class MainActivity extends BridgeActivity {
+
+  private static final String SITE = "%%URL%%";
+
+  @Override
+  public void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    // So na abertura "de verdade": se o Android recriou a tela (rotacao, processo
+    // morto), o mesmo intent voltaria e o destino seria aplicado de novo.
+    if (savedInstanceState == null) abrirDestino(getIntent());
+  }
+
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    abrirDestino(intent);
+  }
+
+  private void abrirDestino(Intent intent) {
+    String url = urlDoIntent(intent);
+    if (url == null || getBridge() == null || getBridge().getWebView() == null) return;
+    getBridge().getWebView().loadUrl(url);
+  }
+
+  private String urlDoIntent(Intent intent) {
+    if (intent == null) return null;
+    String acao = intent.getAction();
+    String bruto = null;
+
+    if (Intent.ACTION_VIEW.equals(acao) && intent.getData() != null) {
+      String esquema = intent.getData().getScheme();
+      if ("geo".equals(esquema) || "google.navigation".equals(esquema)) {
+        bruto = intent.getDataString();
+      }
+    } else if (Intent.ACTION_SEND.equals(acao)) {
+      CharSequence texto = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+      if (texto != null) bruto = texto.toString();
+    }
+
+    if (bruto == null || bruto.trim().isEmpty()) return null;
+    return SITE + "/?entrada=" + Uri.encode(bruto);
+  }
+}

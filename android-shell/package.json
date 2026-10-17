@@ -1,0 +1,11 @@
+{
+  "name": "gps-scooter-android-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Casca Android (Capacitor) do GPS Scooter. Vive separada da raiz de proposito: nao mexe no package.json nem no lock que a Vercel usa.",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  }
+}
