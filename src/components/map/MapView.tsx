@@ -2362,22 +2362,21 @@ function refineCartography(map: MapLibreMap, theme: 'dark' | 'light') {
     setPaint(layerId, 'line-color', C.roadCasing)
   }
 
-  // Prédios em volume. Sem sombras nem oclusão (o MapLibre 4 não tem nenhuma
-  // das duas), o relevo vem do gradiente vertical embutido — a face de cima
-  // clareia em relação à base — e da altura vinda do dado real.
-  setPaint('Building 3D', 'fill-extrusion-vertical-gradient', true)
-  setPaint('Building 3D', 'fill-extrusion-opacity', theme === 'light' ? 0.5 : 0.42)
-  // Prédios altos ficam levemente mais claros: dá leitura de silhueta urbana
-  // sem inventar iluminação que o renderizador não calcula.
-  setPaint('Building 3D', 'fill-extrusion-color', [
-    'interpolate',
-    ['linear'],
-    ['coalesce', ['get', 'render_height'], 0],
-    0,
-    C.building,
-    60,
-    theme === 'light' ? '#F2F5F9' : '#26374E',
-  ])
+  // Prédios PLANOS, como no Google Maps. O volume em 3D (fill-extrusion) ficava
+  // borrado e parecia "não carregado"; o prédio plano, com contorno fino, mostra
+  // o formato real de cada casa e quarteirão.
+  try {
+    if (map.getLayer('Building 3D')) map.setLayoutProperty('Building 3D', 'visibility', 'none')
+    if (map.getLayer('Building')) {
+      map.setLayerZoomRange('Building', 12, 24)
+      map.setLayoutProperty('Building', 'visibility', 'visible')
+    }
+  } catch {
+    // Estilo do provedor mudou: segue com o que a recoloração geral deixou.
+  }
+  setPaint('Building', 'fill-color', C.building)
+  setPaint('Building', 'fill-opacity', 1)
+  setPaint('Building', 'fill-outline-color', C.roadCasing)
 
   // Água e verde são os únicos pontos de cor do mapa — é o que evita o cinza
   // uniforme da referência virar um borrão sem hierarquia.
