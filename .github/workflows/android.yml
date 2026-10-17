@@ -44,6 +44,9 @@ jobs:
         working-directory: android-shell
         run: npx cap add android
 
+      - name: Garantir o ImageMagick (icones)
+        run: command -v magick >/dev/null || command -v convert >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
+
       - name: Aplicar os ajustes do GPS Scooter
         working-directory: android-shell
         env:

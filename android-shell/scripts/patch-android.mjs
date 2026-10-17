@@ -14,6 +14,9 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Todo o patch num try: o log completo do CI nao e legivel fora do navegador, mas
+// anotacoes `::error::` sim — e e nelas que o motivo da falha aparece.
+try {
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
 const android = join(raiz, 'android')
 const config = JSON.parse(readFileSync(join(raiz, 'capacitor.config.json'), 'utf8'))
@@ -89,7 +92,13 @@ for (const [densidade, px] of Object.entries(tamanhos)) {
   mkdirSync(destino, { recursive: true })
   for (const nome of ['ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png']) {
     const arquivo = join(destino, nome)
-    execFileSync('convert', [icone, '-resize', `${px}x${px}`, arquivo])
+    // ImageMagick 7 expoe `magick`; o 6 so tem `convert`.
+    try {
+      execFileSync('magick', [icone, '-resize', `${px}x${px}`, arquivo], { stdio: 'pipe' })
+    } catch (erroMagick) {
+      if (erroMagick.code !== 'ENOENT') throw erroMagick
+      execFileSync('convert', [icone, '-resize', `${px}x${px}`, arquivo], { stdio: 'pipe' })
+    }
   }
 }
 
@@ -104,3 +113,8 @@ gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`).repla
 writeFileSync(gradlePath, gradle)
 
 console.log(`patch-android: ok (pacote ${pacote}, site ${site}, versao ${versionName} / ${versionCode})`)
+} catch (erro) {
+  const detalhe = [erro?.message, erro?.stderr?.toString()].filter(Boolean).join(' | ')
+  console.log(`::error title=patch-android falhou::${detalhe.replace(/\r?\n/g, '%0A').slice(0, 900)}`)
+  process.exit(1)
+}
