@@ -1,5 +1,10 @@
+import { nativeBridge } from '@/native/nativeBridge'
+
 /**
  * Síntese de voz para as instruções de navegação (Web Speech API).
+ *
+ * No app Android não existe `speechSynthesis`: a fala vai para o TextToSpeech do
+ * aparelho pela ponte nativa (ver `native/nativeBridge.ts`).
  *
  * Escolha da API, com as limitações verificadas antes de implementar:
  * - `speechSynthesis` EXISTE no Safari/iOS, diferente do Web Bluetooth. É a
@@ -17,7 +22,11 @@
  * um respiro mínimo entre elas.
  */
 
-export const isSpeechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+/** Voz do navegador. Falta no WebView do Android — é por isso que o app instalado fala pela ponte nativa. */
+const hasWebSpeech = typeof window !== 'undefined' && 'speechSynthesis' in window
+
+/** Há alguma forma de falar: a do navegador ou o TextToSpeech do Android (app instalado). */
+export const isSpeechSupported = hasWebSpeech || nativeBridge !== null
 
 /** Respiro entre duas falas consecutivas — sem isso elas soam coladas. */
 const MIN_GAP_BETWEEN_UTTERANCES_MS = 600
@@ -91,7 +100,7 @@ export function speakableText(text: string): string {
  * (a online falha sem rede, no meio do trânsito), e nome como desempate.
  */
 export function listPortugueseVoices(): SpeechSynthesisVoice[] {
-  if (!isSpeechSupported) return []
+  if (!hasWebSpeech) return []
 
   const porUri = new Map<string, SpeechSynthesisVoice>()
   for (const voice of window.speechSynthesis.getVoices()) {
@@ -150,7 +159,7 @@ export function describeVoice(voice: SpeechSynthesisVoice, all: SpeechSynthesisV
  * de forma assíncrona, por este evento.
  */
 export function onVoicesChanged(callback: () => void): () => void {
-  if (!isSpeechSupported) return () => {}
+  if (!hasWebSpeech) return () => {}
   window.speechSynthesis.addEventListener('voiceschanged', callback)
   return () => window.speechSynthesis.removeEventListener('voiceschanged', callback)
 }
@@ -207,7 +216,7 @@ function resolveLocalVoice(): SpeechSynthesisVoice | null {
 }
 
 function drainQueue() {
-  if (isSpeaking || queue.length === 0 || !isSpeechSupported) return
+  if (isSpeaking || queue.length === 0 || !hasWebSpeech) return
 
   const item = queue.shift()!
   isSpeaking = true
@@ -255,7 +264,7 @@ function drainQueue() {
  * real do usuário — chamar depois, de um callback de GPS, não funciona.
  */
 export function primeFromUserGesture() {
-  if (!isSpeechSupported) return
+  if (!hasWebSpeech) return
   const utterance = new SpeechSynthesisUtterance('')
   utterance.volume = 0
   window.speechSynthesis.speak(utterance)
@@ -271,6 +280,13 @@ export function primeFromUserGesture() {
  */
 export function speak(text: string, { urgent = false, calm = false }: { urgent?: boolean; calm?: boolean } = {}) {
   if (!isSpeechSupported) return
+
+  // App Android: o TextToSpeech do aparelho tem a própria fila (urgente corta e
+  // fala, o resto entra na fila), então a fila e o respiro daqui não se aplicam.
+  if (nativeBridge && !hasWebSpeech) {
+    nativeBridge.speak(speakableText(text), calm ? 0.96 : 1.0, urgent)
+    return
+  }
 
   if (urgent) {
     queue = [{ text, urgent, calm }]
@@ -291,6 +307,10 @@ export function clearPendingSpeech() {
 
 export function stopSpeaking() {
   if (!isSpeechSupported) return
+  if (nativeBridge && !hasWebSpeech) {
+    nativeBridge.stopSpeaking()
+    return
+  }
   queue = []
   isSpeaking = false
   window.speechSynthesis.cancel()

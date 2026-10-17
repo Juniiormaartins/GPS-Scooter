@@ -1,0 +1,112 @@
+package %%PACKAGE%%;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.PowerManager;
+
+/**
+ * Servico em primeiro plano que mantem o GPS ligado com a tela apagada ou com
+ * outro app na frente. Usa o LocationManager do proprio Android (sem Google Play
+ * Services). Cada posicao vai para `sink`, que a MainActivity entrega ao site.
+ */
+public class TrackingService extends Service {
+
+  public interface Sink {
+    void onLocation(Location local);
+  }
+
+  public static volatile Sink sink = null;
+  public static volatile boolean running = false;
+
+  private static final String CANAL = "gps-scooter-trilha";
+  private LocationManager manager;
+  private PowerManager.WakeLock wakeLock;
+
+  private final LocationListener ouvinte = new LocationListener() {
+    @Override
+    public void onLocationChanged(Location local) {
+      Sink destino = sink;
+      if (destino != null) destino.onLocation(local);
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {}
+
+    @Override
+    public void onProviderDisabled(String provider) {}
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {}
+  };
+
+  @Override
+  public IBinder onBind(Intent intent) {
+    return null;
+  }
+
+  @Override
+  public int onStartCommand(Intent intent, int flags, int startId) {
+    if (running) return START_STICKY;
+
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (Build.VERSION.SDK_INT >= 26) {
+      nm.createNotificationChannel(new NotificationChannel(CANAL, "Navegação ativa", NotificationManager.IMPORTANCE_LOW));
+    }
+    Intent abrir = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    int flagsPi = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+    PendingIntent toque = PendingIntent.getActivity(this, 0, abrir, flagsPi);
+    Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CANAL) : new Notification.Builder(this);
+    Notification aviso = b.setContentTitle("GPS Scooter")
+        .setContentText("Navegação ativa — usando sua localização")
+        .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+        .setContentIntent(toque)
+        .setOngoing(true)
+        .build();
+
+    try {
+      if (Build.VERSION.SDK_INT >= 29) {
+        startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+      } else {
+        startForeground(1, aviso);
+      }
+    } catch (RuntimeException negado) {
+      stopSelf();
+      return START_NOT_STICKY;
+    }
+
+    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gpsscooter:trilha");
+    wakeLock.acquire(4 * 60 * 60 * 1000L);
+
+    manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+    try {
+      manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, ouvinte, Looper.getMainLooper());
+      running = true;
+    } catch (SecurityException | IllegalArgumentException semGps) {
+      stopSelf();
+      return START_NOT_STICKY;
+    }
+    return START_STICKY;
+  }
+
+  @Override
+  public void onDestroy() {
+    running = false;
+    if (manager != null) manager.removeUpdates(ouvinte);
+    if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+    super.onDestroy();
+  }
+}

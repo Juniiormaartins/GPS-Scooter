@@ -36,6 +36,9 @@ const permissoes = [
   'android.permission.ACCESS_FINE_LOCATION',
   'android.permission.ACCESS_COARSE_LOCATION',
   'android.permission.WAKE_LOCK',
+  'android.permission.FOREGROUND_SERVICE',
+  'android.permission.FOREGROUND_SERVICE_LOCATION',
+  'android.permission.POST_NOTIFICATIONS',
 ]
 const linhasPermissao = permissoes
   .filter((p) => !manifest.includes(p))
@@ -69,6 +72,16 @@ const filtros = `
 const fechaActivity = manifest.indexOf('</activity>')
 exige(fechaActivity > 0, 'manifest sem </activity>')
 manifest = manifest.slice(0, fechaActivity) + filtros + '        ' + manifest.slice(fechaActivity)
+// Servico de localizacao em segundo plano + visibilidade do reconhecimento de fala (Android 11+).
+const fimActivity = manifest.indexOf('</activity>') + '</activity>'.length
+manifest =
+  manifest.slice(0, fimActivity) +
+  '\n        <service android:name=".TrackingService" android:exported="false" android:foregroundServiceType="location" />' +
+  manifest.slice(fimActivity)
+manifest = manifest.replace(
+  '<application',
+  '<queries><intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent></queries>\n    <application',
+)
 exige(/android:launchMode="singleTask"/.test(manifest), 'MainActivity sem launchMode singleTask')
 writeFileSync(manifestPath, manifest)
 
@@ -77,6 +90,8 @@ const pastaJava = join(android, 'app/src/main/java', ...pacote.split('.'))
 mkdirSync(pastaJava, { recursive: true })
 const modelo = readFileSync(join(raiz, 'overlay/MainActivity.java.template'), 'utf8')
 writeFileSync(join(pastaJava, 'MainActivity.java'), modelo.replaceAll('%%PACKAGE%%', pacote).replaceAll('%%URL%%', site))
+const servico = readFileSync(join(raiz, 'overlay/TrackingService.java.template'), 'utf8')
+writeFileSync(join(pastaJava, 'TrackingService.java'), servico.replaceAll('%%PACKAGE%%', pacote))
 
 // 3. Icone (a partir do icone do PWA) ----------------------------------------------
 const icone = join(raiz, '..', 'public/icons/icon-512.png')

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LngLat } from '@/config/region'
+import { nativeBridge, subscribeNativeLocation, type NativeLocationSample } from '@/native/nativeBridge'
 
 export type LocationPermissionState = 'unknown' | 'granted' | 'denied' | 'prompt' | 'unsupported'
 
@@ -39,6 +40,8 @@ export function useGeolocation() {
     permission: 'unknown',
   })
   const watchIdRef = useRef<number | null>(null)
+  /** Encerra o serviço de localização do app Android (só existe lá). */
+  const nativeStopRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!('permissions' in navigator) || !navigator.permissions?.query) return
@@ -85,6 +88,32 @@ export function useGeolocation() {
     }))
   }, [])
 
+  /**
+   * Posição vinda do serviço em segundo plano do app Android.
+   *
+   * Só vale com o app ESCONDIDO. Com ele na tela, quem lê a posição é o próprio
+   * navegador (melhor combinação de GPS e rede, já testada); ouvir os dois ao
+   * mesmo tempo misturaria duas fontes de precisão diferente e a posição
+   * tremeria. O navegador deixa de entregar leituras quando o app vai para
+   * segundo plano — é aí que esta entra.
+   */
+  const handleNativeSample = useCallback((native: NativeLocationSample) => {
+    if (document.visibilityState !== 'hidden') return
+    setState((prev) => ({
+      ...prev,
+      isLocating: false,
+      error: null,
+      permission: 'granted',
+      sample: {
+        position: { lng: native.lng, lat: native.lat },
+        accuracyMeters: native.accuracyMeters ?? 15,
+        speedMps: native.speedMps,
+        headingDeg: native.headingDeg,
+        timestamp: native.timestamp,
+      },
+    }))
+  }, [])
+
   const locate = useCallback(() => {
     if (!('geolocation' in navigator)) {
       setState((prev) => ({ ...prev, permission: 'unsupported', error: 'Geolocalização não é suportada neste navegador.' }))
@@ -111,12 +140,38 @@ export function useGeolocation() {
       maximumAge: 0,
       timeout: 15000,
     })
-  }, [handleSuccess, handleError])
+
+    // App Android: liga também o serviço em segundo plano (com aviso fixo na
+    // barra), para a navegação continuar com a tela apagada ou com outro app na frente.
+    if (nativeBridge && nativeStopRef.current === null) {
+      let started = false
+      try {
+        started = nativeBridge.startTracking()
+      } catch {
+        // a ponte falhou: segue só com a leitura do navegador
+      }
+      if (started) {
+        const unsubscribe = subscribeNativeLocation(handleNativeSample)
+        nativeStopRef.current = () => {
+          unsubscribe()
+          try {
+            nativeBridge?.stopTracking()
+          } catch {
+            // nada a fazer: o serviço para junto com o app
+          }
+        }
+      }
+    }
+  }, [handleSuccess, handleError, handleNativeSample])
 
   const stopWatching = useCallback(() => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
+    }
+    if (nativeStopRef.current) {
+      nativeStopRef.current()
+      nativeStopRef.current = null
     }
   }, [])
 

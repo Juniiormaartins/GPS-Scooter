@@ -24,6 +24,7 @@ import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
 import { runKey } from '@/services/navigation/segmentAlerts'
 import { currentSpeedLimit } from '@/services/navigation/speedLimit'
 import { consumeIncomingDestination } from '@/native/incomingDestination'
+import { nativeBridge, startNativeVoiceSearch } from '@/native/nativeBridge'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import {
@@ -373,6 +374,22 @@ export default function App() {
     if (!isGeocodingConfigured) return 'Busca de endereços indisponível: configure a geocodificação no .env.'
     return null
   }, [idleLocationMessage])
+
+  /**
+   * Microfone da busca (app Android): o reconhecimento de fala do aparelho devolve
+   * o que foi dito e isso entra na busca já preenchido. Cancelou → nada muda.
+   * Aparelho sem reconhecimento de fala → abre a busca digitada, como o microfone
+   * sempre fez.
+   */
+  function handleVoiceSearch() {
+    const started = startNativeVoiceSearch((spoken) => {
+      if (!spoken) return
+      setSearchSeed(spoken)
+      setSearchMode('destination')
+      setIsSearchOpen(true)
+    })
+    if (!started) setIsSearchOpen(true)
+  }
 
   function handleUseCurrentLocation() {
     setFollowUserAsOrigin(true)
@@ -1522,7 +1539,11 @@ export default function App() {
           }}
         />
 
-        <SearchBar onOpenSearch={() => setIsSearchOpen(true)} value={destinationText || null} />
+        <SearchBar
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onVoiceSearch={nativeBridge ? handleVoiceSearch : undefined}
+          value={destinationText || null}
+        />
 
         {userPosition && !destinationText && !activeScoredRoute && (
           <QuickDestinations

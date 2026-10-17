@@ -1,25 +1,83 @@
 package %%PACKAGE%%;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.speech.tts.TextToSpeech;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.getcapacitor.BridgeActivity;
 
+import java.util.ArrayList;
+import java.util.Locale;
+
 /**
- * Casca do GPS Scooter. O app em si e o site publicado (ver capacitor.config.json);
- * esta classe so faz UMA coisa a mais: quando outro app manda abrir um endereco
- * (geo:, google.navigation: ou "Compartilhar" de texto), converte o pedido numa
- * navegacao do WebView para <site>/?entrada=<texto cru>. O site le esse parametro
- * (src/native/incomingDestination.ts). Sem ponte JavaScript de proposito.
+ * Casca do GPS Scooter. O app em si e o site publicado (ver capacitor.config.json).
+ * Esta classe faz o que o site sozinho nao consegue dentro do WebView:
+ *
+ * 1. DESTINO DE OUTROS APPS: quando outro app manda abrir um endereco (geo:,
+ *    google.navigation: ou "Compartilhar" de texto), converte o pedido numa
+ *    navegacao do WebView para <site>/?entrada=<texto cru>. O site le esse
+ *    parametro (src/native/incomingDestination.ts).
+ * 2. PONTE `GpsScooterNative` (src/native/nativeBridge.ts):
+ *    - voz das instrucoes pelo TextToSpeech do Android (o WebView nao tem
+ *      speechSynthesis);
+ *    - localizacao em segundo plano por um servico em primeiro plano
+ *      (TrackingService), com as posicoes entregues ao site;
+ *    - busca por voz pelo reconhecimento de fala do Android.
  */
 public class MainActivity extends BridgeActivity {
 
   private static final String SITE = "%%URL%%";
 
+  private TextToSpeech tts;
+  private volatile boolean ttsReady = false;
+  private volatile String ttsStatus = "iniciando";
+  private final ArrayList<Object[]> ttsPending = new ArrayList<>();
+
+  private ActivityResultLauncher<Intent> voiceSearchLauncher;
+
   @Override
   public void onCreate(Bundle savedInstanceState) {
+    // O launcher precisa ser registrado antes de a Activity iniciar.
+    voiceSearchLauncher = registerForActivityResult(
+        new ActivityResultContracts.StartActivityForResult(),
+        result -> {
+          String texto = null;
+          if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+            ArrayList<String> lista = result.getData().getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            if (lista != null && !lista.isEmpty()) texto = lista.get(0);
+          }
+          entregarAoSite("window.__gpsNativeVoiceResult&&window.__gpsNativeVoiceResult(" + aspasJs(texto) + ")");
+        });
+
     super.onCreate(savedInstanceState);
+
+    iniciarVoz();
+    getBridge().getWebView().addJavascriptInterface(new Ponte(), "GpsScooterNative");
+
+    TrackingService.sink = local -> {
+      String chamada = "window.__gpsNativeLocation&&window.__gpsNativeLocation("
+          + local.getLatitude() + ","
+          + local.getLongitude() + ","
+          + (local.hasAccuracy() ? local.getAccuracy() : -1) + ","
+          + (local.hasSpeed() ? local.getSpeed() : -1) + ","
+          + (local.hasBearing() ? local.getBearing() : -1) + ","
+          + local.getTime() + ")";
+      entregarAoSite(chamada);
+    };
+
     // So na abertura "de verdade": se o Android recriou a tela (rotacao, processo
     // morto), o mesmo intent voltaria e o destino seria aplicado de novo.
     if (savedInstanceState == null) abrirDestino(getIntent());
@@ -31,6 +89,35 @@ public class MainActivity extends BridgeActivity {
     setIntent(intent);
     abrirDestino(intent);
   }
+
+  /**
+   * Com a navegacao em andamento, o app pode ir para segundo plano (a pessoa abre
+   * o app da entrega). Pausado, o WebView congela o JavaScript — e e o JavaScript
+   * que calcula o progresso e fala a proxima instrucao. Enquanto o servico de
+   * localizacao esta ativo, mantem o WebView rodando.
+   */
+  @Override
+  public void onPause() {
+    super.onPause();
+    if (TrackingService.running && getBridge() != null && getBridge().getWebView() != null) {
+      WebView web = getBridge().getWebView();
+      web.onResume();
+      web.resumeTimers();
+    }
+  }
+
+  @Override
+  public void onDestroy() {
+    TrackingService.sink = null;
+    if (tts != null) {
+      tts.stop();
+      tts.shutdown();
+      tts = null;
+    }
+    super.onDestroy();
+  }
+
+  // ---------------------------------------------------------------- destino
 
   private void abrirDestino(Intent intent) {
     String url = urlDoIntent(intent);
@@ -55,5 +142,148 @@ public class MainActivity extends BridgeActivity {
 
     if (bruto == null || bruto.trim().isEmpty()) return null;
     return SITE + "/?entrada=" + Uri.encode(bruto);
+  }
+
+  // -------------------------------------------------------------------- voz
+
+  private void iniciarVoz() {
+    tts = new TextToSpeech(getApplicationContext(), status -> {
+      if (status != TextToSpeech.SUCCESS || tts == null) {
+        ttsStatus = "falhou";
+        return;
+      }
+      try {
+        tts.setAudioAttributes(new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build());
+      } catch (Exception ignorado) {
+        // segue com o canal padrao
+      }
+      int idioma = tts.setLanguage(new Locale("pt", "BR"));
+      if (idioma == TextToSpeech.LANG_MISSING_DATA || idioma == TextToSpeech.LANG_NOT_SUPPORTED) {
+        ttsStatus = "sem-portugues";
+        return;
+      }
+      ttsStatus = "pronta";
+      ttsReady = true;
+      synchronized (ttsPending) {
+        for (Object[] item : ttsPending) {
+          falarAgora((String) item[0], (Float) item[1], (Boolean) item[2]);
+        }
+        ttsPending.clear();
+      }
+    });
+  }
+
+  private void falar(String texto, float velocidade, boolean urgente) {
+    if (texto == null || texto.trim().isEmpty()) return;
+    if (!ttsReady) {
+      // Ainda iniciando: guarda para falar assim que ficar pronto (so se nao falhou de vez).
+      if ("iniciando".equals(ttsStatus)) {
+        synchronized (ttsPending) {
+          ttsPending.add(new Object[] {texto, velocidade, urgente});
+        }
+      }
+      return;
+    }
+    falarAgora(texto, velocidade, urgente);
+  }
+
+  private void falarAgora(String texto, float velocidade, boolean urgente) {
+    if (tts == null) return;
+    tts.setSpeechRate(velocidade);
+    tts.speak(texto, urgente ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, null, "gps-" + System.nanoTime());
+  }
+
+  // ------------------------------------------------------------------ ponte
+
+  /** Executa JavaScript no site, na thread da interface. */
+  private void entregarAoSite(String codigo) {
+    runOnUiThread(() -> {
+      if (getBridge() != null && getBridge().getWebView() != null) {
+        getBridge().getWebView().evaluateJavascript(codigo, null);
+      }
+    });
+  }
+
+  /** Texto como literal JavaScript entre aspas (ou null). */
+  private static String aspasJs(String texto) {
+    if (texto == null) return "null";
+    StringBuilder b = new StringBuilder("\"");
+    for (int i = 0; i < texto.length(); i++) {
+      char c = texto.charAt(i);
+      switch (c) {
+        case '\\': b.append("\\\\"); break;
+        case '"': b.append("\\\""); break;
+        case '\n': b.append("\\n"); break;
+        case '\r': b.append("\\r"); break;
+        case (char) 0x2028: b.append("\\u2028"); break;
+        case (char) 0x2029: b.append("\\u2029"); break;
+        default: b.append(c);
+      }
+    }
+    return b.append('"').toString();
+  }
+
+  /** Objeto visivel ao JavaScript do site como `window.GpsScooterNative`. */
+  private class Ponte {
+
+    @JavascriptInterface
+    public void speak(String texto, float velocidade, boolean urgente) {
+      falar(texto, velocidade, urgente);
+    }
+
+    @JavascriptInterface
+    public void stopSpeaking() {
+      if (tts != null) tts.stop();
+    }
+
+    @JavascriptInterface
+    public String speechStatus() {
+      return ttsStatus;
+    }
+
+    @JavascriptInterface
+    public boolean startTracking() {
+      if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        return false;
+      }
+      runOnUiThread(() -> {
+        // Android 13+: sem esta permissao o aviso fixo nao aparece (o servico roda igual).
+        if (Build.VERSION.SDK_INT >= 33
+            && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+          requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, 7);
+        }
+        Intent servico = new Intent(MainActivity.this, TrackingService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(servico);
+        else startService(servico);
+      });
+      return true;
+    }
+
+    @JavascriptInterface
+    public void stopTracking() {
+      runOnUiThread(() -> stopService(new Intent(MainActivity.this, TrackingService.class)));
+    }
+
+    @JavascriptInterface
+    public boolean startVoiceSearch() {
+      Intent fala = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+      fala.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+      fala.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR");
+      fala.putExtra(RecognizerIntent.EXTRA_PROMPT, "Diga o endereço ou o lugar");
+      fala.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+      final boolean[] aberto = {true};
+      runOnUiThread(() -> {
+        try {
+          voiceSearchLauncher.launch(fala);
+        } catch (ActivityNotFoundException semReconhecimento) {
+          aberto[0] = false;
+          entregarAoSite("window.__gpsNativeVoiceResult&&window.__gpsNativeVoiceResult(null)");
+        }
+      });
+      return aberto[0];
+    }
   }
 }

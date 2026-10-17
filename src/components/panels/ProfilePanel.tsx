@@ -16,6 +16,7 @@ import {
 } from '@/config/userPreferences'
 import type { useVehicleBluetooth } from '@/hooks/useVehicleBluetooth'
 import { describeVoice, isSpeechSupported, listPortugueseVoices, onVoicesChanged } from '@/services/navigation/voiceGuidance'
+import { describeNativeSpeechStatus, nativeBridge } from '@/native/nativeBridge'
 import { AVATAR_ACCEPTED_TYPES, prepareAvatar } from '@/services/avatar'
 
 interface ProfilePanelProps {
@@ -487,6 +488,30 @@ function VoiceGroup({
     // que tem várias.
     return onVoicesChanged(() => setVoices(listPortugueseVoices()))
   }, [])
+
+  // App Android: a voz é a do próprio aparelho (TextToSpeech), sem lista de vozes
+  // para escolher aqui. A linha dá o estado e, ao tocar, uma fala de teste.
+  if (nativeBridge) {
+    const status = nativeBridge.speechStatus()
+    return (
+      <SettingsGroup
+        title="Navegação por voz"
+        footnote={
+          status === 'sem-portugues'
+            ? 'O aparelho não tem voz em português instalada. Nas configurações do Android, em Texto para fala, instale o português (Brasil).'
+            : 'No app, a voz das instruções é a do próprio Android. Para trocar de voz ou de velocidade, use as configurações de Texto para fala do aparelho.'
+        }
+      >
+        <SettingsRow
+          inGroup
+          label="Voz das instruções"
+          control="value"
+          value={describeNativeSpeechStatus(status)}
+          onClick={() => nativeBridge.speak('Navegação por voz funcionando.', 1, true)}
+        />
+      </SettingsGroup>
+    )
+  }
 
   if (!isSpeechSupported) {
     return (

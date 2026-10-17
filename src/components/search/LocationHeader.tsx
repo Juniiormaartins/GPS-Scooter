@@ -126,6 +126,8 @@ export function LocationHeader({
 
 interface SearchBarProps {
   onOpenSearch: () => void
+  /** Toque no microfone. Sem ele (navegador/PWA), o microfone abre a busca digitada, como sempre foi. */
+  onVoiceSearch?: () => void
   /** Texto já escolhido, quando existir — a barra passa a mostrá-lo em vez do placeholder. */
   value?: string | null
 }
@@ -138,24 +140,33 @@ interface SearchBarProps {
  * onde o handoff colocou a experiência de pesquisa (campo focado, categorias,
  * resultados). Manter um input aqui duplicaria estado com aquela tela.
  */
-export function SearchBar({ onOpenSearch, value = null }: SearchBarProps) {
+export function SearchBar({ onOpenSearch, onVoiceSearch, value = null }: SearchBarProps) {
+  // Dois botões lado a lado, não um dentro do outro (botão dentro de botão não é
+  // HTML válido e o toque no microfone dispararia os dois).
   return (
-    <button
-      type="button"
-      onClick={onOpenSearch}
-      className="pointer-events-auto flex h-[58px] w-full items-center gap-3 rounded-field border border-hairline/[.06] bg-surface-card pl-[18px] pr-2 text-left shadow-field transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
-    >
-      <Icon name="search" size={22} className="text-brand-500" />
-
-      <span
-        className={`min-w-0 flex-1 truncate text-field-text ${value ? 'text-content-primary' : 'text-content-tertiary'}`}
+    <div className="pointer-events-auto flex h-[58px] w-full items-center gap-3 rounded-field border border-hairline/[.06] bg-surface-card pl-[18px] pr-2 shadow-field">
+      <button
+        type="button"
+        onClick={onOpenSearch}
+        className="flex h-full min-w-0 flex-1 items-center gap-3 text-left transition-all duration-fast ease-standard active:scale-[.97] active:opacity-[.88]"
       >
-        {value ?? 'Para onde você quer ir?'}
-      </span>
+        <Icon name="search" size={22} className="shrink-0 text-brand-500" />
 
-      <span className="btn-sheen flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-brand-500 text-content-on-accent shadow-primary">
+        <span
+          className={`min-w-0 flex-1 truncate text-field-text ${value ? 'text-content-primary' : 'text-content-tertiary'}`}
+        >
+          {value ?? 'Para onde você quer ir?'}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        aria-label="Pesquisar por voz"
+        onClick={onVoiceSearch ?? onOpenSearch}
+        className="btn-sheen flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-pill bg-brand-500 text-content-on-accent shadow-primary transition-all duration-fast ease-standard active:scale-[.92] active:opacity-[.88]"
+      >
         <Icon name="mic" size={20} strokeWidth={2} />
-      </span>
-    </button>
+      </button>
+    </div>
   )
 }

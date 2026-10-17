@@ -56,7 +56,15 @@ jobs:
 
       - name: Compilar
         working-directory: android-shell/android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: |
+          set +e
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            msg=$(grep -E "error:|FAILED|What went wrong|Execution failed|> " ../gradle.log | head -12 | tr '\n' ' ' | cut -c1-900)
+            echo "::error title=Gradle falhou::$msg"
+          fi
+          exit $code
 
       - name: Assinar
         working-directory: android-shell
