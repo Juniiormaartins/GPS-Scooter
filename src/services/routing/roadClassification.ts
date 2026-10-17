@@ -276,7 +276,12 @@ function applyVehicleAdjustment(
   const onOwnInfrastructure = base.reason === 'ideal-infrastructure'
 
   const maxSpeed = tags?.maxspeed ? Number.parseInt(tags.maxspeed, 10) : undefined
-  if (!onOwnInfrastructure && maxSpeed && Number.isFinite(maxSpeed)) {
+  const avenida = refineArterialForScooter(base, segment, vehicle)
+  if (avenida) {
+    // Avenida: a velocidade permitida decide, e ela nunca vira vermelho sozinha (ver a função).
+    tier = avenida.tier
+    reason = avenida.reason
+  } else if (!onOwnInfrastructure && maxSpeed && Number.isFinite(maxSpeed)) {
     const differential = maxSpeed - vehicle.referenceSpeedKmh
     if (differential >= profile.speedDifferentialThresholdKmh) {
       tier = downgrade(tier as NonProhibitedTier)
@@ -294,6 +299,60 @@ function applyVehicleAdjustment(
   }
 
   return { tier, reason }
+}
+
+/**
+ * AVENIDAS (primary/secondary) PARA A SCOOTER: atenção, não perigo.
+ *
+ * Quem pilota explicou o critério: numa cidade sem ciclovia a avenida muitas
+ * vezes é o único caminho, então pintá-la de vermelho não ajuda — vermelho é para
+ * o que é crítico de verdade (BR, rodovia, túnel). O que a avenida pede é um
+ * ponto de atenção, e o quanto depende da VELOCIDADE PERMITIDA nela: andar a
+ * 32 km/h numa via de 40 ou 50 é tranquilo, mesmo com carros mais rápidos.
+ *
+ * Pela diferença entre o limite da via e a velocidade do veículo:
+ *   até 18 km/h (via de até 50 p/ 32)  → boa
+ *   de 19 a 47 km/h                    → atenção (âmbar), nunca vermelho
+ *   48 km/h ou mais (via de 80 ou +)   → desaconselhada: já é perfil de rodovia
+ *
+ * Sem `maxspeed` no OSM não há velocidade para ler, e a tabela por tipo de via
+ * segue valendo — só uma avenida secundária de 4 faixas ou mais passa de boa a
+ * atenção, porque é o que "avenida movimentada" quer dizer nos dados.
+ *
+ * Só para a scooter (costing `motor_scooter`) e só onde a leitura anterior era
+ * por tipo de via: expressa, túnel e acesso restrito têm regra própria e não
+ * passam por aqui.
+ */
+const AVENUE_COMFORT_GAP_KMH = 18
+const AVENUE_CRITICAL_GAP_KMH = 48
+const AVENUE_HIGH_SPEED_NOTE_GAP_KMH = 28
+const BUSY_AVENUE_MIN_LANES = 4
+
+function refineArterialForScooter(
+  base: SegmentAssessment,
+  segment: RouteSegment,
+  vehicle: VehicleClassificationContext,
+): SegmentAssessment | null {
+  if (mobilityProfile(vehicle.modelId).costing !== 'motor_scooter') return null
+  if (base.reason !== 'urban-road' && base.reason !== 'shared-with-traffic' && base.reason !== 'arterial-road') return null
+
+  const tags = segment.osmTags
+  const wayKind = segment.wayKind ?? normalizeWayKind(tags?.highway)
+  if (wayKind !== 'primary' && wayKind !== 'secondary') return null
+
+  const maxSpeed = tags?.maxspeed ? Number.parseInt(tags.maxspeed, 10) : NaN
+  if (Number.isFinite(maxSpeed) && maxSpeed > 0) {
+    const gap = maxSpeed - vehicle.referenceSpeedKmh
+    if (gap <= AVENUE_COMFORT_GAP_KMH) return { tier: 'good', reason: 'urban-road' }
+    if (gap >= AVENUE_CRITICAL_GAP_KMH) return { tier: 'unsuitable', reason: 'high-speed-traffic' }
+    return { tier: 'caution', reason: gap >= AVENUE_HIGH_SPEED_NOTE_GAP_KMH ? 'high-speed-traffic' : 'shared-with-traffic' }
+  }
+
+  const lanes = Number.parseInt(tags?.lanes ?? '', 10)
+  if (wayKind === 'secondary' && Number.isFinite(lanes) && lanes >= BUSY_AVENUE_MIN_LANES) {
+    return { tier: 'caution', reason: 'shared-with-traffic' }
+  }
+  return null
 }
 
 type NonProhibitedTier = Exclude<SuitabilityTier, 'prohibited'>
