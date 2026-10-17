@@ -40,7 +40,7 @@ export function MapControls({
   suitabilityActive = false,
 }: MapControlsProps) {
   return (
-    <div className="pointer-events-auto flex flex-col gap-2.5">
+    <div className="pip-hide pointer-events-auto flex flex-col gap-2.5">
       {onToggleSuitability && (
         <ControlButton
           onClick={onToggleSuitability}

@@ -28,6 +28,8 @@ interface GpsScooterNative {
   stopTracking(): void
   /** Devolve false se o aparelho não tem reconhecimento de fala. */
   startVoiceSearch(): boolean
+  /** Avisa a casca se há navegação em andamento: é ela que abre a janela flutuante ao sair do app. */
+  setNavigating(active: boolean): void
 }
 
 declare global {
@@ -35,6 +37,7 @@ declare global {
     GpsScooterNative?: GpsScooterNative
     __gpsNativeLocation?: (lat: number, lng: number, accuracy: number, speed: number, heading: number, time: number) => void
     __gpsNativeVoiceResult?: (text: string | null) => void
+    __gpsNativePip?: (active: boolean) => void
   }
 }
 
@@ -106,5 +109,22 @@ export function describeNativeSpeechStatus(status: string): string {
       return 'Sem voz em português no aparelho'
     default:
       return 'Voz do Android indisponível'
+  }
+}
+
+/**
+ * Informa se há navegação ativa (para a casca abrir a janela flutuante ao sair do
+ * app) e liga/desliga o modo compacto da tela quando a janela flutuante abre.
+ */
+export function syncNativeNavigation(active: boolean): void {
+  if (!nativeBridge || typeof window === 'undefined') return
+  try {
+    nativeBridge.setNavigating(active)
+  } catch {
+    // casca antiga sem este método: segue sem janela flutuante
+  }
+  window.__gpsNativePip = (pip) => {
+    if (pip) document.documentElement.setAttribute('data-pip', '1')
+    else document.documentElement.removeAttribute('data-pip')
   }
 }

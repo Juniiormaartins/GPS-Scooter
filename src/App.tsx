@@ -24,7 +24,7 @@ import { useSegmentAlerts } from '@/hooks/useSegmentAlerts'
 import { runKey } from '@/services/navigation/segmentAlerts'
 import { currentSpeedLimit } from '@/services/navigation/speedLimit'
 import { consumeIncomingDestination } from '@/native/incomingDestination'
-import { nativeBridge, startNativeVoiceSearch } from '@/native/nativeBridge'
+import { nativeBridge, startNativeVoiceSearch, syncNativeNavigation } from '@/native/nativeBridge'
 import { VehicleOnboarding } from '@/components/onboarding/VehicleOnboarding'
 import { VehicleStatusBar } from '@/components/layout/VehicleStatusBar'
 import {
@@ -154,6 +154,10 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   useBackToClose(activePanel !== null, () => setActivePanel(null))
   useBackToClose(isSearchOpen, () => setIsSearchOpen(false))
+  useEffect(() => {
+    syncNativeNavigation(isNavigating)
+    return () => syncNativeNavigation(false)
+  }, [isNavigating])
   /**
    * O que a tela de busca está escolhendo: destino (padrão) ou PARTIDA.
    *

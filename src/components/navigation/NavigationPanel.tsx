@@ -103,7 +103,7 @@ export function NavigationPanel({
   return (
     <>
       <TopScrim />
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-gutter pt-[max(1rem,var(--safe-top))]">
+      <div className="pip-top pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2.5 px-gutter pt-[max(1rem,var(--safe-top))]">
         {progress?.nextStep ? (
           /*
             `GuidanceBanner` (handoff §5.1): card ESCURO #0F1729 de raio 28px,
@@ -186,7 +186,7 @@ export function NavigationPanel({
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-gutter pb-[max(1.5rem,var(--safe-bottom))]">
+      <div className="pip-hide pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-stack px-gutter pb-[max(1.5rem,var(--safe-bottom))]">
         {/*
           Faixa inferior: velocidade real do GPS à esquerda e o botão de
           recentralizar à direita — este é o único lugar da navegação onde ele

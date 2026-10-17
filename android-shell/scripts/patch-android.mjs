@@ -83,6 +83,12 @@ manifest = manifest.replace(
   '<queries><intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent></queries>\n    <application',
 )
 exige(/android:launchMode="singleTask"/.test(manifest), 'MainActivity sem launchMode singleTask')
+// Janela flutuante (picture-in-picture) ao sair do app com navegacao ativa.
+exige(manifest.includes('<activity'), 'manifest sem <activity')
+manifest = manifest.replace('<activity', '<activity android:supportsPictureInPicture="true"')
+if (!/android:configChanges="[^"]*screenSize/.test(manifest)) {
+  manifest = manifest.replace('<activity', '<activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"')
+}
 writeFileSync(manifestPath, manifest)
 
 // 2. MainActivity -----------------------------------------------------------------
