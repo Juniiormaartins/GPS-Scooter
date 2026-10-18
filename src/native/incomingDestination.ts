@@ -40,8 +40,23 @@ function parseCoordsWithLabel(value: string): { point: LngLat; label: string | n
   return { point, label: label ? label : null }
 }
 
+/**
+ * "Endereço completo@lat,lng" — como o iFood manda o destino: o texto do endereço
+ * seguido de `@` e a coordenada exata. A coordenada vale mais que o texto (que o
+ * geocodificador não acha, por causa de "Casa Qd 14 Lt 22"), e o texto vira o nome.
+ */
+function splitAddressAtCoords(value: string): { label: string; point: LngLat } | null {
+  const match = value.match(/^([\s\S]*?)\s*@\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/)
+  if (!match) return null
+  const point = toPoint(Number(match[2]), Number(match[3]))
+  if (!point) return null
+  return { label: match[1].trim() || UNNAMED_PLACE_LABEL, point }
+}
+
 function placeOrSearch(value: string, fallbackPoint: LngLat | null): IncomingDestination | null {
   const text = value.trim()
+  const atCoords = splitAddressAtCoords(text)
+  if (atCoords) return { kind: 'place', ...atCoords }
   if (!text) return fallbackPoint ? { kind: 'place', label: UNNAMED_PLACE_LABEL, point: fallbackPoint } : null
 
   const withCoords = parseCoordsWithLabel(text)
@@ -67,6 +82,16 @@ function parseGeoUri(raw: string): IncomingDestination | null {
   const [latText, lngText] = coords.split(',')
   const pathPoint = toPoint(Number(latText), Number(lngText))
   const q = new URLSearchParams(queryPart).get('q') ?? ''
+  // Endereço direto no corpo (`geo:Rua X, 10@-16.6,-49.2`), sem coordenada nem `q=`.
+  if (!q && !pathPoint) {
+    let decoded = body
+    try {
+      decoded = decodeURIComponent(body)
+    } catch {
+      // mantém o texto como veio
+    }
+    return placeOrSearch(decoded, null)
+  }
   return placeOrSearch(q, pathPoint)
 }
 
@@ -84,6 +109,8 @@ function parseGoogleNavigation(raw: string): IncomingDestination | null {
  * (maps.app.goo.gl) não dão para abrir daqui e são ignorados.
  */
 function parseSharedText(raw: string): IncomingDestination | null {
+  const atCoords = splitAddressAtCoords(raw.trim())
+  if (atCoords) return { kind: 'place', ...atCoords }
   const coords = raw.match(DECIMAL_COORDS)
   const point = coords ? toPoint(Number(coords[1]), Number(coords[2])) : null
   const withoutLinks = raw.replace(/https?:\/\/\S+/gi, ' ')
