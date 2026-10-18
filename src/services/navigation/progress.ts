@@ -30,6 +30,16 @@ import type { CandidateRoute, RouteStep } from '@/types/routing'
 const OFF_ROUTE_THRESHOLD_METERS = 22
 const ARRIVAL_THRESHOLD_METERS = 20
 
+/**
+ * Limite de desvio que acompanha a qualidade do GPS: com sinal bom (poucos
+ * metros de incerteza) pistas e ruas vizinhas são detectadas mais cedo; com sinal
+ * ruim o limite sobe para não gerar falso desvio. Entre 14 e 26 m.
+ */
+function offRouteThreshold(accuracyMeters: number | undefined): number {
+  if (accuracyMeters == null || !Number.isFinite(accuracyMeters)) return OFF_ROUTE_THRESHOLD_METERS
+  return Math.min(26, Math.max(14, 8 + accuracyMeters * 1.2))
+}
+
 export interface NavigationProgress {
   /** Posição do usuário "encaixada" na rota (usada para o marcador, mais estável que o GPS bruto). */
   snappedPosition: LngLat
@@ -72,6 +82,7 @@ export function computeNavigationProgress(
   route: CandidateRoute,
   rawPosition: LngLat,
   referenceSpeedKmh: number,
+  accuracyMeters?: number,
 ): NavigationProgress {
   const projection = projectPointOntoPath(rawPosition, route.geometry)
   const distanceTraveledMeters = projection?.distanceAlongMeters ?? 0
@@ -103,7 +114,7 @@ export function computeNavigationProgress(
     nextStep,
     distanceToNextManeuverMeters,
     offRouteDistanceMeters,
-    isOffRoute: offRouteDistanceMeters > OFF_ROUTE_THRESHOLD_METERS,
+    isOffRoute: offRouteDistanceMeters > offRouteThreshold(accuracyMeters),
     isComplete: remainingDistanceMeters <= ARRIVAL_THRESHOLD_METERS,
   }
 }

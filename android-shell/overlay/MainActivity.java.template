@@ -293,6 +293,11 @@ public class MainActivity extends BridgeActivity {
     @JavascriptInterface
     public void setNavigating(boolean ativo) {
       navegando = ativo;
+      // Navegando, a tela nao apaga sozinha.
+      runOnUiThread(() -> {
+        if (ativo) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+      });
     }
 
     @JavascriptInterface

@@ -151,7 +151,7 @@ export function useNavigationSession(
     }
     lastPositionRef.current = sample.position
 
-    const next = computeNavigationProgress(route, sample.position, getUserPreferences().referenceSpeedKmh)
+    const next = computeNavigationProgress(route, sample.position, getUserPreferences().referenceSpeedKmh, sample.accuracyMeters)
     setProgress(next)
 
     if (next.isOffRoute) {

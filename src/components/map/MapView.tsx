@@ -16,6 +16,7 @@ import {
 import type { SegmentSeverity } from '@/services/routing/segmentSeverity'
 import { applyPoiIcons } from '@/components/map/poiIcons'
 import { applySuitabilityLayer } from '@/components/map/suitabilityLayer'
+import { trimPathsFromStart } from '@/components/map/trimRoute'
 import { DESTINATION_ASSETS, DESTINATION_SIZES } from '@/components/map/poiLibrary'
 import { RiderAnimator, type RiderFrame } from '@/components/map/riderAnimator'
 import {
@@ -61,6 +62,8 @@ interface MapViewProps {
    * cor principal, usando `routeGeometry`.
    */
   routeSeveritySegments?: RouteSeveritySegment[]
+  /** Metros já percorridos da rota ativa; o trecho para trás deixa de ser desenhado. */
+  traveledMeters?: number | null
   /** Geometria da alternativa em comparação — desenhada pontilhada ao lado da atual. Vazia = nenhuma. */
   comparisonGeometry?: LngLat[] | null
   /**
@@ -613,6 +616,7 @@ export function MapView({
   routeGeometry,
   routeOptions = [],
   routeSeveritySegments = [],
+  traveledMeters = null,
   comparisonGeometry = null,
   routeWarnings = [],
   isRoutePreview = false,
@@ -690,6 +694,8 @@ export function MapView({
   vehicleRef.current = vehicleModelId
   const speedRef = useRef(vehicleSpeedKmh)
   speedRef.current = vehicleSpeedKmh
+  // Redesenha o traçado a cada ~10 m andados, não a cada amostra de GPS.
+  const traveledBucket = traveledMeters ? Math.floor(traveledMeters / 10) : 0
   const suitabilityRef = useRef(suitabilityLayer)
   suitabilityRef.current = suitabilityLayer
   /** Zoom e inclinação exibidos — perseguem o alvo por quadro, ver cameraRef. */
@@ -1503,9 +1509,9 @@ export function MapView({
 
     // Emendado ao destino: sem isto o traçado para no ponto da via e o pino
     // fica solto ao lado dele (ver joinToDestination).
-    const coordinates: [number, number][] = joinToDestination(routeGeometry ?? [], destinationPoint).map(
-      (point) => [point.lng, point.lat],
-    )
+    const fullPath = joinToDestination(routeGeometry ?? [], destinationPoint)
+    const ahead = isNavigating && traveledMeters ? trimPathsFromStart([fullPath], traveledMeters)[0] ?? [] : fullPath
+    const coordinates: [number, number][] = ahead.map((point) => [point.lng, point.lat])
 
     // O casing continua sendo UMA linha contínua: quebrado por trecho, ele
     // deixaria emendas visíveis em cada junção.
@@ -1528,7 +1534,7 @@ export function MapView({
       )
       fitToBounds(map, bounds, { top: 220, bottom: 220, left: 48, right: 48 }, { duration: 600 })
     }
-  }, [routeGeometry, routeOptions.length])
+  }, [routeGeometry, routeOptions.length, traveledBucket])
 
   /**
    * TRECHOS COLORIDOS da rota ativa.
@@ -1550,10 +1556,24 @@ export function MapView({
     const segmentSource = map?.getSource(ROUTE_SEGMENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
     if (!map || !segmentSource) return
 
-    const usable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
-    const fallback: [number, number][] = joinToDestination(routeGeometry ?? [], destinationPoint).map(
-      (point) => [point.lng, point.lat],
+    const allUsable = routeSeveritySegments.filter((segment) => segment.path.length >= 2)
+    // Navegando, o que ficou para trás some: só o caminho à frente é desenhado.
+    const skip = isNavigating && traveledMeters ? traveledMeters : 0
+    const trimmedPaths = trimPathsFromStart(
+      allUsable.map((segment) => segment.path),
+      skip,
     )
+    const usable = skip > 0 ? [] as typeof allUsable : allUsable
+    if (skip > 0) {
+      // trimPathsFromStart descarta trechos inteiros: reassocia a severidade pelo
+      // índice a partir do primeiro trecho que sobrou.
+      const dropped = allUsable.length - trimmedPaths.length
+      trimmedPaths.forEach((path, index) => usable.push({ ...allUsable[dropped + index], path }))
+    }
+    const fallbackPath = joinToDestination(routeGeometry ?? [], destinationPoint)
+    const fallback: [number, number][] = (
+      skip > 0 ? trimPathsFromStart([fallbackPath], skip)[0] ?? [] : fallbackPath
+    ).map((point) => [point.lng, point.lat])
 
     segmentSource.setData({
       type: 'FeatureCollection',
@@ -1586,7 +1606,7 @@ export function MapView({
             ]
           : [],
     })
-  }, [routeSeveritySegments, routeGeometry])
+  }, [routeSeveritySegments, routeGeometry, traveledBucket])
 
   // Múltiplas candidatas simultâneas — uma linha colorida por elegibilidade
   // para cada rota, enquadrando a câmera em todas de uma vez (não só a ativa).

@@ -38,6 +38,7 @@ import { AlternativeSheet } from '@/components/navigation/AlternativeSheet'
 import { ArrivalSheet } from '@/components/navigation/ArrivalSheet'
 import { SegmentDetailSheet, SegmentWarningPill } from '@/components/navigation/SegmentDetail'
 import { compareRoutes, pickAlternatives, type RouteComparison } from '@/services/routing/alternatives'
+import { useScreenWakeLock } from '@/hooks/useScreenWakeLock'
 import { useBackToClose } from '@/hooks/useBackToClose'
 import { ProfilePanel } from '@/components/panels/ProfilePanel'
 import { SavedPanel } from '@/components/panels/SavedPanel'
@@ -154,6 +155,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   useBackToClose(activePanel !== null, () => setActivePanel(null))
   useBackToClose(isSearchOpen, () => setIsSearchOpen(false))
+  useScreenWakeLock(isNavigating)
   useEffect(() => {
     syncNativeNavigation(isNavigating)
     return () => syncNativeNavigation(false)
@@ -1358,6 +1360,7 @@ export default function App() {
         // de escolha e sumiriam de qualquer forma pela visibilidade das camadas.
         routeOptions={isNavigationView ? [] : routeOptions}
         routeSeveritySegments={routeSeveritySegments}
+        traveledMeters={isNavigating ? navigationSession.progress?.distanceTraveledMeters ?? null : null}
         comparisonGeometry={
           // Traçado da alternativa em foco no mapa: a que está aplicada, ou a
           // primeira da lista quando ainda se está na rota atual. Sem isto o
