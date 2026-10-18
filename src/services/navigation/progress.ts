@@ -1,5 +1,6 @@
 import { calculateEtaMinutes, etaSpeedKmh } from '@/services/routing/eta'
 import { computeBearingDegrees, haversineDistanceMeters, projectPointOntoPath } from '@/utils/geo'
+import { isUnderpass } from '@/services/routing/roadClassification'
 import type { LngLat } from '@/config/region'
 import type { CandidateRoute, RouteStep } from '@/types/routing'
 
@@ -103,6 +104,13 @@ export function computeNavigationProgress(
   const snapped = projection?.point ?? rawPosition
   const routeBearingDeg = bearingAlongRoute(route.geometry, snapped, distanceTraveledMeters)
 
+  // Em passagem em desnível (túnel/viaduto) as pistas laterais correm a poucos
+  // metros da pista de baixo: ali o limite é bem mais curto, senão quem segue
+  // pela lateral continua "na rota" como se tivesse entrado no túnel.
+  const threshold = isInUnderpass(route, distanceTraveledMeters)
+    ? Math.min(14, Math.max(8, 6 + (accuracyMeters ?? 10) * 0.6))
+    : offRouteThreshold(accuracyMeters)
+
   return {
     snappedPosition: projection?.point ?? rawPosition,
     distanceTraveledMeters,
@@ -114,7 +122,7 @@ export function computeNavigationProgress(
     nextStep,
     distanceToNextManeuverMeters,
     offRouteDistanceMeters,
-    isOffRoute: offRouteDistanceMeters > offRouteThreshold(accuracyMeters),
+    isOffRoute: offRouteDistanceMeters > threshold,
     isComplete: remainingDistanceMeters <= ARRIVAL_THRESHOLD_METERS,
   }
 }
@@ -149,4 +157,15 @@ function bearingAlongRoute(
   // Perto do fim: aponta para o último ponto, que ainda é a direção de chegada.
   const last = geometry[geometry.length - 1]
   return haversineDistanceMeters(from, last) < 1 ? null : computeBearingDegrees(from, last)
+}
+
+/** A distância percorrida cai num trecho da rota marcado como túnel/passagem em desnível? */
+function isInUnderpass(route: CandidateRoute, distanceMeters: number): boolean {
+  let start = 0
+  for (const segment of route.segments) {
+    const end = start + segment.distanceMeters
+    if (distanceMeters >= start && distanceMeters <= end) return isUnderpass(segment.osmTags)
+    start = end
+  }
+  return false
 }

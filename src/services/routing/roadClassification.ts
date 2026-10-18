@@ -212,7 +212,7 @@ function assessStructurally(segment: RouteSegment, vehicle?: VehicleClassificati
  * (bueiro, não é via), e `tunnel=no` explícito. `bridge` junto com `layer`
  * negativo é dado inconsistente — na dúvida, não afirma túnel.
  */
-function isUnderpass(tags: RouteSegment['osmTags']): boolean {
+export function isUnderpass(tags: RouteSegment['osmTags']): boolean {
   if (!tags) return false
   const tunnel = tags.tunnel?.trim().toLowerCase()
   if (tunnel === 'no') return false
