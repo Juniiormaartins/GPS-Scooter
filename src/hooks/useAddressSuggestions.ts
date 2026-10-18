@@ -3,6 +3,7 @@ import { adoptLatePoiCategories, getGeocodingProvider, type GeocodingResult } fr
 import { matchSearchHistory } from '@/services/storage/searchHistory'
 import type { LngLat } from '@/config/region'
 import { haversineDistanceMeters } from '@/utils/geo'
+import { parseCoordinateQuery } from '@/native/incomingDestination'
 
 /**
  * Autocomplete de endereços sobre o mesmo provedor de geocodificação já
@@ -66,6 +67,17 @@ export function useAddressSuggestions(query: string, near: LngLat | null = null)
     if (trimmed.length < MIN_QUERY_LENGTH) {
       requestIdRef.current += 1
       setSuggestions([])
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+
+    // Endereço colado já com a coordenada ("...@-16.74,-49.25", como o iFood manda):
+    // o ponto é exato, não há o que buscar na rede.
+    const direct = parseCoordinateQuery(trimmed)
+    if (direct) {
+      requestIdRef.current += 1
+      setSuggestions([{ label: direct.label, secondaryLabel: 'Coordenada exata', point: direct.point }])
       setIsLoading(false)
       setError(null)
       return

@@ -45,7 +45,7 @@ function parseCoordsWithLabel(value: string): { point: LngLat; label: string | n
  * seguido de `@` e a coordenada exata. A coordenada vale mais que o texto (que o
  * geocodificador não acha, por causa de "Casa Qd 14 Lt 22"), e o texto vira o nome.
  */
-function splitAddressAtCoords(value: string): { label: string; point: LngLat } | null {
+export function splitAddressAtCoords(value: string): { label: string; point: LngLat } | null {
   const match = value.match(/^([\s\S]*?)\s*@\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/)
   if (!match) return null
   const point = toPoint(Number(match[2]), Number(match[3]))
@@ -149,4 +149,18 @@ export function consumeIncomingDestination(): IncomingDestination | null {
     return null
   }
   return parseIncomingDestination(raw)
+}
+
+/**
+ * Texto digitado/colado na busca que já traz a coordenada: "Endereço@lat,lng" ou
+ * só "lat, lng". Devolve o ponto direto, sem passar pelo geocodificador.
+ */
+export function parseCoordinateQuery(query: string): { label: string; point: LngLat } | null {
+  const text = query.trim()
+  const atCoords = splitAddressAtCoords(text)
+  if (atCoords) return atCoords
+  const plain = text.match(/^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/)
+  if (!plain) return null
+  const point = toPoint(Number(plain[1]), Number(plain[2]))
+  return point ? { label: UNNAMED_PLACE_LABEL, point } : null
 }
